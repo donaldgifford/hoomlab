@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 )
@@ -19,6 +20,16 @@ type rootOptions struct {
 	secrets  string
 	dryRun   bool
 	logLevel string
+}
+
+// secretsPath resolves the Talos secrets bundle location: --secrets
+// when set, otherwise secrets.yaml next to the config file — keeping
+// the bundle adjacent to the config it belongs to by default.
+func (o *rootOptions) secretsPath() string {
+	if o.secrets != "" {
+		return o.secrets
+	}
+	return filepath.Join(filepath.Dir(o.config), "secrets.yaml")
 }
 
 // setupLogging replaces the default slog handler with one honoring
@@ -66,6 +77,7 @@ file, the configuration files and the world are the only two truths.`,
 	root.AddCommand(
 		newValidateCmd(opts),
 		newPVECmd(opts),
+		newTalosCmd(opts),
 		newVersionCmd(version, commit, date),
 	)
 	return root

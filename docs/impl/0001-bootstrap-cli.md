@@ -265,9 +265,9 @@ validated with booty's and machinery's own loaders.
 
 #### Tasks
 
-- [ ] Add `github.com/siderolabs/talos/pkg/machinery` to
+- [x] Add `github.com/siderolabs/talos/pkg/machinery` to
       `tools/bootstrap/go.mod`
-- [ ] Implement `bootstrap talos secrets`: generate a machinery secrets
+- [x] Implement `bootstrap talos secrets`: generate a machinery secrets
       bundle and write it to `--secrets`; if the file exists, no-op
       with a message — **never overwrite** (DESIGN-0001 OQ-2)
 - [ ] Implement catalog emission in `internal/emit`:

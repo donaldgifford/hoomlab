@@ -80,9 +80,13 @@ type Talos struct {
 	// Endpoint is the cluster endpoint (VIP or first control plane),
 	// e.g. "https://10.0.20.10:6443".
 	Endpoint string `hcl:"endpoint"`
+	// KubernetesVersion pins the Kubernetes version the generated
+	// machineconfigs install. Empty means the default of the machinery
+	// release this CLI was built against.
+	KubernetesVersion string `hcl:"kubernetes_version,optional"`
 	// SchematicID selects a Talos Image Factory schematic for the
-	// downloaded boot assets. Empty means the vanilla no-extensions
-	// schematic for Version (IMPL-0001 OQ-1).
+	// downloaded boot assets and the installer image. Empty means the
+	// vanilla no-extensions schematic (IMPL-0001 OQ-1).
 	SchematicID string      `hcl:"schematic_id,optional"`
 	Booty       Booty       `hcl:"booty,block"`
 	Nodes       []TalosNode `hcl:"node,block"`

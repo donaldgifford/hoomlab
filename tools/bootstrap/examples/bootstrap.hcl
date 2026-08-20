@@ -58,6 +58,11 @@ cluster "homelab" {
     version  = "v1.13.8"
     endpoint = "https://10.0.20.10:6443" # cluster VIP / endpoint
 
+    # Optional: pins the Kubernetes version the machineconfigs
+    # install. Omitted means the default of the Talos machinery this
+    # CLI was built against.
+    # kubernetes_version = "1.36.3"
+
     # Optional: a Talos Image Factory schematic ID for the downloaded
     # boot assets. Omitted means the vanilla no-extensions schematic
     # for the version above. Create one at https://factory.talos.dev
