@@ -116,13 +116,13 @@ config errors fail loudly before any API is touched.
       `booty { url, version }` with `version` optional (OQ-4), labeled
       `node` blocks: `role`, `pve_node`, `vmid`, `mac`, `cores`,
       `memory`, `disk_gb`, `storage`, `bridge`)
-- [ ] Implement the `env(name)` function and register it via
+- [x] Implement the `env(name)` function and register it via
       `hclkit.WithFunctions`; an unset/empty variable produces a
       diagnostic naming the variable, never a silent empty string
-- [ ] Implement the loader:
+- [x] Implement the loader:
       `hclkit.New(WithFunctions(env), WithValidators(...)).LoadFile(path, &cfg)`
       with hclkit's GCC-style diagnostics rendered to stderr
-- [ ] Implement validators: MAC well-formed + normalized (single
+- [x] Implement validators: MAC well-formed + normalized (single
       canonical form shared with `internal/emit` later) + unique across
       all `talos.node` blocks; VMID unique; exactly one `pve.node` with
       `primary = true`; `role` is `controlplane` or `worker` with at
