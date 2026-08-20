@@ -270,7 +270,7 @@ validated with booty's and machinery's own loaders.
 - [x] Implement `bootstrap talos secrets`: generate a machinery secrets
       bundle and write it to `--secrets`; if the file exists, no-op
       with a message — **never overwrite** (DESIGN-0001 OQ-2)
-- [ ] Implement catalog emission in `internal/emit`:
+- [x] Implement catalog emission in `internal/emit`:
       `00-variables.hcl` (cluster name, talos version, endpoint,
       boot base), `10-profiles.hcl` (`talos-control`/`talos-worker`
       with the mandatory metal cmdline
@@ -278,32 +278,50 @@ validated with booty's and machinery's own loaders.
       `$${mac}` HCL escaping), `20-groups.hcl` (one group per node,
       `selector = { mac = … }` using the canonical MAC form from
       Phase 1)
-- [ ] Implement machineconfig template emission: machinery config
+      — every emitted variable is load-bearing, so the cluster name and
+      endpoint live in the header comment and the baked machineconfig
+      rather than in variables nothing reads
+- [x] Implement machineconfig template emission: machinery config
       generation seeded by the secrets bundle → per-role templates
       under `templates/talos/{controlplane,worker}.yaml.tmpl` (family
       subdir mandatory) with exactly the two overlay edits from booty's
       walkthrough — hostname var and install-image var (OQ-1a)
-- [ ] Validate generated machineconfigs with machinery
-      `Validate(ModeMetal)` before writing
-- [ ] Implement `embed.ipxe` emission (three-line chain script, URL
-      derived from `talos.booty.url`)
-- [ ] Implement `booty-run.sh` emission encoding the sharp edges:
+- [x] Validate generated machineconfigs with machinery
+      `Validate(ModeMetal)` before writing — machinery ships the
+      `validation.RuntimeMode` interface but not the modes themselves
+      (they live in the Talos runtime), so `internal/talos` carries a
+      three-method `metalMode` mirroring `runtime.ModeMetal`
+- [x] Implement `embed.ipxe` emission (three-line chain script, URL
+      derived from `talos.booty.url`) — rendered through booty's own
+      `Renderer.ChainScript` rather than a copied script, so the
+      embedded chain and the one booty serves at `/boot.ipxe` cannot
+      drift apart
+- [x] Implement `booty-run.sh` emission encoding the sharp edges:
       `--net=host`, port-capable user, catalog/templates/boot mounts,
       the correct `--catalog` flag, `--proxydhcp --server-ip` from
       config, and the booty image pinned to `booty.version` —
       defaulting to the tested-against constant in the CLI (OQ-4)
-- [ ] Implement Image Factory asset download into
+- [x] Implement Image Factory asset download into
       `booty/boot/talos/<version>/` (`vmlinuz`, `initramfs.xz`):
       checksum-verified, skipped when already present (DESIGN-0001
       OQ-6a); schematic from the config's optional `schematic_id`,
       defaulting to the vanilla no-extensions schematic for the
       configured version (OQ-1)
-- [ ] Wire `bootstrap talos emit`: `Check` is a byte-diff of the
+      — the factory publishes no authoritative checksum, so integrity
+      rests on an atomic temp-file rename plus a Content-Length check
+      (a truncated transfer leaves nothing behind) and a
+      trust-on-first-use `.sha256` sidecar that catches any change
+      after staging; authenticity on the first fetch is TLS
+- [x] Wire `bootstrap talos emit`: `Check` is a byte-diff of the
       on-disk tree against a fresh render; when anything changed, the
       step output ends with "restart the booty container"
-- [ ] Write golden-file tests for the entire emitted tree; byte-stable
-      output is a test invariant (two renders identical)
-- [ ] Write in-process booty contract tests: `catalog.DirSource.Load`
+- [x] Write golden-file tests for the entire emitted tree; byte-stable
+      output is a test invariant (two renders identical) — the catalog,
+      `embed.ipxe`, and `booty-run.sh` are golden-pinned under
+      `internal/emit/testdata/golden` (`-update` regenerates); the
+      machineconfig templates carry fresh secrets and are pinned by the
+      contract test below instead
+- [x] Write in-process booty contract tests: `catalog.DirSource.Load`
       over the emitted catalog, and a `Renderer.Config` dry-render for
       a synthetic node identity → parsed and re-validated with
       `Validate(ModeMetal)`
@@ -319,7 +337,11 @@ validated with booty's and machinery's own loaders.
 - Manual smoke (documented in the runbook, not CI — OQ-3): a real
   booty container started via the emitted `booty-run.sh` serves
   `/boot.ipxe`, `/ipxe?mac=…`, and `/machine-config?mac=…` from the
-  emitted tree
+  emitted tree — **operator-run, still outstanding**; the in-process
+  contract test covers the same chain (load → match → render →
+  validate) without a container, and the real Image Factory asset URLs
+  were verified to respond, but nothing here has yet started a booty
+  container. Runbook lands in Phase 6.
 - `just bootstrap-test` / `tools-ci.yml` green
 
 ---

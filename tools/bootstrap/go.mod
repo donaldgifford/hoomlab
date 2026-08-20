@@ -3,6 +3,7 @@ module github.com/donaldgifford/hoomlab/tools/bootstrap
 go 1.26.6
 
 require (
+	github.com/donaldgifford/booty v0.2.1
 	github.com/donaldgifford/hclkit v0.2.0
 	github.com/donaldgifford/proxmox-go-sdk v0.11.0
 	github.com/hashicorp/hcl/v2 v2.24.0

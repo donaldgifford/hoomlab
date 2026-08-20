@@ -16,12 +16,31 @@ import (
 // orphans every node holding the old one (DESIGN-0001 OQ-2).
 var ErrSecretsExist = errors.New("secrets bundle already exists")
 
+// ErrSecretsMissing reports that no secrets bundle exists yet. Stages
+// that consume the bundle surface it as "run talos secrets first"
+// rather than as a bare file-not-found.
+var ErrSecretsMissing = errors.New("secrets bundle not found")
+
 // SecretsBundleExists reports whether a secrets bundle file is present
 // at path. It only stats — the dry-run path uses it to report
 // done/pending without opening the file.
 func SecretsBundleExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+// LoadSecretsBundle reads the bundle every later stage is seeded from.
+// A missing file is ErrSecretsMissing, so callers can point the
+// operator at "bootstrap talos secrets" instead of at errno.
+func LoadSecretsBundle(path string) (*secrets.Bundle, error) {
+	if !SecretsBundleExists(path) {
+		return nil, fmt.Errorf("%w at %s", ErrSecretsMissing, path)
+	}
+	bundle, err := secrets.LoadBundle(path)
+	if err != nil {
+		return nil, fmt.Errorf("load secrets bundle %s: %w", path, err)
+	}
+	return bundle, nil
 }
 
 // GenerateSecretsBundle creates a fresh machinery secrets bundle for
