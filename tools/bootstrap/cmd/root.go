@@ -65,6 +65,7 @@ file, the configuration files and the world are the only two truths.`,
 
 	root.AddCommand(
 		newValidateCmd(opts),
+		newPVECmd(opts),
 		newVersionCmd(version, commit, date),
 	)
 	return root

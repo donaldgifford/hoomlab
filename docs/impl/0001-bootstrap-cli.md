@@ -128,14 +128,14 @@ config errors fail loudly before any API is touched.
       `primary = true`; `role` is `controlplane` or `worker` with at
       least one controlplane; every `talos.node.pve_node` names a
       declared `pve.node`; `endpoint`/`booty.url` parse as URLs
-- [ ] Wire `bootstrap validate` (cobra) to loader + validators; exit
+- [x] Wire `bootstrap validate` (cobra) to loader + validators; exit
       non-zero when any diagnostic is an error
-- [ ] Add an annotated example config at
+- [x] Add an annotated example config at
       `tools/bootstrap/examples/bootstrap.hcl` (doubles as a test
       fixture)
-- [ ] Add `.gitignore` entries for the operator-owned files:
+- [x] Add `.gitignore` entries for the operator-owned files:
       `secrets.yaml`, `bootstrap-out/`
-- [ ] Write table tests over HCL fixtures: the valid example, one
+- [x] Write table tests over HCL fixtures: the valid example, one
       fixture per validator failure, `env()` present/missing/empty;
       assert rendered diagnostic text names the offending field or
       variable
@@ -164,35 +164,42 @@ against mockpve.
 
 #### Tasks
 
-- [ ] Implement `internal/steps`: `Step{Name, Check(ctx) (bool, error),
+- [x] Implement `internal/steps`: `Step{Name, Check(ctx) (bool, error),
       Apply(ctx) error}` and a runner that checks each step, skips done
       ones, applies pending ones in order, logs progress via `slog`,
       and wraps failures with the step name (`%w`)
-- [ ] Implement `--dry-run` in the runner: print the pending-step list
+- [x] Implement `--dry-run` in the runner: print the pending-step list
       and stop — zero `Apply` calls, zero write requests
-- [ ] Add `github.com/donaldgifford/proxmox-go-sdk@v0.11.0` to
+- [x] Add `github.com/donaldgifford/proxmox-go-sdk@v0.11.0` to
       `tools/bootstrap/go.mod`
-- [ ] Implement per-node client construction in `internal/pve` from the
+- [x] Implement per-node client construction in `internal/pve` from the
       config (`proxmox.NewClient` with `api.TokenCredentials` from the
-      resolved `env()` values)
-- [ ] Implement formation steps per DESIGN-0001 Stage 1:
+      resolved `env()` values; joining-node dials use root@pam
+      credentials — API tokens do not survive a join, root@pam does)
+- [x] Implement formation steps per DESIGN-0001 Stage 1:
       create-cluster on the primary (`CreateCluster` fire-and-poll on
       `ListConfigNodes`), then for each remaining node **serially**:
       `JoinInfo` fingerprint from the primary → `JoinCluster` issued on
       the joining node with the root@pam password → wait for membership
       → wait for quorum (pvelab's `waitForMember`/`waitForQuorum`
       pattern); corosync `link0` via `JoinSpec.Extra` when `address` is
-      set
-- [ ] Route all PVE writes through `tasks.Ref` waits so a step is not
-      "applied" until PVE reports the task finished
-- [ ] Wire `bootstrap pve form` with `--dry-run`
-- [ ] Write mockpve tests: fresh 3-node formation converges; a second
+      set; a final cluster-quorate step verifies the formed cluster on
+      re-runs
+- [x] Bound every apply behind its convergence signal: formation
+      writes are fire-and-poll per the SDK contract (no UPID comes
+      back), so membership/quorum polls are the "task wait" here;
+      `tasks.Ref` waits enter with the Stage 2+ writes that do return
+      UPIDs
+- [x] Wire `bootstrap pve form` with `--dry-run`
+- [x] Write mockpve tests: fresh 3-node formation converges; a second
       run reports every step done with zero write requests; an
       interruption matrix (stop the runner after each step boundary,
       re-run the full stage, assert convergence) — table-driven over
       the boundaries
 - [ ] Spot-check `pve form` against a nested pvelab-style 3-node lab
       (OQ-2): formation, quorum, and a convergent re-run on real PVE
+      *(operator-run: needs the lab hardware; everything up to it is
+      mockpve-verified)*
 
 #### Success Criteria
 
