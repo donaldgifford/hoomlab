@@ -20,6 +20,7 @@ together as OCI artifacts on every release.
 ```
 cmd/hoomlab/      # main package — keep thin, call into internal/
 internal/                 # library code; not importable outside this module
+tools/bootstrap/          # bootstrap CLI (ADR-0001) — own Go module, own CI (tools-ci.yml)
 charts/hoomlab/   # Helm chart + unittest suites + values.schema.json
 Dockerfile                # multi-stage distroless build (VERSION/COMMIT/DATE args)
 docker-bake.hcl           # bake targets: default (local), ci, release
@@ -38,6 +39,9 @@ mise.toml                 # pinned toolchain: go, golangci-lint, helm, ct, k3d, 
 - `just k3d-install` — build dev image → import into local k3d cluster
   → `helm upgrade --install` (the inner dev loop; `just k3d-down` to
   tear down)
+- `just bootstrap-build` / `bootstrap-test` / `bootstrap-lint` — the
+  `tools/bootstrap` module (nested Go module; root-module recipes and
+  CI do not cover it, tools-ci.yml does)
 
 ## Configuration contract
 
@@ -68,6 +72,12 @@ are **lockstep** — binary, image, and chart all carry the same tag:
   `patch` label if they need to go out on their own.
 
 Do NOT push tags by hand — the release train owns them.
+
+Tools under `tools/` release separately and on demand:
+`tools-release.yml` (workflow_dispatch) cuts `tools/<tool>/vX.Y.Z`
+nested-module tags and publishes binary archives only — no image, no
+chart. A tools-only PR merges with `dont-release` so the main train
+stays inert.
 
 ## Conventions
 

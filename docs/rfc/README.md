@@ -29,4 +29,9 @@ docz create rfc "Your RFC Title"
 - **Superseded**: Replaced by another RFC
 
 <!-- BEGIN DOCZ AUTO-GENERATED -->
+## All RFCs
+
+| ID | Title | Status | Date | Author | Link |
+|----|-------|--------|------|--------|------|
+| RFC-0001 | Hoomlab: A Self-Hosted Cloud for Homelab Environments | Draft | 2026-08-17 | Donald Gifford | [0001-hoomlab-a-self-hosted-cloud-for-homelab-environments.md](0001-hoomlab-a-self-hosted-cloud-for-homelab-environments.md) |
 <!-- END DOCZ AUTO-GENERATED -->

@@ -9,6 +9,10 @@ Design docs, plans, and implementation docs can reference investigations by ID
 (e.g. `INV-0001`) to document how open questions were resolved.
 
 <!-- BEGIN DOCZ AUTO-GENERATED -->
+## All Investigations
+
+| ID | Title | Status | Date | Author | Link |
+|----|-------|--------|------|--------|------|
 <!-- END DOCZ AUTO-GENERATED -->
 <!-- BEGIN DOCZ AUTO-GENERATED -->
 <!-- END DOCZ AUTO-GENERATED -->

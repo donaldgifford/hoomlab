@@ -27,4 +27,9 @@ docz create adr "Your ADR Title"
 - **Superseded by ADR-XXXX**: Replaced by another ADR
 
 <!-- BEGIN DOCZ AUTO-GENERATED -->
+## All ADRs
+
+| ID | Title | Status | Date | Author | Link |
+|----|-------|--------|------|--------|------|
+| ADR-0001 | Bootstrap CLI | Proposed | 2026-08-17 | Donald Gifford | [0001-bootstrap-cli-and-service.md](0001-bootstrap-cli-and-service.md) |
 <!-- END DOCZ AUTO-GENERATED -->
