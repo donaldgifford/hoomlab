@@ -27,6 +27,18 @@ type Cluster struct {
 	Talos Talos  `hcl:"talos,block"`
 }
 
+// PrimaryNode returns the PVE node declared primary = true. Validated
+// clusters always have exactly one; ok is false on an unvalidated
+// cluster without one.
+func (c *Cluster) PrimaryNode() (node PVENode, ok bool) {
+	for _, n := range c.PVE.Nodes {
+		if n.Primary {
+			return n, true
+		}
+	}
+	return PVENode{}, false
+}
+
 // PVE describes the Proxmox side: API credentials (env() references)
 // and the physical nodes the cluster is formed from (Stage 1).
 type PVE struct {
@@ -48,12 +60,16 @@ type PVENode struct {
 
 // ACME configures Stage 2: account registration, the DNS-01 plugin,
 // and per-node certificates for <node>.<domain>. Token is an env()
-// reference to the DNS provider API token.
+// reference to the DNS provider API token. Directory optionally names
+// the CA directory URL (e.g. Let's Encrypt staging while drilling, so
+// failed orders don't burn production rate limits); empty means the
+// CA default (Let's Encrypt production).
 type ACME struct {
-	Email  string `hcl:"email"`
-	Domain string `hcl:"domain"`
-	DNS    string `hcl:"dns"`
-	Token  string `hcl:"token"`
+	Email     string `hcl:"email"`
+	Domain    string `hcl:"domain"`
+	DNS       string `hcl:"dns"`
+	Token     string `hcl:"token"`
+	Directory string `hcl:"directory,optional"`
 }
 
 // Talos describes the Kubernetes cluster built in Stages 3–5: the

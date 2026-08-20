@@ -222,24 +222,28 @@ certificate ordering — all as convergent steps.
 
 #### Tasks
 
-- [ ] Implement the ACME account step: `RegisterACMEAccount` from
-      `acme.email` + directory; `Check` via `ListACMEAccounts`
-- [ ] Implement the Cloudflare plugin step: `CreateACMEPlugin` with the
+- [x] Implement the ACME account step: `RegisterACMEAccount` from
+      `acme.email` + directory (new optional `acme.directory` config
+      field for the staging CA; TOS accepted from `GetACMEMeta` rather
+      than a hardcoded URL); `Check` via `ListACMEAccounts`
+- [x] Implement the Cloudflare plugin step: `CreateACMEPlugin` with the
       typed `ACMECloudflare` provider (scoped token from
       `env("HOOMLAB_CLOUDFLARE_API_TOKEN")`); `Check` via
-      `GetACMEPlugin`; drifted plugin config → `UpdateACMEPlugin`
-- [ ] Implement the per-node domain step: `SetNodeConfig` with an
+      `GetACMEPlugin` comparing the stored payload against the
+      config's encoding, so a rotated token reopens the step; drifted
+      plugin config → `UpdateACMEPlugin`
+- [x] Implement the per-node domain step: `SetNodeConfig` with an
       `ACMEDomain` entry for `<node>.<domain>`; `Check` via
       `GetNodeConfig`
-- [ ] Implement the per-node certificate step: `OrderNodeCertificate` +
+- [x] Implement the per-node certificate step: `OrderNodeCertificate` +
       task wait; `Check` via `GetNodeCertificates` — done when an ACME
       cert covers the node FQDN with expiry beyond a renewal threshold
       (default 30 days), so renewal is the same command re-run
-- [ ] Wire `bootstrap pve certs` with `--dry-run`
-- [ ] Write mockpve tests using the native ACME routes
-      (`AddACMEPlugin` seeding): fresh run, idempotent re-run, drifted
-      plugin update, near-expiry cert marks the order step pending
-- [ ] Write a redaction test: the Cloudflare token never appears in
+- [x] Wire `bootstrap pve certs` with `--dry-run`
+- [x] Write mockpve tests using the native ACME routes: fresh run,
+      idempotent re-run, drifted plugin update, near-expiry cert marks
+      the order step pending
+- [x] Write a redaction test: the Cloudflare token never appears in
       logs, step output, or error text (the SDK's redacting `String()`
       plus our own output paths)
 

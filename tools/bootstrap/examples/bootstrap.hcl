@@ -46,6 +46,11 @@ cluster "homelab" {
     domain = "pve.example.internal" # node FQDNs become <node>.<domain>
     dns    = "cloudflare"           # the blessed DNS-01 provider (ADR-0001)
     token  = env("HOOMLAB_CLOUDFLARE_API_TOKEN")
+
+    # Optional: the CA directory URL. Omitted means Let's Encrypt
+    # production; point it at the staging directory while drilling so
+    # failed orders don't burn production rate limits.
+    # directory = "https://acme-staging-v02.api.letsencrypt.org/directory"
   }
 
   # ── Stages 3–5: talos secrets/emit/ipxe/vms/bootstrap/health ──────

@@ -213,6 +213,12 @@ func TestLoad(t *testing.T) {
 			wantErrs: []string{"Unsupported acme dns provider", "route53"},
 		},
 		{
+			name: "invalid acme directory",
+			mutate: replace(`dns    = "cloudflare"`, `dns       = "cloudflare"
+    directory = "not a url"`),
+			wantErrs: []string{"Invalid acme directory"},
+		},
+		{
 			name:     "zero cluster blocks",
 			mutate:   func(string) string { return "" },
 			wantErrs: []string{"Exactly one cluster block required"},

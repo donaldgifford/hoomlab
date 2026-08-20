@@ -58,6 +58,12 @@ func (c *Cluster) validateACME() hcl.Diagnostics {
 			"acme: dns %q: %q is the only supported provider (ADR-0001).",
 			c.ACME.DNS, dnsCloudflare))
 	}
+	if c.ACME.Directory != "" {
+		if err := validateURL(c.ACME.Directory); err != nil {
+			diags = append(diags, errf("Invalid acme directory",
+				"acme: directory %q: %v.", c.ACME.Directory, err))
+		}
+	}
 	return diags
 }
 

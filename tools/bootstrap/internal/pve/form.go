@@ -51,13 +51,10 @@ type Former struct {
 // because joining wipes that node's local pmxcfs config — API tokens
 // do not survive it, root@pam does.
 func (f *Former) Steps() ([]steps.Step, error) {
-	primaryIdx := slices.IndexFunc(f.Cluster.PVE.Nodes, func(n config.PVENode) bool {
-		return n.Primary
-	})
-	if primaryIdx < 0 {
+	primary, ok := f.Cluster.PrimaryNode()
+	if !ok {
 		return nil, fmt.Errorf("cluster %s: no primary pve node", f.Cluster.Name)
 	}
-	primary := f.Cluster.PVE.Nodes[primaryIdx]
 
 	list := []steps.Step{{
 		Name:  "create-cluster",
