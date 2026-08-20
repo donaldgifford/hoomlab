@@ -66,12 +66,12 @@ func TestRunnerRun(t *testing.T) {
 			stage := []Step{w.step("one"), w.step("two"), w.step("three")}
 
 			var r Runner
-			applied, err := r.Run(context.Background(), stage)
+			res, err := r.Run(context.Background(), stage)
 			if err != nil {
 				t.Fatalf("Run() error: %v", err)
 			}
-			if applied != len(tt.wantApplies) {
-				t.Errorf("Run() applied = %d, want %d", applied, len(tt.wantApplies))
+			if res.Applied != len(tt.wantApplies) {
+				t.Errorf("Run() applied = %d, want %d", res.Applied, len(tt.wantApplies))
 			}
 			if got, want := strings.Join(w.applies, ","), strings.Join(tt.wantApplies, ","); got != want {
 				t.Errorf("applies = %q, want %q", got, want)
@@ -143,7 +143,7 @@ func TestRunnerDryRun(t *testing.T) {
 
 	var out strings.Builder
 	r := Runner{DryRun: true, Out: &out}
-	pending, err := r.Run(context.Background(), stage)
+	res, err := r.Run(context.Background(), stage)
 	if err != nil {
 		t.Fatalf("Run() error: %v", err)
 	}
@@ -151,8 +151,11 @@ func TestRunnerDryRun(t *testing.T) {
 	if len(w.applies) != 0 {
 		t.Fatalf("dry-run applied steps: %v", w.applies)
 	}
-	if pending != 1 {
-		t.Errorf("Run() pending = %d, want 1", pending)
+	if res.Pending != 1 {
+		t.Errorf("Run() pending = %d, want 1", res.Pending)
+	}
+	if res.Applied != 0 {
+		t.Errorf("Run() applied = %d, want 0 in dry-run", res.Applied)
 	}
 	report := out.String()
 	for _, want := range []string{

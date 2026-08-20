@@ -37,13 +37,21 @@ type Runner struct {
 	Log *slog.Logger
 }
 
+// Result summarizes a Run. Applied counts the steps applied this run;
+// Pending counts steps found pending but not applied, which only a
+// dry-run produces (an apply run either applies a pending step or
+// stops on its error).
+type Result struct {
+	Applied int
+	Pending int
+}
+
 // Run converges the stage: for each step in order, Check, skip when
 // done, otherwise Apply. The first failure stops the run — a re-run
 // picks up where it left off because everything already applied
 // checks as done. In dry-run mode it never applies; a Check error is
-// reported as unknown state rather than stopping the survey. It
-// returns the number of steps applied (pending, in dry-run).
-func (r *Runner) Run(ctx context.Context, stage []Step) (int, error) {
+// reported as unknown state rather than stopping the survey.
+func (r *Runner) Run(ctx context.Context, stage []Step) (Result, error) {
 	log := r.Log
 	if log == nil {
 		log = slog.Default()
@@ -52,11 +60,11 @@ func (r *Runner) Run(ctx context.Context, stage []Step) (int, error) {
 		return r.survey(ctx, stage, log)
 	}
 
-	applied := 0
+	var res Result
 	for _, s := range stage {
 		done, err := s.Check(ctx)
 		if err != nil {
-			return applied, fmt.Errorf("check %s: %w", s.Name, err)
+			return res, fmt.Errorf("check %s: %w", s.Name, err)
 		}
 		if done {
 			log.Info("step already done, skipping", "step", s.Name)
@@ -64,21 +72,21 @@ func (r *Runner) Run(ctx context.Context, stage []Step) (int, error) {
 		}
 		log.Info("applying step", "step", s.Name)
 		if err := s.Apply(ctx); err != nil {
-			return applied, fmt.Errorf("apply %s: %w", s.Name, err)
+			return res, fmt.Errorf("apply %s: %w", s.Name, err)
 		}
-		applied++
+		res.Applied++
 		log.Info("step applied", "step", s.Name)
 	}
-	return applied, nil
+	return res, nil
 }
 
 // survey is the dry-run path: report each step's state, apply nothing.
-func (r *Runner) survey(ctx context.Context, stage []Step, log *slog.Logger) (int, error) {
+func (r *Runner) survey(ctx context.Context, stage []Step, log *slog.Logger) (Result, error) {
 	out := r.Out
 	if out == nil {
 		out = io.Discard
 	}
-	pending := 0
+	var res Result
 	for _, s := range stage {
 		done, err := s.Check(ctx)
 		var state string
@@ -90,15 +98,15 @@ func (r *Runner) survey(ctx context.Context, stage []Step, log *slog.Logger) (in
 			state = "done"
 		default:
 			state = "pending"
-			pending++
+			res.Pending++
 		}
 		if _, err := fmt.Fprintf(out, "%-10s %s\n", state, s.Name); err != nil {
-			return pending, fmt.Errorf("write dry-run report: %w", err)
+			return res, fmt.Errorf("write dry-run report: %w", err)
 		}
 	}
 	if _, err := fmt.Fprintf(out, "\ndry-run: %d of %d steps pending, nothing applied\n",
-		pending, len(stage)); err != nil {
-		return pending, fmt.Errorf("write dry-run report: %w", err)
+		res.Pending, len(stage)); err != nil {
+		return res, fmt.Errorf("write dry-run report: %w", err)
 	}
-	return pending, nil
+	return res, nil
 }

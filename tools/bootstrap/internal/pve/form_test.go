@@ -119,14 +119,14 @@ func TestFormFreshCluster(t *testing.T) {
 	}
 
 	var r steps.Runner
-	applied, err := r.Run(context.Background(), stage)
+	res, err := r.Run(context.Background(), stage)
 	if err != nil {
 		t.Fatalf("Run() error: %v", err)
 	}
 	// create + two joins apply; the quorate step checks done off the
 	// seeded status.
-	if applied != 3 {
-		t.Errorf("Run() applied = %d, want 3", applied)
+	if res.Applied != 3 {
+		t.Errorf("Run() applied = %d, want 3", res.Applied)
 	}
 	if counter.writes != 3 {
 		t.Errorf("writes = %d, want 3 (create + 2 joins)", counter.writes)
@@ -150,12 +150,12 @@ func TestFormReRunIsNoOp(t *testing.T) {
 	}
 	writesAfterFirst := counter.writes
 
-	applied, err := r.Run(context.Background(), stage)
+	res, err := r.Run(context.Background(), stage)
 	if err != nil {
 		t.Fatalf("second Run() error: %v", err)
 	}
-	if applied != 0 {
-		t.Errorf("second Run() applied = %d, want 0", applied)
+	if res.Applied != 0 {
+		t.Errorf("second Run() applied = %d, want 0", res.Applied)
 	}
 	if counter.writes != writesAfterFirst {
 		t.Errorf("second Run() made %d writes, want 0", counter.writes-writesAfterFirst)
@@ -207,7 +207,7 @@ func TestFormDryRunMakesNoWrites(t *testing.T) {
 
 	var out strings.Builder
 	r := steps.Runner{DryRun: true, Out: &out}
-	pending, err := r.Run(context.Background(), stage)
+	res, err := r.Run(context.Background(), stage)
 	if err != nil {
 		t.Fatalf("Run() error: %v", err)
 	}
@@ -219,8 +219,8 @@ func TestFormDryRunMakesNoWrites(t *testing.T) {
 		t.Errorf("dry-run changed membership: %v", got)
 	}
 	// create + both joins pending; quorate reads done off the seed.
-	if pending != 3 {
-		t.Errorf("Run() pending = %d, want 3", pending)
+	if res.Pending != 3 {
+		t.Errorf("Run() pending = %d, want 3", res.Pending)
 	}
 	for _, want := range []string{"create-cluster", "join-pve-02", "join-pve-03", "cluster-quorate"} {
 		if !strings.Contains(out.String(), want) {

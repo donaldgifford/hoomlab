@@ -41,7 +41,7 @@ configuration — nodes other than the primary must be fresh installs.`,
 				return err
 			}
 			runner := steps.Runner{DryRun: opts.dryRun, Out: cmd.OutOrStdout()}
-			applied, err := runner.Run(cmd.Context(), stage)
+			res, err := runner.Run(cmd.Context(), stage)
 			if err != nil {
 				return fmt.Errorf("pve form: %w", err)
 			}
@@ -50,7 +50,7 @@ configuration — nodes other than the primary must be fresh installs.`,
 			}
 			if _, err := fmt.Fprintf(cmd.OutOrStdout(),
 				"✓ cluster %q formed and quorate (%d of %d steps applied)\nnext: bootstrap pve certs\n",
-				cluster.Name, applied, len(stage)); err != nil {
+				cluster.Name, res.Applied, len(stage)); err != nil {
 				return fmt.Errorf("write summary: %w", err)
 			}
 			return nil
