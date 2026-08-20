@@ -47,7 +47,7 @@ func Load(path string) (*Cluster, hclkit.Diagnostics) {
 	}
 
 	cluster := &root.Clusters[0]
-	if semDiags := cluster.Validate(); semDiags.HasErrors() {
+	if semDiags := cluster.ValidateAndNormalize(); semDiags.HasErrors() {
 		// Keep any decode warnings in front of the semantic errors.
 		diags.Diagnostics = append(diags.Diagnostics, semDiags...)
 		return nil, diags

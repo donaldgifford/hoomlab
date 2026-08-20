@@ -15,13 +15,14 @@ const dnsCloudflare = "cloudflare"
 // below 100 are reserved for internal use.
 const pveVMIDMin = 100
 
-// Validate runs the semantic checks gohcl decoding cannot express and
-// returns every violation as a diagnostic naming the offending block
-// and field. As a side effect it rewrites each talos node MAC to the
-// canonical NormalizeMAC form, so a validated cluster always carries
-// canonical MACs. Positions are not available post-decode; these
-// diagnostics carry summaries and details only.
-func (c *Cluster) Validate() hcl.Diagnostics {
+// ValidateAndNormalize runs the semantic checks gohcl decoding cannot
+// express and returns every violation as a diagnostic naming the
+// offending block and field. The "normalize" in the name is real: it
+// rewrites each talos node MAC to the canonical NormalizeMAC form, so
+// a validated cluster always carries canonical MACs. Positions are
+// not available post-decode; these diagnostics carry summaries and
+// details only.
+func (c *Cluster) ValidateAndNormalize() hcl.Diagnostics {
 	diags := c.validatePVE()
 	diags = append(diags, c.validateACME()...)
 	diags = append(diags, c.validateTalos()...)
