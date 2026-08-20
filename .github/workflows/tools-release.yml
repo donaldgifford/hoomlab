@@ -1,0 +1,120 @@
+---
+# yaml-language-server: $schema=https://www.schemastore.org/github-workflow.json
+# Release train for the nested Go modules under tools/ — separate from
+# release.yml (the binary + image + chart lockstep train for the Hoomlab
+# service). Tools release on demand, not on merge: dispatch with a tool
+# and version, and this workflow cuts the tag tools/<tool>/<version> —
+# the Go nested-module tag format, so
+# `go install github.com/donaldgifford/hoomlab/tools/<tool>@<version>`
+# resolves — then builds the platform archives and publishes a GitHub
+# release. No image, no chart: binaries only (ADR-0001; a tools/
+# container delivery would be its own ADR).
+name: Tools Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tool:
+        description: "Tool to release (directory under tools/)"
+        type: choice
+        options: [bootstrap]
+        required: true
+      version:
+        description: "Semver tag to cut, with leading v (e.g. v0.1.0)"
+        type: string
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  TOOL: ${{ inputs.tool }}
+  VERSION: ${{ inputs.version }}
+  TAG: tools/${{ inputs.tool }}/${{ inputs.version }}
+
+jobs:
+  release:
+    name: Release ${{ inputs.tool }} ${{ inputs.version }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tools/${{ inputs.tool }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Validate version format
+        working-directory: .
+        run: |
+          if ! echo "$VERSION" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "ERROR: version must be vMAJOR.MINOR.PATCH, got: $VERSION"
+            exit 1
+          fi
+
+      - name: Check tag does not exist
+        working-directory: .
+        run: |
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "ERROR: tag $TAG already exists"
+            exit 1
+          fi
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: tools/${{ inputs.tool }}/go.mod
+          cache-dependency-path: tools/${{ inputs.tool }}/go.sum
+
+      - name: Run unit tests
+        run: go test -race ./...
+
+      - name: Build platform archives
+        run: |
+          commit=$(git rev-parse --short HEAD)
+          build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          mkdir -p dist
+          for platform in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+            os="${platform%/*}"
+            arch="${platform#*/}"
+            out="dist/${TOOL}_${VERSION#v}_${os}_${arch}"
+            mkdir -p "$out"
+            CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build \
+              -trimpath \
+              -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${commit} -X main.date=${build_date}" \
+              -o "$out/${TOOL}" .
+            tar -czf "${out}.tar.gz" -C "$out" "${TOOL}"
+            rm -r "$out"
+          done
+          (cd dist && sha256sum ./*.tar.gz > "${TOOL}_${VERSION#v}_checksums.txt")
+
+      - name: Create and push tag
+        working-directory: .
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "${TOOL} ${VERSION}"
+          git push origin "$TAG"
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$TAG" \
+            --title "${TOOL} ${VERSION}" \
+            --generate-notes \
+            dist/*.tar.gz "dist/${TOOL}_${VERSION#v}_checksums.txt"
+
+      - name: Write release summary
+        if: always()
+        working-directory: .
+        run: |
+          {
+            echo "## Tools Release"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| Tool | \`${TOOL}\` |"
+            echo "| Tag | \`${TAG}\` |"
+            echo "| go install | \`go install github.com/${{ github.repository }}/tools/${TOOL}@${VERSION}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
