@@ -65,26 +65,35 @@ func bootAssets(factoryURL string, cfg *config.Talos) []bootAsset {
 // the booty host.
 func assetsReady(root string, assets []bootAsset) (bool, error) {
 	for _, a := range assets {
-		full := filepath.Join(root, filepath.FromSlash(a.Path))
-		want, err := os.ReadFile(full + digestSuffix)
-		if errors.Is(err, os.ErrNotExist) {
-			return false, nil
-		}
-		if err != nil {
-			return false, fmt.Errorf("read digest for %s: %w", a.Path, err)
-		}
-		got, err := fileDigest(full)
-		if errors.Is(err, os.ErrNotExist) {
-			return false, nil
-		}
-		if err != nil {
+		ready, err := assetReady(root, a)
+		if err != nil || !ready {
 			return false, err
 		}
-		if got != strings.TrimSpace(string(want)) {
-			return false, fmt.Errorf(
-				"%s does not match the digest recorded when it was downloaded: "+
-					"delete it and re-run to fetch a fresh copy", a.Path)
-		}
+	}
+	return true, nil
+}
+
+// assetReady is assetsReady for a single asset.
+func assetReady(root string, a bootAsset) (bool, error) {
+	full := filepath.Join(root, filepath.FromSlash(a.Path))
+	want, err := os.ReadFile(full + digestSuffix)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("read digest for %s: %w", a.Path, err)
+	}
+	got, err := fileDigest(full)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if got != strings.TrimSpace(string(want)) {
+		return false, fmt.Errorf(
+			"%s does not match the digest recorded when it was downloaded: "+
+				"delete it and re-run to fetch a fresh copy", a.Path)
 	}
 	return true, nil
 }
@@ -109,7 +118,7 @@ func fileDigest(name string) (string, error) {
 // hundreds of megabytes and re-emitting must stay cheap.
 func (e *Emitter) downloadAssets(ctx context.Context, assets []bootAsset) error {
 	for _, a := range assets {
-		ok, err := assetsReady(e.Root, []bootAsset{a})
+		ok, err := assetReady(e.Root, a)
 		if err != nil {
 			return err
 		}

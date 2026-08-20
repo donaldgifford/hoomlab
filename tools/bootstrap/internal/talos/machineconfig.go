@@ -109,22 +109,19 @@ func RoleTemplates(bundle *secrets.Bundle, cluster *config.Cluster) (Templates, 
 		return Templates{}, fmt.Errorf("machinery generate input: %w", err)
 	}
 
-	var out Templates
-	for _, role := range []struct {
-		machineType machine.Type
-		target      *[]byte
-	}{
-		{machine.TypeControlPlane, &out.ControlPlane},
-		{machine.TypeWorker, &out.Worker},
-	} {
-		data, warnings, err := roleTemplate(in, role.machineType, image)
-		if err != nil {
-			return Templates{}, fmt.Errorf("%s template: %w", role.machineType, err)
-		}
-		*role.target = data
-		out.Warnings = append(out.Warnings, warnings...)
+	controlPlane, cpWarnings, err := roleTemplate(in, machine.TypeControlPlane, image)
+	if err != nil {
+		return Templates{}, fmt.Errorf("controlplane template: %w", err)
 	}
-	return out, nil
+	worker, workerWarnings, err := roleTemplate(in, machine.TypeWorker, image)
+	if err != nil {
+		return Templates{}, fmt.Errorf("worker template: %w", err)
+	}
+	return Templates{
+		ControlPlane: controlPlane,
+		Worker:       worker,
+		Warnings:     append(cpWarnings, workerWarnings...),
+	}, nil
 }
 
 // roleTemplate generates, validates, and templatizes the config for
