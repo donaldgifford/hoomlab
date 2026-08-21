@@ -354,12 +354,31 @@ load-bearing Proxmox setting encoded and asserted.
 
 #### Tasks
 
-- [ ] Implement `bootstrap talos ipxe`: run booty's containerized iPXE
+- [x] Implement `bootstrap talos ipxe`: run booty's containerized iPXE
       build via docker, dropping `booty/boot/ipxe.efi`; the step is
       pending only when the binary is missing or the on-disk
       `embed.ipxe` differs from a fresh render (OQ-9a — a changed
       `booty.url` triggers the rebuild; nothing else does)
-- [ ] Implement VM creation steps in `internal/pve` per DESIGN-0001
+      — **two deviations, both deliberate:**
+      1. booty v0.2.1 ships *no* containerized iPXE build (its docs
+         give the manual `make -C ipxe/src … EMBED=…` from an iPXE
+         checkout). The CLI therefore runs that same build itself in a
+         pinned `debian:bookworm-slim` container against a pinned iPXE
+         ref, mounting the boot dir writable and `embed.ipxe`
+         read-only. If booty later ships a builder image, switch to it.
+      2. The convergence check compares the fresh render against a
+         `boot/ipxe.efi.embed.sha256` stamp written at build time, not
+         against the on-disk `embed.ipxe`. Comparing to the file
+         literally can never trigger: `talos emit` runs first and
+         rewrites `embed.ipxe`, so by the time `talos ipxe` looks, disk
+         and render always agree and the rebuild would never fire. The
+         embedded script is not readable back out of a compiled binary,
+         so the stamp is the only way to distinguish "built from this
+         URL" from "built from the previous one" — which is the stated
+         intent (OQ-9a). Running `talos ipxe` against an `embed.ipxe`
+         that is stale or missing is refused with a pointer to
+         `talos emit` rather than baking in a wrong URL.
+- [x] Implement VM creation steps in `internal/pve` per DESIGN-0001
       Stage 4: per-node `qemu.NewService(client, pveNode, caps)` and
       `Create` with the full load-bearing spec — `VMID`, `Name`,
       `Memory`, `Cores`, `SCSI0` (`<storage>:<disk_gb>`), `Net0`
@@ -368,14 +387,14 @@ load-bearing Proxmox setting encoded and asserted.
       `bios=ovmf`, `efidisk0` **without** pre-enrolled Secure Boot keys
       (`pre-enrolled-keys=0`), `machine=q35`, `cpu=host`, VirtIO
       `rng0`, `serial0`
-- [ ] Implement the start step with task waits; `Check` via `qemu.Get`
+- [x] Implement the start step with task waits; `Check` via `qemu.Get`
       on the VMID at the target node (exists + running)
-- [ ] Wire `bootstrap talos vms` with `--dry-run`
-- [ ] Write mockpve tests: fresh create + start for all nodes;
+- [x] Wire `bootstrap talos vms` with `--dry-run`
+- [x] Write mockpve tests: fresh create + start for all nodes;
       idempotent second run; partial-exists convergence (subset of VMs
       pre-seeded); a spec-assertion test proving every load-bearing
       field above lands on the wire exactly as designed
-- [ ] Write `talos ipxe` unit tests for the rebuild trigger: unchanged
+- [x] Write `talos ipxe` unit tests for the rebuild trigger: unchanged
       `embed.ipxe` + present binary ⇒ done; changed URL or missing
       binary ⇒ pending (docker invocation stubbed; the real build runs
       in the Phase 6 drill, not CI — OQ-3)
