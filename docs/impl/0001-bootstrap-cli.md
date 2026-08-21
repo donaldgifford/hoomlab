@@ -469,7 +469,10 @@ cluster drill on the real lab, re-run to prove end-to-end convergence.
       no-op (the "take ownership converges on no-op" property the
       Hoomlab service will later rely on)
 - [ ] Record drill results and deviations (INV doc or runbook
-      appendix); fold any fixes back into code and docs
+      appendix); fold any fixes back into code and docs — the appendix
+      is prepared (`tools/bootstrap/README.md`, "The acceptance drill"):
+      a 12-step result table, the convergence re-run loop, and a
+      deviations table awaiting the run
 - [ ] Cut `tools/bootstrap/v0.1.0` via `tools-release.yml` once the
       drill and the no-op re-run have passed (OQ-5)
 
@@ -508,22 +511,27 @@ cluster drill on the real lab, re-run to prove end-to-end convergence.
 
 Per DESIGN-0001's Testing Strategy, distributed across the phases:
 
-- [ ] `internal/config`: table tests over HCL fixtures — valid config,
+- [x] `internal/config`: table tests over HCL fixtures — valid config,
       every validator failure, `env()` present/missing/empty, rendered
       diagnostics asserted (Phase 1)
-- [ ] `internal/steps` + `internal/pve`: mockpve end-to-end — fresh
+- [x] `internal/steps` + `internal/pve`: mockpve end-to-end — fresh
       runs, no-op re-runs, interruption matrices, dry-run
       zero-write assertions, task-waiter paths, ACME seeding via
       `AddACMEPlugin`, VM spec assertions (Phases 2, 3, 5)
-- [ ] Secret redaction: no token/password bytes in any captured output
+- [x] Secret redaction: no token/password bytes in any captured output
       (Phases 1, 3)
-- [ ] `internal/emit`: golden files, byte-stability invariant,
+- [x] `internal/emit`: golden files, byte-stability invariant,
       in-process booty catalog load + dry-render, machinery
       `Validate(ModeMetal)` (Phase 4)
-- [ ] `internal/talos`: mockery v3 mocks for bootstrap/health
-      sequencing (Phase 6)
-- [ ] Filesystem-touching tests use `t.TempDir()`; no test writes into
-      the repo tree
+- [x] `internal/talos`: mockery v3 mocks for bootstrap/health
+      sequencing (Phase 6) — bootstrap sequencing is mock-driven; the
+      health stream runs against a real in-process ClusterService gRPC
+      server instead, because streaming semantics (EOF-as-success,
+      server-side deadline) are the thing a mock would assume rather
+      than verify
+- [x] Filesystem-touching tests use `t.TempDir()`; no test writes into
+      the repo tree — the one exception is `-update`, which rewrites
+      `internal/emit/testdata/golden` on demand
 - [ ] e2e: the Phase 6 real-lab drill — deliberately not a merge gate
       (per DESIGN-0001), recorded in an INV/runbook appendix
 

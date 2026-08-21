@@ -189,3 +189,62 @@ just bootstrap-test    # go test ./...
 just bootstrap-lint    # golangci-lint
 mise x -- mockery      # regenerate internal/talos/mocks
 ```
+
+## Appendix: the acceptance drill
+
+IMPL-0001 Phase 6 gates the `v0.1.0` release on a full
+bare-nodes-to-healthy-cluster run on real hardware, driven **from this
+runbook rather than from memory** — if a step here is wrong or missing,
+that is a finding, not something to work around silently.
+
+Run it from a scratch directory so nothing pre-exists:
+
+```sh
+mkdir -p ~/drill && cd ~/drill
+cp <repo>/tools/bootstrap/examples/bootstrap.hcl .
+$EDITOR bootstrap.hcl              # real endpoints, MACs, storage, bridges
+# export the four HOOMLAB_* variables (see Configuration)
+```
+
+Point `acme.directory` at Let's Encrypt staging for the drill so failed
+orders don't burn production rate limits, then re-run `pve certs`
+against production once the flow is proven.
+
+Record the result of each step — `pass`, or what actually happened:
+
+| # | Step | Expected | Result |
+| --- | --- | --- | --- |
+| 1 | `bootstrap validate` | exit 0 | |
+| 2 | `bootstrap pve form` | cluster formed and quorate | |
+| 3 | `bootstrap pve certs` | certificates on all nodes | |
+| 4 | `bootstrap talos secrets` | `secrets.yaml`, 0600 | |
+| 5 | `bootstrap talos emit` | full tree under `bootstrap-out/booty/` | |
+| 6 | `bootstrap talos ipxe` | `boot/ipxe.efi` built | |
+| 7 | copy tree to booty host, `./booty-run.sh` | `/boot.ipxe` and `/machine-config?mac=…` answer | |
+| 8 | `bootstrap talos vms` | every VM created and running | |
+| 9 | (watch) | VMs PXE boot, install, reboot into Talos | |
+| 10 | `bootstrap talos bootstrap` | etcd bootstrapped, credentials written | |
+| 11 | `bootstrap talos health` | cluster reports healthy | |
+| 12 | `kubectl --kubeconfig bootstrap-out/out/kubeconfig get nodes` | every node `Ready` | |
+
+Then the convergence pass — the property the Hoomlab service will rely
+on when it takes ownership. Re-run **every** stage:
+
+```sh
+for stage in "pve form" "pve certs" "talos secrets" "talos emit" \
+             "talos ipxe" "talos vms" "talos bootstrap" "talos health"; do
+  echo "== $stage"; bootstrap $stage || break
+done
+```
+
+Expected: every stage reports its steps already done and applies
+nothing (`0 steps applied`, or the equivalent "nothing to do" summary).
+Any stage that applies something on the second pass is a convergence
+bug — record which step re-fired and why.
+
+**Deviations found during the drill** (fold fixes back into the code
+and this runbook, then note them here):
+
+| Date | Step | What happened | Resolution |
+| --- | --- | --- | --- |
+| | | _(no drill run yet)_ | |
