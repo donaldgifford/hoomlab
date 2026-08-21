@@ -12,6 +12,7 @@ created: 2026-08-20
 
 <!--toc:start-->
 - [Objective](#objective)
+  - [Current status (2026-08-21)](#current-status-2026-08-21)
 - [Scope](#scope)
   - [In Scope](#in-scope)
   - [Out of Scope](#out-of-scope)
@@ -74,18 +75,24 @@ DESIGN-0001 intended — none of it can be discharged from a workstation:
 | Task | Phase | Why it needs the lab |
 | --- | --- | --- |
 | `pve form` nested-lab spot-check | 2 | needs three PVE nodes to form and join |
-| booty container smoke | 4 | needs a running booty serving the emitted tree |
 | The acceptance drill | 6 | bare nodes → healthy cluster on real hardware |
 | Post-drill no-op re-run | 6 | the convergence property, proven against a real cluster |
-| Record drill results | 6 | follows the drill (appendix is prepared) |
+| Record drill results | 6 | follows the drill |
 | Cut `tools/bootstrap/v0.1.0` | 6 | gated on the drill passing (OQ-5) |
 
-The drill procedure is written up as an executable checklist in
-`tools/bootstrap/README.md` ("Appendix: the acceptance drill") with
-result and deviation tables to fill in. Until it runs, this document
-stays **In Progress** and DESIGN-0001 stays **Approved** rather than
-Implemented — the criteria they gate on are empirical, not code
-review.
+Phase 4's booty container smoke **is** now discharged: booty loads the
+emitted catalog and serves `/boot.ipxe`, `/ipxe?mac=…`,
+`/machine-config?mac=…`, and the boot assets correctly, with an
+unconfigured MAC returning 404. That run also turned up five defects in
+artifacts the test suite had been happily pinning — see INV-0001, which
+tracks the remaining work and holds the drill results.
+
+The procedure the drill follows is
+[`docs/runbook/bootstrap-cluster.md`](../runbook/bootstrap-cluster.md);
+`tools/bootstrap/README.md` remains the CLI's operator reference. Until
+the drill runs, this document stays **In Progress** and DESIGN-0001
+stays **Approved** rather than Implemented — the criteria they gate on
+are empirical, not code review.
 
 ## Scope
 
@@ -104,7 +111,8 @@ review.
 - Tests: config table tests, mockpve convergence/interruption tests,
   golden-file emission tests with in-process booty validation, mocked
   Talos client tests, and the Phase 6 real-lab drill.
-- An operator runbook (`tools/bootstrap/README.md`).
+- An operator runbook (`docs/runbook/bootstrap-cluster.md`), with
+  `tools/bootstrap/README.md` as the CLI's own reference.
 
 ### Out of Scope
 
@@ -362,13 +370,17 @@ validated with booty's and machinery's own loaders.
   passes `Validate(ModeMetal)`
 - `talos secrets` refuses to overwrite an existing bundle (tested)
 - Manual smoke (documented in the runbook, not CI — OQ-3): a real
-  booty container started via the emitted `booty-run.sh` serves
-  `/boot.ipxe`, `/ipxe?mac=…`, and `/machine-config?mac=…` from the
-  emitted tree — **operator-run, still outstanding**; the in-process
-  contract test covers the same chain (load → match → render →
-  validate) without a container, and the real Image Factory asset URLs
-  were verified to respond, but nothing here has yet started a booty
-  container. Runbook lands in Phase 6.
+  booty container serves `/boot.ipxe`, `/ipxe?mac=…`, and
+  `/machine-config?mac=…` from the emitted tree — **met**. booty loaded
+  the emitted catalog (`profiles=2 groups=4`), matched `cp-01` by MAC
+  to `talos-control`, served a `type: controlplane` /
+  `hostname: cp-01` machineconfig with no template expressions left,
+  served the worker its own, returned 404 for an unconfigured MAC, and
+  served both boot assets at full length. Running it also exposed five
+  defects in the emitted artifacts (INV-0001) that no test could see,
+  because the tests stub the container runtime and pin the emitted
+  text. The PXE handshake itself — proxyDHCP, TFTP, chainloading
+  `ipxe.efi` — still needs a machine and lands in the drill.
 - `just bootstrap-test` / `tools-ci.yml` green
 
 ---
@@ -480,13 +492,19 @@ cluster drill on the real lab, re-run to prove end-to-end convergence.
       (plus: real-failure stop, no-op re-run, never-overwrite
       credentials, dry-run touching nothing; health success/timeout run
       against a real in-process gRPC ClusterService)
-- [x] Write the operator runbook (`tools/bootstrap/README.md`): the
-      full stage flow from DESIGN-0001's command tree, required
-      `HOOMLAB_*` variables, prerequisites (trusted/isolated boot
-      network, booty host with docker, moving the emitted tree and
-      secrets bundle), and the "restart booty after re-emit" rule
-      — includes the DHCP-reservation prerequisite (endpoint host must
-      be the first control-plane node) and the convergence re-run check
+- [x] Write the operator runbook
+      (`docs/runbook/bootstrap-cluster.md`, with
+      `tools/bootstrap/README.md` as the CLI reference): the full stage
+      flow from DESIGN-0001's command tree, required `HOOMLAB_*`
+      variables, prerequisites (trusted/isolated boot network, booty
+      host with docker, moving the emitted tree and secrets bundle),
+      and the "restart booty after re-emit" rule — includes the
+      DHCP-reservation prerequisite (endpoint host must be the first
+      control-plane node), the convergence re-run check, per-step
+      expected output taken from the code, and a troubleshooting
+      section covering the failure modes found so far. Steps that need
+      the lab are marked unverified rather than implying confidence
+      nobody has earned.
 - [ ] Run the full drill on the homelab hardware (OQ-2; nested-lab
       rehearsals first as needed): bare PVE nodes → `validate →
       pve form → pve certs → talos secrets → talos emit → talos ipxe →
@@ -495,11 +513,10 @@ cluster drill on the real lab, re-run to prove end-to-end convergence.
 - [ ] Re-run every stage after the drill and confirm the full pass is a
       no-op (the "take ownership converges on no-op" property the
       Hoomlab service will later rely on)
-- [ ] Record drill results and deviations (INV doc or runbook
-      appendix); fold any fixes back into code and docs — the appendix
-      is prepared (`tools/bootstrap/README.md`, "The acceptance drill"):
-      a 12-step result table, the convergence re-run loop, and a
-      deviations table awaiting the run
+- [ ] Record drill results and deviations in INV-0001; fold any fixes
+      back into code and docs — INV-0001 is prepared with a 12-step
+      result table, a per-stage convergence table, and a deviations
+      table awaiting the run
 - [ ] Cut `tools/bootstrap/v0.1.0` via `tools-release.yml` once the
       drill and the no-op re-run have passed (OQ-5)
 
