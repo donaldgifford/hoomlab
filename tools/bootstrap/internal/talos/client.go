@@ -38,12 +38,12 @@ type Client interface {
 	Close() error
 }
 
-// EndpointHost extracts the host the CLI dials for Talos API calls
+// endpointHost extracts the host the CLI dials for Talos API calls
 // from the configured cluster endpoint. The config declares no per-VM
 // IPs (identity is MAC-based, addresses come from DHCP reservations on
 // those MACs), so talos.endpoint must resolve to the first
 // control-plane node — the runbook states this as a prerequisite.
-func EndpointHost(cluster *config.Cluster) (string, error) {
+func endpointHost(cluster *config.Cluster) (string, error) {
 	u, err := url.Parse(cluster.Talos.Endpoint)
 	if err != nil {
 		return "", fmt.Errorf("parse talos endpoint %q: %w", cluster.Talos.Endpoint, err)
@@ -60,7 +60,7 @@ func EndpointHost(cluster *config.Cluster) (string, error) {
 // anew on every call — write the result once and keep it, the same
 // rule as the secrets bundle itself.
 func Talosconfig(bundle *secrets.Bundle, cluster *config.Cluster) (*clientconfig.Config, error) {
-	host, err := EndpointHost(cluster)
+	host, err := endpointHost(cluster)
 	if err != nil {
 		return nil, err
 	}

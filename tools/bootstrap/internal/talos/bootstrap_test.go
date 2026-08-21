@@ -61,9 +61,9 @@ func TestBootstrapFreshRun(t *testing.T) {
 
 	// The etcd-bootstrap Check probes with Kubeconfig and the node is
 	// not serving yet; after Bootstrap the fetch succeeds.
-	client.On("Kubeconfig", mock.Anything).Return(nil, errNotServing).Once()
-	client.On("Bootstrap", mock.Anything).Return(nil).Once()
-	client.On("Kubeconfig", mock.Anything).Return([]byte(kubeconfigBytes), nil).Once()
+	client.EXPECT().Kubeconfig(mock.Anything).Return(nil, errNotServing).Once()
+	client.EXPECT().Bootstrap(mock.Anything).Return(nil).Once()
+	client.EXPECT().Kubeconfig(mock.Anything).Return([]byte(kubeconfigBytes), nil).Once()
 
 	if res := runBootstrap(t, b); res.Applied != 3 {
 		t.Errorf("applied %d steps, want 3", res.Applied)
@@ -116,10 +116,10 @@ func TestBootstrapAlreadyBootstrapped(t *testing.T) {
 
 	// The probe fails (node mid-restart, say) so the step runs, and the
 	// bootstrap call reports the work already done.
-	client.On("Kubeconfig", mock.Anything).Return(nil, errNotServing).Once()
-	client.On("Bootstrap", mock.Anything).
+	client.EXPECT().Kubeconfig(mock.Anything).Return(nil, errNotServing).Once()
+	client.EXPECT().Bootstrap(mock.Anything).
 		Return(status.Error(codes.FailedPrecondition, "etcd data directory is not empty")).Once()
-	client.On("Kubeconfig", mock.Anything).Return([]byte(kubeconfigBytes), nil).Once()
+	client.EXPECT().Kubeconfig(mock.Anything).Return([]byte(kubeconfigBytes), nil).Once()
 
 	if res := runBootstrap(t, b); res.Applied != 3 {
 		t.Errorf("applied %d steps, want 3", res.Applied)
@@ -132,13 +132,13 @@ func TestBootstrapAlreadyBootstrapped(t *testing.T) {
 func TestBootstrapRerunIsNoOp(t *testing.T) {
 	b, client := newBootstrapper(t)
 
-	client.On("Kubeconfig", mock.Anything).Return(nil, errNotServing).Once()
-	client.On("Bootstrap", mock.Anything).Return(nil).Once()
-	client.On("Kubeconfig", mock.Anything).Return([]byte(kubeconfigBytes), nil).Once()
+	client.EXPECT().Kubeconfig(mock.Anything).Return(nil, errNotServing).Once()
+	client.EXPECT().Bootstrap(mock.Anything).Return(nil).Once()
+	client.EXPECT().Kubeconfig(mock.Anything).Return([]byte(kubeconfigBytes), nil).Once()
 	runBootstrap(t, b)
 
 	// Second run: only the etcd-bootstrap Check queries the cluster.
-	client.On("Kubeconfig", mock.Anything).Return([]byte(kubeconfigBytes), nil).Once()
+	client.EXPECT().Kubeconfig(mock.Anything).Return([]byte(kubeconfigBytes), nil).Once()
 	if res := runBootstrap(t, b); res.Applied != 0 {
 		t.Errorf("second run applied %d steps, want 0", res.Applied)
 	}
@@ -149,8 +149,8 @@ func TestBootstrapRerunIsNoOp(t *testing.T) {
 func TestBootstrapRealFailure(t *testing.T) {
 	b, client := newBootstrapper(t)
 
-	client.On("Kubeconfig", mock.Anything).Return(nil, errNotServing).Once()
-	client.On("Bootstrap", mock.Anything).
+	client.EXPECT().Kubeconfig(mock.Anything).Return(nil, errNotServing).Once()
+	client.EXPECT().Bootstrap(mock.Anything).
 		Return(status.Error(codes.Unavailable, "connection refused")).Once()
 
 	r := steps.Runner{Log: discardLogger()}
@@ -181,7 +181,7 @@ func TestBootstrapNeverOverwritesCredentials(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	client.On("Kubeconfig", mock.Anything).Return([]byte(kubeconfigBytes), nil).Once()
+	client.EXPECT().Kubeconfig(mock.Anything).Return([]byte(kubeconfigBytes), nil).Once()
 
 	if res := runBootstrap(t, b); res.Applied != 0 {
 		t.Errorf("applied %d steps over existing credentials, want 0", res.Applied)
@@ -199,7 +199,7 @@ func TestBootstrapNeverOverwritesCredentials(t *testing.T) {
 
 func TestBootstrapDryRun(t *testing.T) {
 	b, client := newBootstrapper(t)
-	client.On("Kubeconfig", mock.Anything).Return(nil, errNotServing).Once()
+	client.EXPECT().Kubeconfig(mock.Anything).Return(nil, errNotServing).Once()
 
 	var out strings.Builder
 	r := steps.Runner{DryRun: true, Out: &out, Log: discardLogger()}
