@@ -2,7 +2,9 @@
 // Talos PXE chain from: the HCL catalog, the secret-bearing
 // machineconfig template overlay, the embedded iPXE chain script, a
 // ready-to-run launcher, and the Image Factory boot assets
-// (DESIGN-0001 Stage 3).
+// (DESIGN-0001 Stage 3). It also builds boot/ipxe.efi — the pinned
+// iPXE source compiled in a container with the chain script embedded
+// (ipxe.go), converged via a build-time stamp of the embedded script.
 //
 // Emission is pure rendering — no API calls, deterministic output — so
 // the convergence Check is a byte-diff of a fresh render against the
