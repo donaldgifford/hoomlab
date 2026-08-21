@@ -22,7 +22,7 @@
 # Override the image with BOOTY_IMAGE=... if you need a different build.
 set -euo pipefail
 
-IMAGE="${BOOTY_IMAGE:-ghcr.io/donaldgifford/booty:v0.2.1}"
+IMAGE="${BOOTY_IMAGE:-ghcr.io/donaldgifford/booty:0.2.1}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly IMAGE HERE
 

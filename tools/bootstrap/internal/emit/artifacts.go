@@ -3,6 +3,7 @@ package emit
 import (
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/donaldgifford/booty/render"
 	"github.com/donaldgifford/hoomlab/tools/bootstrap/internal/config"
@@ -30,12 +31,19 @@ const defaultBootyVersion = "v0.2.1"
 
 // bootyImage returns the container image reference for the emitted
 // launcher.
+//
+// booty's git tags carry a leading "v" but its GHCR tags do not
+// (ghcr.io/donaldgifford/booty:0.2.1, never :v0.2.1), so the "v" is
+// stripped. Operators reach for the release version they see on the
+// releases page, and an image reference that doesn't resolve fails at
+// the worst moment — on the booty host, after the tree has been copied
+// over, with `docker run` reporting only "not found".
 func bootyImage(booty config.Booty) string {
 	version := booty.Version
 	if version == "" {
 		version = defaultBootyVersion
 	}
-	return "ghcr.io/donaldgifford/booty:" + version
+	return "ghcr.io/donaldgifford/booty:" + strings.TrimPrefix(version, "v")
 }
 
 // renderEmbedIPXE renders the chainloading script that gets baked into

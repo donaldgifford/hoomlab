@@ -390,3 +390,46 @@ func TestIdentityBindingSurvivesMACSpelling(t *testing.T) {
 		}
 	}
 }
+
+// TestLauncherImageTagHasNoVPrefix pins a mismatch that bit once and
+// would bite again: booty's git tags carry a leading "v" (v0.2.1) but
+// its GHCR tags do not (ghcr.io/donaldgifford/booty:0.2.1). Emitting
+// the git spelling produces an image reference that does not resolve,
+// and it fails in the worst place — on the booty host, after the tree
+// has been copied over, with docker reporting only "not found".
+//
+// Whatever the operator writes in the config, the launcher must carry
+// a tag that exists.
+func TestLauncherImageTagHasNoVPrefix(t *testing.T) {
+	for name, version := range map[string]string{
+		"default":    "",
+		"v-prefixed": "v0.3.0",
+		"bare":       "0.3.0",
+		"prerelease": "v0.3.0-rc.1",
+	} {
+		t.Run(name, func(t *testing.T) {
+			cluster := testCluster()
+			cluster.Talos.Booty.Version = version
+
+			e := &emit.Emitter{Cluster: cluster, Bundle: testBundle(t), Root: t.TempDir()}
+			tree, err := e.Tree()
+			if err != nil {
+				t.Fatalf("Tree: %v", err)
+			}
+
+			const prefix = "ghcr.io/donaldgifford/booty:"
+			launcher := string(tree["booty-run.sh"].Data)
+			_, after, found := strings.Cut(launcher, prefix)
+			if !found {
+				t.Fatalf("launcher references no booty image:\n%s", launcher)
+			}
+			tag, _, _ := strings.Cut(after, "}")
+			if strings.HasPrefix(tag, "v") {
+				t.Errorf("image tag %q carries the git-tag \"v\" prefix; GHCR has no such tag", tag)
+			}
+			if version != "" && tag != strings.TrimPrefix(version, "v") {
+				t.Errorf("image tag = %q, want %q", tag, strings.TrimPrefix(version, "v"))
+			}
+		})
+	}
+}
