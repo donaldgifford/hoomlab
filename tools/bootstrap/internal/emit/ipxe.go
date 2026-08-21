@@ -30,6 +30,14 @@ const (
 	// ipxeTarget is the UEFI x86-64 binary — the one a q35 + OVMF VM
 	// loads. Talos on Proxmox is UEFI-only here (see the VM spec).
 	ipxeTarget = "bin-x86_64-efi/ipxe.efi"
+	// ipxeBuildPlatform pins the builder to x86-64 regardless of the
+	// workstation's own architecture. Without it, an arm64 host (any
+	// Apple Silicon Mac) pulls the arm64 image and its gcc rejects the
+	// x86-64 flags iPXE's makefile passes: "unrecognized command-line
+	// option '-m64'". Emulated, the build is slower but correct — and
+	// the artifact must be x86-64 either way, since that is what the
+	// Proxmox VMs boot.
+	ipxeBuildPlatform = "linux/amd64"
 )
 
 // The emitted binary and the record of what it was built from.
@@ -47,13 +55,24 @@ const (
 // source, build the EFI binary with our chain script embedded, and
 // drop it in the mounted output directory. iPXE's EMBED accepts an
 // absolute path, so the script is mounted rather than copied in.
+//
+// NO_WERROR=1 is iPXE's own knob for exactly this situation: its
+// v1.21.1 sources trip -Werror=array-bounds false positives on
+// bookworm's gcc-12, which fails the build outright. The warnings are
+// compiler artifacts on a tagged upstream release, not defects we can
+// fix from here, and the alternative — pinning an older toolchain
+// image — just relocates the decay.
+// ca-certificates is not optional: the slim image ships no trust
+// store, so cloning over HTTPS fails with "server certificate
+// verification failed. CAfile: none" — after the apt install has
+// already run, which makes it read like a network fault.
 const buildScript = `set -eu
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq --no-install-recommends \
-	git make gcc binutils perl liblzma-dev mtools >/dev/null
+	ca-certificates git make gcc binutils perl liblzma-dev mtools >/dev/null
 git clone --quiet --depth 1 --branch ` + ipxeRef + ` https://github.com/ipxe/ipxe.git /ipxe
-make -C /ipxe/src ` + ipxeTarget + ` EMBED=/embed.ipxe -j"$(nproc)"
+make -C /ipxe/src ` + ipxeTarget + ` EMBED=/embed.ipxe NO_WERROR=1 -j"$(nproc)"
 cp /ipxe/src/` + ipxeTarget + ` /out/ipxe.efi
 `
 
@@ -173,9 +192,17 @@ func (b *IPXEBuilder) apply(ctx context.Context) error {
 	if err := os.MkdirAll(bootDir, dirMode); err != nil {
 		return fmt.Errorf("create %s: %w", bootDir, err)
 	}
+	// docker refuses a relative --volume source: it reads anything
+	// without a leading separator as a named volume, and the default
+	// --output is relative, so the whole documented flow would fail
+	// here on "includes invalid characters for a local volume name".
+	bootMount, embedMount, err := mountPaths(bootDir, embedPath)
+	if err != nil {
+		return err
+	}
 	b.logger().Info("building ipxe.efi", "image", ipxeBuilderImage, "ipxe_ref", ipxeRef,
 		"booty_url", b.BootyURL)
-	if err := b.runner()(ctx, "docker", dockerArgs(bootDir, embedPath)...); err != nil {
+	if err := b.runner()(ctx, "docker", dockerArgs(bootMount, embedMount)...); err != nil {
 		return fmt.Errorf("build ipxe.efi: %w", err)
 	}
 
@@ -190,12 +217,27 @@ func (b *IPXEBuilder) apply(ctx context.Context) error {
 	return nil
 }
 
+// mountPaths resolves the two bind-mount sources to absolute paths,
+// which is what docker requires of a host directory.
+func mountPaths(bootDir, embedPath string) (boot, embed string, err error) {
+	boot, err = filepath.Abs(bootDir)
+	if err != nil {
+		return "", "", fmt.Errorf("resolve %s: %w", bootDir, err)
+	}
+	embed, err = filepath.Abs(embedPath)
+	if err != nil {
+		return "", "", fmt.Errorf("resolve %s: %w", embedPath, err)
+	}
+	return boot, embed, nil
+}
+
 // dockerArgs builds the container invocation. The output directory is
 // mounted writable and the chain script read-only; nothing else from
 // the host is exposed.
 func dockerArgs(bootDir, embedPath string) []string {
 	return []string{
 		"run", "--rm",
+		"--platform", ipxeBuildPlatform,
 		"--volume", bootDir + ":/out",
 		"--volume", embedPath + ":/embed.ipxe:ro",
 		ipxeBuilderImage,

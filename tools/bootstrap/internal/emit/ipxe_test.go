@@ -202,6 +202,10 @@ func TestIPXEDockerInvocation(t *testing.T) {
 	joined := strings.Join(docker.args, " ")
 	for _, want := range []string{
 		"run --rm",
+		// The artifact is an x86-64 EFI binary, so the toolchain must be
+		// x86-64 too — an arm64 workstation would otherwise build with a
+		// gcc that rejects iPXE's -m64.
+		"--platform linux/amd64",
 		filepath.Join(b.Root, "boot") + ":/out",
 		filepath.Join(b.Root, "embed.ipxe") + ":/embed.ipxe:ro",
 		"debian:bookworm-slim",
@@ -229,5 +233,47 @@ func TestIPXEDryRunBuildsNothing(t *testing.T) {
 	}
 	if docker.calls != 0 {
 		t.Errorf("dry run ran docker %d times, want 0", docker.calls)
+	}
+}
+
+// TestIPXEDockerMountsAreAbsolute pins the one thing docker will not
+// forgive about a bind mount. Anything without a leading separator is
+// read as a *named volume*, not a host path, so a relative source
+// fails with "includes invalid characters for a local volume name" —
+// and --output defaults to the relative ./bootstrap-out, so this is
+// the ordinary flow, not an edge case.
+//
+// The other tests here all run from t.TempDir(), which is already
+// absolute, so none of them can see this.
+func TestIPXEDockerMountsAreAbsolute(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	root := filepath.Join("bootstrap-out", "booty")
+	e := &emit.Emitter{Cluster: testCluster(), Bundle: testBundle(t), Root: root}
+	tree, err := e.Tree()
+	if err != nil {
+		t.Fatalf("Tree: %v", err)
+	}
+	if err := tree.Write(root); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+
+	docker := &fakeDocker{root: root}
+	b := &emit.IPXEBuilder{Root: root, BootyURL: bootyURL, Run: docker.run, Log: discardLogger()}
+	runIPXE(t, b)
+
+	var mounts int
+	for i, arg := range docker.args {
+		if arg != "--volume" || i+1 >= len(docker.args) {
+			continue
+		}
+		mounts++
+		source, _, _ := strings.Cut(docker.args[i+1], ":")
+		if !filepath.IsAbs(source) {
+			t.Errorf("--volume source %q is relative; docker reads that as a named volume", source)
+		}
+	}
+	if mounts != 2 {
+		t.Errorf("found %d --volume flags, want 2 (the boot dir and embed.ipxe)", mounts)
 	}
 }
