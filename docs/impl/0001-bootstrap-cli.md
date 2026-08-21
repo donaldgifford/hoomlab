@@ -60,6 +60,33 @@ Each phase lands as one or more PRs gated by `tools-ci.yml`
 `just bootstrap-build` until `v0.1.0` is cut after the Phase 6 drill —
 OQ-5).
 
+### Current status (2026-08-21)
+
+**Code complete through Phase 6.** Every command in the DESIGN-0001
+tree is implemented, tested, and lint-clean: `validate`, `pve form`,
+`pve certs`, `talos secrets|emit|ipxe|vms|bootstrap|health`, `version`.
+`just bootstrap-lint` / `bootstrap-test` / `bootstrap-build` pass;
+`govulncheck` is clean.
+
+**What remains is hardware-gated and operator-run**, exactly as
+DESIGN-0001 intended — none of it can be discharged from a workstation:
+
+| Task | Phase | Why it needs the lab |
+| --- | --- | --- |
+| `pve form` nested-lab spot-check | 2 | needs three PVE nodes to form and join |
+| booty container smoke | 4 | needs a running booty serving the emitted tree |
+| The acceptance drill | 6 | bare nodes → healthy cluster on real hardware |
+| Post-drill no-op re-run | 6 | the convergence property, proven against a real cluster |
+| Record drill results | 6 | follows the drill (appendix is prepared) |
+| Cut `tools/bootstrap/v0.1.0` | 6 | gated on the drill passing (OQ-5) |
+
+The drill procedure is written up as an executable checklist in
+`tools/bootstrap/README.md` ("Appendix: the acceptance drill") with
+result and deviation tables to fill in. Until it runs, this document
+stays **In Progress** and DESIGN-0001 stays **Approved** rather than
+Implemented — the criteria they gate on are empirical, not code
+review.
+
 ## Scope
 
 ### In Scope
