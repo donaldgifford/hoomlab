@@ -62,15 +62,25 @@ const (
 // compiler artifacts on a tagged upstream release, not defects we can
 // fix from here, and the alternative — pinning an older toolchain
 // image — just relocates the decay.
-// ca-certificates is not optional: the slim image ships no trust
-// store, so cloning over HTTPS fails with "server certificate
-// verification failed. CAfile: none" — after the apt install has
-// already run, which makes it read like a network fault.
+//
+// Two of the packages look redundant and are not:
+//
+// ca-certificates — the slim image ships no trust store, so cloning
+// over HTTPS fails with "server certificate verification failed.
+// CAfile: none", after the apt install has already run, which makes it
+// read like a network fault.
+//
+// libc6-dev — --no-install-recommends means gcc does NOT pull it, so
+// /usr/include/stdint.h is absent. iPXE's firmware objects are
+// freestanding and never notice, but the host tool elf2efi64 is an
+// ordinary hosted program: it fails alone, late, and confusingly,
+// resolving stdint.h to iPXE's own freestanding copy and dying on
+// "bits/stdint.h: No such file or directory".
 const buildScript = `set -eu
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq --no-install-recommends \
-	ca-certificates git make gcc binutils perl liblzma-dev mtools >/dev/null
+	ca-certificates git make gcc libc6-dev binutils perl liblzma-dev mtools >/dev/null
 git clone --quiet --depth 1 --branch ` + ipxeRef + ` https://github.com/ipxe/ipxe.git /ipxe
 make -C /ipxe/src ` + ipxeTarget + ` EMBED=/embed.ipxe NO_WERROR=1 -j"$(nproc)"
 cp /ipxe/src/` + ipxeTarget + ` /out/ipxe.efi

@@ -113,7 +113,11 @@ against production once the flow is proven.
 - [x] Smoke the emitted tree through a real booty container: catalog
       loads, `/boot.ipxe`, `/ipxe?mac=…`, `/machine-config?mac=…`, and
       the boot assets all answer correctly
-- [x] Build `ipxe.efi` for real rather than through the test stub
+- [x] Build `ipxe.efi` for real rather than through the test stub —
+      produces a 984 KB x86-64 PE32+ EFI application with the chain
+      script embedded and pointing at the configured booty URL; the
+      stamp matches `embed.ipxe`, and a re-run converges without
+      rebuilding
 - [ ] Verify the built `ipxe.efi` actually chainloads — needs a machine
       to PXE boot, so it lands in the drill
 - [ ] Nested-lab rehearsal of `pve form` and `pve certs` (step 2 above)
@@ -137,10 +141,10 @@ against production once the flow is proven.
 
 ### Pre-drill: defects found by running the emitted artifacts
 
-Four defects, all found by *executing* what the CLI produces rather
-than reading it. Each would have failed during the drill; three would
-have failed at the same step, one after another, costing three
-round-trips of hardware time.
+Six defects, all found by *executing* what the CLI produces rather
+than reading it. Each would have failed during the drill, and five of
+them at the same step — one after another, each hiding the next, so
+discovering them on hardware would have cost five round-trips.
 
 | # | Stage | Symptom | Cause | Fix |
 | --- | --- | --- | --- | --- |
@@ -149,6 +153,7 @@ round-trips of hardware time.
 | 3 | `talos ipxe` | `fatal: unable to access 'https://github.com/ipxe/ipxe.git/': server certificate verification failed. CAfile: none` | `debian:bookworm-slim` ships no trust store, and the apt install list omitted `ca-certificates`. Surfaces *after* the apt step, so it reads like a network fault. | Add `ca-certificates` to the install list |
 | 4 | `talos ipxe` | `gcc: error: unrecognized command-line option '-m64'` | On Apple Silicon the builder pulled the arm64 image, whose gcc cannot target x86-64. The artifact must be x86-64 regardless of the workstation. | Pin `--platform linux/amd64`; slower under emulation, correct everywhere |
 | 5 | `talos ipxe` | `error: array subscript ... is partly outside array bounds [-Werror=array-bounds]`, build fails | iPXE v1.21.1 trips gcc-12 false positives, fatal under iPXE's default `-Werror` | Pass iPXE's own `NO_WERROR=1` |
+| 6 | `talos ipxe` | `include/stdint.h:16:10: fatal error: bits/stdint.h: No such file or directory`, building `util/elf2efi64` | `--no-install-recommends` means `gcc` never pulls `libc6-dev`, so there is no `/usr/include/stdint.h`. iPXE's firmware objects are freestanding and never notice; only the *host* tool does, so it fails alone and late, and the error points at iPXE's own headers rather than the missing package. Reproduced identically on iPXE master, which ruled out the version. | Add `libc6-dev` |
 
 The pattern is worth naming: **every one of these was invisible to the
 test suite**, because the tests stub the container runtime and pin the

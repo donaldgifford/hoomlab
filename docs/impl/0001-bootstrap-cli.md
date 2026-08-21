@@ -83,7 +83,7 @@ DESIGN-0001 intended — none of it can be discharged from a workstation:
 Phase 4's booty container smoke **is** now discharged: booty loads the
 emitted catalog and serves `/boot.ipxe`, `/ipxe?mac=…`,
 `/machine-config?mac=…`, and the boot assets correctly, with an
-unconfigured MAC returning 404. That run also turned up five defects in
+unconfigured MAC returning 404. That run also turned up six defects in
 artifacts the test suite had been happily pinning — see INV-0001, which
 tracks the remaining work and holds the drill results.
 
@@ -376,7 +376,7 @@ validated with booty's and machinery's own loaders.
   to `talos-control`, served a `type: controlplane` /
   `hostname: cp-01` machineconfig with no template expressions left,
   served the worker its own, returned 404 for an unconfigured MAC, and
-  served both boot assets at full length. Running it also exposed five
+  served both boot assets at full length. Running it also exposed six
   defects in the emitted artifacts (INV-0001) that no test could see,
   because the tests stub the container runtime and pin the emitted
   text. The PXE handshake itself — proxyDHCP, TFTP, chainloading
