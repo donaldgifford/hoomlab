@@ -2,6 +2,7 @@ package pve_test
 
 import (
 	"context"
+	"encoding/base64"
 	"log/slog"
 	"strings"
 	"testing"
@@ -214,5 +215,87 @@ func TestCertsRedaction(t *testing.T) {
 		if strings.Contains(output, cfSecret) {
 			t.Errorf("%s output leaks the provider token:\n%s", name, output)
 		}
+	}
+}
+
+// seededCertifier wires a Certifier against a mock whose ACME plugin
+// was seeded before the CLI ever ran — the operator-registered-it-out-
+// of-band case, which reaches pluginCheck with an existing record
+// rather than one this stage created.
+func seededCertifier(t *testing.T, cfg *config.Cluster, pluginData string) *pve.Certifier {
+	t.Helper()
+	mock := mockpve.New()
+	mock.SeedVersion("9.2.1", "9.2", "test")
+	for _, n := range cfg.PVE.Nodes {
+		mock.AddNode(n.Name)
+	}
+	mock.AddACMEPlugin(cfg.ACME.DNS, "dns", "cf", pluginData)
+
+	client, cleanup := mock.NewClient()
+	t.Cleanup(cleanup)
+
+	var logBuf strings.Builder
+	return &pve.Certifier{
+		Cluster: cfg,
+		Nodes:   nodes.NewService(client, version.Capabilities{}),
+		Tasks:   tasks.NewService(client),
+		Now:     func() time.Time { return time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC) },
+		Log:     slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})),
+	}
+}
+
+// cloudflarePluginData is what PVE stores for a Cloudflare plugin
+// holding token: sorted KEY=value lines, empty values dropped, base64.
+// Written out longhand rather than by calling the CLI's own encoder, so
+// the test pins the wire format independently of the code under test.
+func cloudflarePluginData(token string) string {
+	return base64.StdEncoding.EncodeToString([]byte("CF_Token=" + token))
+}
+
+// TestCertsPreexistingPluginMatches: a plugin already carrying exactly
+// the configured credentials is left alone. Rewriting it would be a
+// pointless cluster write on every run.
+func TestCertsPreexistingPluginMatches(t *testing.T) {
+	cfg := certsCluster()
+	certifier := seededCertifier(t, cfg, cloudflarePluginData(cfSecret))
+
+	res := runCerts(t, certifier)
+	// Everything but the plugin step still has work to do: the account,
+	// three node domains, three certificate orders.
+	if res.Applied != 7 {
+		t.Errorf("applied = %d, want 7 (the seeded plugin must be skipped)", res.Applied)
+	}
+	plugin, err := certifier.Nodes.GetACMEPlugin(context.Background(), cfg.ACME.DNS)
+	if err != nil {
+		t.Fatalf("GetACMEPlugin: %v", err)
+	}
+	if plugin.Data != cloudflarePluginData(cfSecret) {
+		t.Errorf("seeded plugin data was rewritten: %q", plugin.Data)
+	}
+}
+
+// TestCertsPreexistingPluginDrifted: a plugin holding a stale token is
+// updated in place, not recreated — PVE rejects a create for an ID that
+// already exists, so getting this branch wrong breaks every re-run
+// after a token rotation.
+func TestCertsPreexistingPluginDrifted(t *testing.T) {
+	cfg := certsCluster()
+	certifier := seededCertifier(t, cfg, cloudflarePluginData("stale-token-from-last-year"))
+
+	res := runCerts(t, certifier)
+	if res.Applied != 8 {
+		t.Errorf("applied = %d, want 8 (the drifted plugin must be updated)", res.Applied)
+	}
+	plugin, err := certifier.Nodes.GetACMEPlugin(context.Background(), cfg.ACME.DNS)
+	if err != nil {
+		t.Fatalf("GetACMEPlugin: %v", err)
+	}
+	if plugin.Data != cloudflarePluginData(cfSecret) {
+		t.Errorf("plugin data = %q, want the configured token", plugin.Data)
+	}
+
+	// And the whole stage converges from there.
+	if again := runCerts(t, certifier); again.Applied != 0 {
+		t.Errorf("re-run applied = %d, want 0", again.Applied)
 	}
 }
