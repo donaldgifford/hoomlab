@@ -10,6 +10,10 @@ import (
 	"github.com/donaldgifford/hclkit/pkg/hclkit/validate"
 )
 
+// errExactlyOneCluster is the diagnostic summary for a config with
+// zero or multiple cluster blocks; tests assert on the same text.
+const errExactlyOneCluster = "Exactly one cluster block required"
+
 // Load reads the bootstrap config file at path and decodes it into the
 // schema, resolving env() references against the process environment.
 // It returns the file's single cluster with every node MAC rewritten
@@ -39,7 +43,7 @@ func Load(path string) (*Cluster, hclkit.Diagnostics) {
 	if n := len(root.Clusters); n != 1 {
 		return nil, hclkit.NewDiagnostics(hcl.Diagnostics{{
 			Severity: hcl.DiagError,
-			Summary:  "Exactly one cluster block required",
+			Summary:  errExactlyOneCluster,
 			Detail: fmt.Sprintf(
 				"%s declares %d cluster blocks; the bootstrap CLI operates on exactly one.",
 				path, n),

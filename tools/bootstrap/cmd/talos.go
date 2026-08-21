@@ -3,10 +3,14 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"path/filepath"
+	"time"
 
+	"github.com/siderolabs/talos/pkg/machinery/config/generate/secrets"
 	"github.com/spf13/cobra"
 
+	"github.com/donaldgifford/hoomlab/tools/bootstrap/internal/config"
 	"github.com/donaldgifford/hoomlab/tools/bootstrap/internal/emit"
 	"github.com/donaldgifford/hoomlab/tools/bootstrap/internal/pve"
 	"github.com/donaldgifford/hoomlab/tools/bootstrap/internal/steps"
@@ -23,8 +27,115 @@ func newTalosCmd(opts *rootOptions) *cobra.Command {
 		newTalosEmitCmd(opts),
 		newTalosIPXECmd(opts),
 		newTalosVMsCmd(opts),
+		newTalosBootstrapCmd(opts),
+		newTalosHealthCmd(opts),
 	)
 	return root
+}
+
+// talosSession is the shared preamble of bootstrap and health: the
+// validated config, the secrets bundle, and a dialed Talos API client.
+type talosSession struct {
+	cluster *config.Cluster
+	bundle  *secrets.Bundle
+	client  talos.Client
+}
+
+func newTalosSession(cmd *cobra.Command, opts *rootOptions) (*talosSession, error) {
+	cluster, err := loadCluster(cmd, opts)
+	if err != nil {
+		return nil, err
+	}
+	bundle, err := talos.LoadSecretsBundle(opts.secretsPath())
+	if errors.Is(err, talos.ErrSecretsMissing) {
+		return nil, fmt.Errorf("%w\nrun: bootstrap talos secrets", err)
+	}
+	if err != nil {
+		return nil, err
+	}
+	client, err := talos.NewClient(cmd.Context(), bundle, cluster)
+	if err != nil {
+		return nil, err
+	}
+	return &talosSession{cluster: cluster, bundle: bundle, client: client}, nil
+}
+
+func newTalosBootstrapCmd(opts *rootOptions) *cobra.Command {
+	return &cobra.Command{
+		Use:   "bootstrap",
+		Short: "Bootstrap etcd and write the cluster credentials",
+		Long: `bootstrap issues the one-time etcd bootstrap against the cluster
+endpoint — which must resolve to the first control-plane node — and
+writes the credentials under <output>/out/: talosconfig (generated from
+the secrets bundle) and kubeconfig (fetched from the live cluster).
+
+Run it once the VMs have PXE-booted, installed, and rebooted into
+Talos. Re-running converges: "already bootstrapped" is success, and
+existing credential files are never overwritten — they are working
+operator credentials, not render output.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			session, err := newTalosSession(cmd, opts)
+			if err != nil {
+				return err
+			}
+			defer session.client.Close() //nolint:errcheck // read-side close on command exit
+
+			bootstrapper := &talos.Bootstrapper{
+				Cluster: session.cluster,
+				Bundle:  session.bundle,
+				Client:  session.client,
+				OutDir:  filepath.Join(opts.output, "out"),
+			}
+			runner := steps.Runner{DryRun: opts.dryRun, Out: cmd.OutOrStdout()}
+			res, err := runner.Run(cmd.Context(), bootstrapper.Steps())
+			if err != nil {
+				return fmt.Errorf("talos bootstrap: %w", err)
+			}
+			if opts.dryRun {
+				return nil
+			}
+			if _, err := fmt.Fprintf(cmd.OutOrStdout(),
+				"✓ cluster bootstrapped, credentials in %s (%d steps applied)\nnext: bootstrap talos health\n",
+				filepath.Join(opts.output, "out"), res.Applied); err != nil {
+				return fmt.Errorf("write summary: %w", err)
+			}
+			return nil
+		},
+	}
+}
+
+func newTalosHealthCmd(opts *rootOptions) *cobra.Command {
+	var wait time.Duration
+	cmd := &cobra.Command{
+		Use:   "health",
+		Short: "Wait until the Talos cluster reports healthy",
+		Long: `health blocks until the cluster's own health check passes — etcd
+quorum, control-plane components, and every member Ready — or the wait
+expires. It is the standalone verification command: run it after
+bootstrap, after any maintenance, or any time you want the cluster to
+prove itself.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			session, err := newTalosSession(cmd, opts)
+			if err != nil {
+				return err
+			}
+			defer session.client.Close() //nolint:errcheck // read-side close on command exit
+
+			if err := session.client.Health(cmd.Context(), wait, slog.Default()); err != nil {
+				return fmt.Errorf("talos health: %w", err)
+			}
+			if _, err := fmt.Fprintf(cmd.OutOrStdout(),
+				"✓ cluster %q is healthy\n", session.cluster.Name); err != nil {
+				return fmt.Errorf("write summary: %w", err)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().DurationVar(&wait, "wait", 10*time.Minute,
+		"how long the cluster gets to become healthy")
+	return cmd
 }
 
 func newTalosIPXECmd(opts *rootOptions) *cobra.Command {

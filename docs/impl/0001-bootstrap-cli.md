@@ -421,23 +421,45 @@ cluster drill on the real lab, re-run to prove end-to-end convergence.
 
 #### Tasks
 
-- [ ] Define a narrow interface over the Talos client operations the
+- [x] Define a narrow interface over the Talos client operations the
       CLI needs (bootstrap, kubeconfig/talosconfig retrieval, health);
-      generate mockery v3 mocks
-- [ ] Implement `bootstrap talos bootstrap`: one-time etcd bootstrap
+      generate mockery v3 mocks — `internal/talos.Client`
+      (Bootstrap/Kubeconfig/Health/Close), mocks in
+      `internal/talos/mocks` via `.mockery.yml`
+      (`mise x -- mockery` regenerates). Talosconfig generation needs
+      no cluster, so it is a plain function, not an interface method.
+      The health stream translation (progress messages, EOF-as-success,
+      server errors) is additionally tested against a real
+      ClusterService gRPC server on a unix socket rather than a mock
+- [x] Implement `bootstrap talos bootstrap`: one-time etcd bootstrap
       against the first control-plane node — "already bootstrapped" is
       success (idempotency per DESIGN-0001); then write
       `<output>/out/talosconfig` and `<output>/out/kubeconfig`
-- [ ] Implement `bootstrap talos health`: block until the cluster
+      — "first control-plane node" resolves to the `talos.endpoint`
+      host (the config pins no per-VM IPs; the runbook requires a DHCP
+      reservation making the endpoint the first CP). Already-
+      bootstrapped detection is gRPC FailedPrecondition/AlreadyExists.
+      Both credential files are skip-if-present (their certs are
+      freshly generated per call, so a byte-diff would always differ,
+      and rotating working operator credentials on re-run would be
+      wrong); the etcd step's Check probes with a Kubeconfig fetch,
+      which only succeeds on a bootstrapped, serving cluster
+- [x] Implement `bootstrap talos health`: block until the cluster
       reports healthy (bounded, configurable wait), usable as the
-      standalone verification command
-- [ ] Write mock tests: first-call bootstrap sequencing,
+      standalone verification command — `--wait` (default 10m) becomes
+      the server-side health-check wait; progress streams to the log
+- [x] Write mock tests: first-call bootstrap sequencing,
       already-bootstrapped tolerance, health wait success/timeout
-- [ ] Write the operator runbook (`tools/bootstrap/README.md`): the
+      (plus: real-failure stop, no-op re-run, never-overwrite
+      credentials, dry-run touching nothing; health success/timeout run
+      against a real in-process gRPC ClusterService)
+- [x] Write the operator runbook (`tools/bootstrap/README.md`): the
       full stage flow from DESIGN-0001's command tree, required
       `HOOMLAB_*` variables, prerequisites (trusted/isolated boot
       network, booty host with docker, moving the emitted tree and
       secrets bundle), and the "restart booty after re-emit" rule
+      — includes the DHCP-reservation prerequisite (endpoint host must
+      be the first control-plane node) and the convergence re-run check
 - [ ] Run the full drill on the homelab hardware (OQ-2; nested-lab
       rehearsals first as needed): bare PVE nodes → `validate →
       pve form → pve certs → talos secrets → talos emit → talos ipxe →
