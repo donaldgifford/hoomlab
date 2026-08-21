@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	machcfg "github.com/siderolabs/talos/pkg/machinery/config"
@@ -331,4 +332,61 @@ func containsString(haystack []string, needle string) bool {
 		}
 	}
 	return false
+}
+
+// TestIdentityBindingSurvivesMACSpelling covers the far end of the
+// identity chain, where a MAC crosses out of our code and into booty's.
+// A booting machine reports its MAC however its firmware spells it, and
+// booty compares that against the selector we emitted. If the two
+// spellings disagree the group simply never matches: the node PXE
+// boots, is handed nothing, and no error anywhere says why.
+//
+// The near end — an operator writing the MAC in any accepted spelling
+// and the loader rewriting it to canonical form — is pinned by
+// config.TestLoadResolvesAndNormalizes, so this starts from a canonical
+// config and asserts the two things that test cannot see: that we emit
+// the canonical form, and that booty matches a node against it no
+// matter how the node spells itself.
+func TestIdentityBindingSurvivesMACSpelling(t *testing.T) {
+	cluster := testCluster()
+	cluster.Talos.Nodes = cluster.Talos.Nodes[:1]
+
+	e := &emit.Emitter{Cluster: cluster, Bundle: testBundle(t), Root: t.TempDir()}
+	tree, err := e.Tree()
+	if err != nil {
+		t.Fatalf("Tree: %v", err)
+	}
+	if err := tree.Write(e.Root); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+
+	// Our half of the contract. booty normalizes selectors on its side
+	// too, so a successful match alone would pass even if we emitted
+	// something odd — this pins the bytes we actually write.
+	groups := string(tree["catalog/20-groups.hcl"].Data)
+	if want := `mac = "` + cpMAC + `"`; !strings.Contains(groups, want) {
+		t.Errorf("emitted selector is not the canonical %s:\n%s", want, groups)
+	}
+
+	cat, err := catalog.DirSource{Root: filepath.Join(e.Root, "catalog")}.
+		Load(context.Background())
+	if err != nil {
+		t.Fatalf("booty catalog load: %v", err)
+	}
+
+	for _, reported := range []string{
+		"02:50:99:a2:00:01",
+		"02:50:99:A2:00:01",
+		"02-50-99-a2-00-01",
+		"02-50-99-A2-00-01",
+		"0250.99a2.0001",
+	} {
+		res, err := cat.Match(catalog.Identity{MAC: reported})
+		if err != nil {
+			t.Fatalf("a node reporting %q matched no group: %v", reported, err)
+		}
+		if res.Group != "cp-01" {
+			t.Errorf("a node reporting %q matched group %q, want cp-01", reported, res.Group)
+		}
+	}
 }
