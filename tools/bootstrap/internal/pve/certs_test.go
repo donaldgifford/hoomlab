@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"log/slog"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -298,4 +299,109 @@ func TestCertsPreexistingPluginDrifted(t *testing.T) {
 	if again := runCerts(t, certifier); again.Applied != 0 {
 		t.Errorf("re-run applied = %d, want 0", again.Applied)
 	}
+}
+
+// TestCertsReusesExistingDomainSlot covers the slot-allocation branch a
+// fresh cluster never reaches: the node already carries the FQDN, but
+// in a slot other than 0 and bound to no plugin (a hand-configured
+// node, or one wired before the plugin existed). The domain must be
+// rewritten *in its existing slot* — allocating a fresh index instead
+// would leave PVE holding the same domain twice, and a node with a
+// duplicated domain fails its certificate order.
+func TestCertsReusesExistingDomainSlot(t *testing.T) {
+	cfg := certsCluster()
+	node := cfg.PVE.Nodes[0].Name
+	fqdn := node + "." + cfg.ACME.Domain
+
+	mock := mockpve.New()
+	mock.SeedVersion("9.2.1", "9.2", "test")
+	for _, n := range cfg.PVE.Nodes {
+		mock.AddNode(n.Name)
+	}
+	// Slots 0 and 1 are taken by unrelated domains; ours sits in 2.
+	mock.SetNodeConfigKey(node, "acmedomain0", "other-a."+cfg.ACME.Domain)
+	mock.SetNodeConfigKey(node, "acmedomain1", "other-b."+cfg.ACME.Domain)
+	mock.SetNodeConfigKey(node, "acmedomain2", fqdn)
+
+	client, cleanup := mock.NewClient()
+	t.Cleanup(cleanup)
+
+	var logBuf strings.Builder
+	certifier := &pve.Certifier{
+		Cluster: cfg,
+		Nodes:   nodes.NewService(client, version.Capabilities{}),
+		Tasks:   tasks.NewService(client),
+		Now:     func() time.Time { return time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC) },
+		Log:     slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})),
+	}
+	runCerts(t, certifier)
+
+	got, err := certifier.Nodes.GetNodeConfig(context.Background(), node)
+	if err != nil {
+		t.Fatalf("GetNodeConfig: %v", err)
+	}
+
+	var slots []int
+	for _, d := range got.ACMEDomains {
+		if d.Domain == fqdn {
+			slots = append(slots, d.Index)
+		}
+	}
+	if len(slots) != 1 {
+		t.Fatalf("%s appears in %d slots (%v), want exactly 1", fqdn, len(slots), slots)
+	}
+	if slots[0] != 2 {
+		t.Errorf("%s moved to slot %d, want its existing slot 2", fqdn, slots[0])
+	}
+	// The unrelated domains must survive untouched.
+	for _, want := range []string{"other-a." + cfg.ACME.Domain, "other-b." + cfg.ACME.Domain} {
+		if !slices.ContainsFunc(got.ACMEDomains, func(d nodes.ACMEDomain) bool {
+			return d.Domain == want
+		}) {
+			t.Errorf("pre-existing domain %s was dropped", want)
+		}
+	}
+}
+
+// TestCertsFillsDomainSlotGap: with slots 0 and 2 taken, the new domain
+// takes 1 rather than colliding or running past the six PVE allows.
+func TestCertsFillsDomainSlotGap(t *testing.T) {
+	cfg := certsCluster()
+	node := cfg.PVE.Nodes[0].Name
+
+	mock := mockpve.New()
+	mock.SeedVersion("9.2.1", "9.2", "test")
+	for _, n := range cfg.PVE.Nodes {
+		mock.AddNode(n.Name)
+	}
+	mock.SetNodeConfigKey(node, "acmedomain0", "taken-a."+cfg.ACME.Domain)
+	mock.SetNodeConfigKey(node, "acmedomain2", "taken-c."+cfg.ACME.Domain)
+
+	client, cleanup := mock.NewClient()
+	t.Cleanup(cleanup)
+
+	var logBuf strings.Builder
+	certifier := &pve.Certifier{
+		Cluster: cfg,
+		Nodes:   nodes.NewService(client, version.Capabilities{}),
+		Tasks:   tasks.NewService(client),
+		Now:     func() time.Time { return time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC) },
+		Log:     slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})),
+	}
+	runCerts(t, certifier)
+
+	got, err := certifier.Nodes.GetNodeConfig(context.Background(), node)
+	if err != nil {
+		t.Fatalf("GetNodeConfig: %v", err)
+	}
+	fqdn := node + "." + cfg.ACME.Domain
+	for _, d := range got.ACMEDomains {
+		if d.Domain == fqdn {
+			if d.Index != 1 {
+				t.Errorf("%s landed in slot %d, want the free slot 1", fqdn, d.Index)
+			}
+			return
+		}
+	}
+	t.Errorf("%s was not written to any slot", fqdn)
 }

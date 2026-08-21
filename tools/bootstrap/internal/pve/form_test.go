@@ -35,6 +35,9 @@ func testCluster() *config.Cluster {
 // test dialer, so tests can assert "zero writes" precisely.
 type writeCounter struct {
 	writes int
+	// joinHosts records the contact address each join was told to
+	// reach the primary on — the corosync link0 the cluster forms over.
+	joinHosts []string
 }
 
 // countingAPI wraps a cluster.API, bumping the counter on every write.
@@ -50,6 +53,7 @@ func (a countingAPI) CreateCluster(ctx context.Context, spec *cluster.ClusterCre
 
 func (a countingAPI) JoinCluster(ctx context.Context, spec *cluster.JoinSpec) error {
 	a.c.writes++
+	a.c.joinHosts = append(a.c.joinHosts, spec.Hostname)
 	return a.API.JoinCluster(ctx, spec)
 }
 
@@ -292,5 +296,62 @@ func TestFormerStepsRequiresPrimary(t *testing.T) {
 	former := &pve.Former{Cluster: cfg, Dial: nil}
 	if _, err := former.Steps(); err == nil {
 		t.Fatal("Steps() succeeded without a primary node, want error")
+	}
+}
+
+// TestFormContactAddressFallback covers the branch a config exercising
+// the optional address field never reaches: with address omitted, the
+// joining node must be told to contact the primary on its endpoint
+// host. Getting this wrong sends corosync at an empty string, and the
+// join fails on the remote node where the error is hardest to read.
+func TestFormContactAddressFallback(t *testing.T) {
+	cfg := testCluster()
+	for i := range cfg.PVE.Nodes {
+		cfg.PVE.Nodes[i].Address = ""
+	}
+
+	mock := newFormationMock(t)
+	former, counter := newTestFormer(t, mock, cfg)
+	stage, err := former.Steps()
+	if err != nil {
+		t.Fatalf("Steps() error: %v", err)
+	}
+	var r steps.Runner
+	if _, err := r.Run(context.Background(), stage); err != nil {
+		t.Fatalf("Run() error: %v", err)
+	}
+
+	// https://10.0.10.11:8006 → 10.0.10.11
+	for i, host := range counter.joinHosts {
+		if host != "10.0.10.11" {
+			t.Errorf("join %d contacted %q, want the primary endpoint host 10.0.10.11", i, host)
+		}
+	}
+	if len(counter.joinHosts) != 2 {
+		t.Errorf("recorded %d joins, want 2", len(counter.joinHosts))
+	}
+}
+
+// TestFormContactAddressPrefersCorosync: when address is declared it
+// wins over the endpoint host — that is the whole point of the field,
+// letting corosync run on a separate network from the API.
+func TestFormContactAddressPrefersCorosync(t *testing.T) {
+	cfg := testCluster()
+	cfg.PVE.Nodes[0].Address = "10.99.0.11" // corosync link, not the API host
+
+	mock := newFormationMock(t)
+	former, counter := newTestFormer(t, mock, cfg)
+	stage, err := former.Steps()
+	if err != nil {
+		t.Fatalf("Steps() error: %v", err)
+	}
+	var r steps.Runner
+	if _, err := r.Run(context.Background(), stage); err != nil {
+		t.Fatalf("Run() error: %v", err)
+	}
+	for i, host := range counter.joinHosts {
+		if host != "10.99.0.11" {
+			t.Errorf("join %d contacted %q, want the declared address 10.99.0.11", i, host)
+		}
 	}
 }
