@@ -1,7 +1,7 @@
 ---
 id: IMPL-0002
 title: "Hardware acceptance drill for the bootstrap CLI"
-status: Draft
+status: In Progress
 author: Donald Gifford
 created: 2026-08-22
 ---
@@ -30,14 +30,22 @@ created: 2026-08-22
 
 ## Objective
 
-Execute INV-0001 the pragmatic way: use the three existing bare-metal
-PVE hosts — already installed and individually configured, not
-re-imaged — to take the `bootstrap` CLI through its entire flow for
-real: form the cluster, certify it with Cloudflare DNS-01 + ACME so the
-node UIs carry valid certificates, then create and verify a Talos
-cluster on top of it, with booty running in an operator-configured
-environment. Fold every deviation back into code and docs, prove the
-second full pass applies nothing, and cut `tools/bootstrap/v0.1.0`.
+Execute INV-0001 the pragmatic way, in two goals:
+
+1. **Evaluate whether bootstrap as it stands is acceptable to run
+   against the production bare-metal nodes** — then run it: form the
+   cluster from the hosts' current state and certify it with
+   Cloudflare DNS-01 + ACME so every node UI carries a valid
+   certificate.
+2. **Use that cluster to test Talos cluster creation** with the CLI,
+   against the existing booty service already running in the
+   environment — the fastest feedback loop available, in the actual
+   environment the tool is for.
+
+Fold every deviation back into code and docs, prove the second full
+pass applies nothing, and cut `tools/bootstrap/v0.1.0`. The three PVE
+hosts are already installed and individually configured, not
+re-imaged; what clustering does to that state is itself under test.
 
 This deliberately front-loads *manual* iteration: build → run → adjust
 → re-run, recorded in INV-0001 as it happens. The isolated, VLAN'd
@@ -90,12 +98,14 @@ RFC-0001 Phase 1.
 - **The isolated nested test environment** (dedicated test VLAN, a
   hoomlab-controlled booty VM scoped to it, a nested 3-VM PVE cluster
   PXE-installed from that booty, Talos on top — all automated). It is
-  deliberately deferred, not rejected: requirements observed during
-  this run get captured for it (Phase 6), and it becomes its own
-  design doc afterwards (OQ-4). Note it needs capabilities nothing
-  ships today — PVE-installer PXE profiles for booty and nested-VM
-  provisioning tooling in hoomlab — which is exactly why it should be
-  designed after the manual run, not before.
+  deliberately deferred, not rejected: this run is its requirements
+  gathering, and once the production cluster exists, the nested
+  environment gets built *on it*, working backwards from a known-good
+  state — with the production cluster and production Talos cluster as
+  the reference it is validated against (OQ-4). Note it needs
+  capabilities nothing ships today — PVE-installer PXE profiles for
+  booty and nested-VM provisioning tooling in hoomlab — which is
+  exactly why it is designed after the manual run, not before.
 - pvelab. It stays what it is — proxmox-go-sdk's own validation
   harness and example CLI. The bootstrap CLI has no dependency on it
   (its formation *logic* was adapted from pvelab's, but the code lives
@@ -126,8 +136,9 @@ radius of first contact.
 
 #### Tasks
 
-- [ ] Resolve OQ-1 through OQ-4 below and record the decisions in this
-      doc (strikethrough the losing options, IMPL-0001 style)
+- [x] Resolve OQ-1 through OQ-4 below and record the decisions in this
+      doc (strikethrough the losing options, IMPL-0001 style) —
+      decided 2026-08-22
 - [ ] Choose the primary node deliberately: the cluster is created on
       it and its `/etc/pve` *becomes* the cluster configuration —
       joiners get theirs replaced. The node whose local config
@@ -140,9 +151,11 @@ radius of first contact.
       node with guests) and inventory what node-local config exists on
       them (storage entries, users, tokens) so post-join losses are
       expected, not discovered
-- [ ] Root credentials per OQ-2's decision: one shared `root@pam`
-      password across all nodes (align them), or the config model
-      grows per-node passwords first
+- [ ] Confirm the `root@pam` password is identical on all three nodes
+      (OQ-2: the nodes were built from per-node answer files with
+      node-specific ansible on top, but access credentials are already
+      set everywhere — align via ansible if they differ; `pve form`
+      dials every joiner with the single configured password)
 - [ ] Create the API token on the **primary** (`pve form` dials
       joiners as root@pam, and every other stage dials the primary,
       which proxies node-scoped calls cluster-wide — a token on the
@@ -158,6 +171,10 @@ radius of first contact.
       variables; `bootstrap validate` exits 0
 - [ ] Record the environment in INV-0001's table: PVE version, node
       names/endpoints, CLI commit SHA, lab topology
+- [ ] The goal-1 gate: with the predictions, backups, and dry-runs in
+      hand, make the explicit go/no-go call that bootstrap as it
+      stands is acceptable to run against the production nodes, and
+      record it in INV-0001
 
 #### Success Criteria
 
@@ -167,31 +184,43 @@ radius of first contact.
 - `/etc/pve` backups exist for all three nodes, the joiners are
   guest-free, and the expected join-time config losses are written
   down *before* the join.
+- The go/no-go call is recorded — running against production is a
+  decision made on evidence, not momentum.
 
 ---
 
 ### Phase 2: Form and certify the real cluster
 
-First contact between the CLI and real Proxmox. The end state you
-actually want: the three hosts clustered, quorate, and serving their
-UIs with valid certificates.
+First contact between the CLI and real Proxmox, taken incrementally
+(OQ-1): a cluster of one first, certified end-to-end on the primary,
+then grown to three by re-running the same commands against an
+expanded config. The growth path is not a workaround — it exercises
+the convergence model doing exactly what it claims (already-done steps
+skip, new steps apply), and it means the certs stage is proven on one
+node before it ever touches the other two.
 
 #### Tasks
 
-- [ ] `bootstrap pve form --dry-run`: the survey lists create-cluster,
-      one join per joiner, and cluster-quorate as pending, and touches
-      nothing
-- [ ] `bootstrap pve form`: cluster created on the primary, joiners
-      joined serially, quorum verified; every node's UI reachable
-      afterwards
+- [ ] Single node first: with a primary-only `bootstrap.hcl`,
+      `pve form --dry-run` then `pve form` — the cluster of one
+      created on the primary, quorate, UI reachable
+- [ ] `bootstrap pve certs` on the single node against LE staging
+      until it converges cleanly (account, Cloudflare plugin, domain,
+      order)
+- [ ] Flip `acme.directory` to production and re-run — the primary's
+      UI presents a valid browser-trusted certificate (OQ-1: once
+      it's correct here, it's production-correct)
+- [ ] Grow to three: expand the config to all nodes;
+      `pve form --dry-run` shows exactly the two joins pending;
+      `pve form` joins them serially, full quorum verified, every UI
+      reachable
 - [ ] Verify the join-wipe reality against the prediction from
       Phase 1: what survived on the joiners, what was replaced;
       re-declare any joiner-local storage cluster-wide; amend the
       runbook's "fresh installs" prerequisite to the precise truth
-- [ ] `bootstrap pve certs` against LE staging until it converges
-      cleanly (account, Cloudflare plugin, per-node domains, orders)
-- [ ] Per OQ-1: flip `acme.directory` to production and re-run — every
-      node UI presents a valid browser-trusted certificate
+- [ ] `bootstrap pve certs` (production) extends to the joiners:
+      domains wired, orders complete, all three node UIs presenting
+      valid certificates
 - [ ] Convergence: re-run both stages; each reports every step done,
       nothing applied
 - [ ] Record every real-Proxmox-vs-mockpve discrepancy in INV-0001;
@@ -199,8 +228,9 @@ UIs with valid certificates.
 
 #### Success Criteria
 
-- One command formed the cluster from the hosts' real starting state;
-  interruptions (if any occurred) converged on re-run.
+- The cluster grew from one node to three by re-running the same
+  commands against a changed config — the convergence model's
+  incremental-growth claim, demonstrated on real hardware.
 - All three node UIs serve valid production certificates.
 - The second pass of both stages applies nothing.
 - The runbook's prerequisites section now tells the truth about
@@ -210,9 +240,9 @@ UIs with valid certificates.
 
 ### Phase 3: Talos artifacts and the booty environment
 
-The handoff point between the CLI's output and the operator-managed
-booty instance. Booty's environment is configured manually this run —
-by design; what that configuration turns out to require is input for
+The handoff point between the CLI's output and the **existing booty
+service already running in the environment** — operator-managed this
+run, by design. What deploying to it turns out to require is input for
 the future test environment's design.
 
 #### Tasks
@@ -220,14 +250,16 @@ the future test environment's design.
 - [ ] `bootstrap talos secrets`; back up `secrets.yaml` immediately
       (destination decided in Phase 1's config task)
 - [ ] `bootstrap talos emit` and `bootstrap talos ipxe` against the
-      real config
-- [ ] Stand up booty where it will serve the boot network (operator
-      task, manual configuration); copy the emitted tree over
-- [ ] Compare the manual booty invocation against the emitted
-      `booty-run.sh` — every deliberate difference gets noted in
-      INV-0001 (the launcher encodes the sharp edges; where the manual
-      setup diverges, either the launcher or the runbook is wrong for
-      this environment, and that is a finding)
+      real config, with `talos.booty.url` pointing at the existing
+      booty service
+- [ ] Deploy the emitted tree (catalog, templates, boot assets,
+      `ipxe.efi`) to the running booty service and restart it —
+      operator task; booty loads the catalog once at startup
+- [ ] Compare the existing service's live configuration against the
+      emitted `booty-run.sh` — every deliberate difference gets noted
+      in INV-0001 (the launcher encodes the sharp edges; where the
+      real environment diverges, either the launcher or the runbook is
+      wrong for this environment, and that is a finding)
 - [ ] Runbook step 7 verification before any VM exists: `/boot.ipxe`,
       `/ipxe?mac=…`, `/machine-config?mac=…` for a configured MAC
       (right role + hostname), 404 for an unconfigured MAC, boot
@@ -335,10 +367,13 @@ next doc.
 - [ ] DESIGN-0001 status → **Implemented**
 - [ ] Update the runbook's `[unverified]` markers to match what this
       run verified; `docz update` for the index tables
-- [ ] Seed the future test environment doc per OQ-4's decision,
-      carrying the requirements this run observed (what booty's
-      environment needed, what nested provisioning must provide, what
-      a PVE-installer PXE profile would take)
+- [ ] Write the future test environment's DESIGN doc (OQ-4), carrying
+      the requirements this run observed: what booty's environment
+      needed, what nested provisioning must provide, what a
+      PVE-installer PXE profile would take — the environment to be
+      built on the production cluster this run created, validated
+      against the production cluster and Talos cluster as the
+      reference
 - [ ] This doc: all boxes checked, status → **Completed**
 
 #### Success Criteria
@@ -370,30 +405,37 @@ CI honest alongside them:
   joining replaces the joiners' `/etc/pve`).
 - A Cloudflare-managed DNS zone for the certificate FQDNs; Let's
   Encrypt staging and production.
-- An operator-configured booty environment on the boot network
-  (manual this run, by design).
+- The existing operator-managed booty service on the boot network
+  (deployed to manually this run, by design).
 - DHCP control on the boot network (reservations for the Talos MACs).
 - `tools-release.yml` (already merged) for Phase 6.
 
 ## Open Questions
 
-Answer each with the letter of the chosen option (**a** is my
-recommendation), or **other** with your own. Decisions get recorded
-inline, IMPL-0001 style.
+All four decided **a** on 2026-08-22 and folded into the phase tasks
+above. The reasoning stays for the record.
 
 **OQ-1 — Certificate CA sequencing: staging first, or straight to
 production?** The end state is valid production certificates on every
 node UI. The question is only the path while the certs stage is being
 exercised for the first time against real Proxmox and real Cloudflare.
 
-- **a (recommended):** Staging until `pve certs` converges cleanly,
-  then flip `acme.directory` to production and re-run once. Iterating
-  a first-contact stage directly against production LE risks
+**Decided: a** (2026-08-22), with the caveat that reshaped Phase 2:
+the stage gets its first exercise against a *single node* (the
+primary-only config), so even a production misstep would burn a
+handful of attempts, not fifty. Staging proves the stage converges;
+the production run is the authoritative verification — once it is
+correct there, it is production-correct, which is the feedback this
+pragmatic pass exists to get.
+
+- **a:** Staging until `pve certs` converges cleanly, then flip
+  `acme.directory` to production and re-run. Iterating a
+  first-contact stage directly against production LE risks
   rate-limiting the domain (production limits are strict and last up
   to a week); the flip costs one extra command and also proves the
   staging→production transition works.
-- b: Straight to production. One less re-run if everything works
-  first try; an expensive week if the stage has a retry bug.
+- ~~b: Straight to production. One less re-run if everything works
+  first try; an expensive week if the stage has a retry bug.~~
 
 **OQ-2 — `pve form` assumes one shared root password. Your hosts, your
 call.** `applyJoin` dials each joining node as `root@pam` with the
@@ -401,39 +443,61 @@ single `root_password` config value, and sends that same value as the
 cluster password in the join spec — the design assumes all nodes share
 it.
 
-- **a (recommended):** Align all three hosts to one root password for
-  the run (rotate afterwards if wanted). No code change, matches the
-  design's assumption, and the password is only load-bearing during
-  joins.
-- b: Extend the config model to per-node root passwords before first
-  contact. More faithful to hosts as they are, but it changes config
-  schema + validation + form + runbook ahead of any evidence the
-  simpler model fails.
+**Decided: a** (2026-08-22). The three nodes were built from per-node
+answer files with node-specific ansible on top — they are deliberately
+different — but access credentials (passwords, SSH keys) are already
+set on all of them. Phase 1 confirms the `root@pam` password is
+identical across the three (ansible makes aligning it cheap if it
+isn't); the single-password config model stands unless the run itself
+proves it wrong, which would be a fold-back, not a precondition.
+
+- **a:** One shared root password across the nodes. No code change,
+  matches the design's assumption, and the password is only
+  load-bearing during joins.
+- ~~b: Extend the config model to per-node root passwords before
+  first contact. More faithful to hosts as they are, but it changes
+  config schema + validation + form + runbook ahead of any evidence
+  the simpler model fails.~~
 
 **OQ-3 — IMPL-0001's "nested spot-check" checkbox: what satisfies
 it?** The pragmatic path replaces the nested `pve form` rehearsal with
 first contact on the real cluster.
 
-- **a (recommended):** Annotate the task as superseded — the real
-  three-node formation in Phase 2 is a strictly stronger validation
-  than a nested rehearsal of the same stage — and check it off when
-  Phase 2 passes, with a pointer to INV-0001.
-- b: Leave it unchecked until the future nested test environment
+**Decided: a** (2026-08-22) — *deferred* is the operative word: the
+spot-check is not performed nested, because the production nodes
+already provide exactly what it wanted (unclustered PVE nodes to form)
+and Phase 2's real formation is a strictly stronger validation of the
+same stage. IMPL-0001's task gets annotated as
+deferred-and-superseded with a pointer to INV-0001 and checked off
+when Phase 2 passes, so IMPL-0001's completion does not block on
+tooling that is deliberately deferred.
+
+- **a:** Annotate as superseded by the real-cluster formation; check
+  off when Phase 2 passes.
+- ~~b: Leave it unchecked until the future nested test environment
   exists and runs it nested. Keeps the letter of the task; blocks
-  IMPL-0001's completion on tooling that is deliberately deferred.
+  IMPL-0001's completion on tooling that is deliberately deferred.~~
 
 **OQ-4 — Where does the future isolated test environment get
 captured?** The VLAN'd, booty-driven nested environment (PXE-installed
 nested PVE cluster + Talos on top) is wanted, deliberately deferred,
 and this run generates its requirements.
 
-- **a (recommended):** Collect requirements in INV-0001 as they're
-  observed during the run, then write a DESIGN doc after Phase 6 with
-  the real inputs in hand. The manual run is the requirements
-  gathering; the design comes after the evidence.
-- b: Open a placeholder INV/DESIGN doc now and append to it during
-  the run. Captures intent earlier, at the cost of a doc that's
-  mostly empty until the run finishes anyway.
+**Decided: a** (2026-08-22), with two refinements: the nested
+environment gets built **on the production cluster this run creates**
+— working backwards from a known-good state once the tool demonstrably
+works in the environment it is for — and the production cluster +
+production Talos cluster become the **reference the test environment
+is validated against**: the nested env must reproduce what prod
+demonstrably does.
+
+- **a:** Collect requirements in INV-0001 as they are observed during
+  the run, then write the DESIGN doc after Phase 6 with the real
+  inputs in hand. The manual run is the requirements gathering; the
+  design comes after the evidence.
+- ~~b: Open a placeholder INV/DESIGN doc now and append to it during
+  the run. Captures intent earlier, at the cost of a doc that is
+  mostly empty until the run finishes anyway.~~
 
 ## References
 
