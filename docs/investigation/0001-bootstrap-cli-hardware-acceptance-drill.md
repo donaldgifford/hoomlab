@@ -90,11 +90,15 @@ DESIGN-0001 / ADR-0001 for RFC-0001 Phase 1.
    be exercised without Proxmox, and fix what breaks — the drill costs
    hours of hardware time, so defects found at a workstation are the
    cheapest ones.
-2. **Nested rehearsal.** Run `validate` → `pve form` → `pve certs`
-   against a nested pvelab-style 3-node lab. This is the first contact
-   with a real PVE API and the cheapest place to discover that
-   `mockpve` and Proxmox disagree.
-3. **The drill.** Run the full flow on homelab hardware **from
+2. **First contact on the real hosts** (IMPL-0002's pragmatic
+   revision, 2026-08-22: the originally planned nested pvelab
+   rehearsal is deferred with the rest of the isolated test
+   environment — the three hosts already have PVE installed, so every
+   remaining step is API calls and VMs, and the bare-metal round-trip
+   cost the nested lab existed to avoid isn't there). The hosts start
+   *unclustered but configured*, not fresh — what joining preserves
+   and destroys is itself under test.
+3. **The drill.** Run the full flow on the real hardware **from
    [the runbook](../runbook/bootstrap-cluster.md), not from memory**.
    A step in the runbook that is wrong or missing is a finding, not
    something to work around silently.
@@ -120,7 +124,10 @@ against production once the flow is proven.
       rebuilding
 - [ ] Verify the built `ipxe.efi` actually chainloads — needs a machine
       to PXE boot, so it lands in the drill
-- [ ] Nested-lab rehearsal of `pve form` and `pve certs` (step 2 above)
+- [ ] ~~Nested-lab rehearsal of `pve form` and `pve certs`~~ —
+      superseded by IMPL-0002 (2026-08-22): first contact happens on
+      the real hosts; the nested environment is deferred to a future
+      design doc with this run as its requirements gathering
 
 ## Environment
 

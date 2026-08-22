@@ -16,27 +16,12 @@ created: 2026-08-22
   - [In Scope](#in-scope)
   - [Out of Scope](#out-of-scope)
 - [Implementation Phases](#implementation-phases)
-  - [Phase 1: Groundwork and open-question resolution](#phase-1-groundwork-and-open-question-resolution)
-    - [Tasks](#tasks)
-    - [Success Criteria](#success-criteria)
-  - [Phase 2: Nested rehearsal — pve form and pve certs](#phase-2-nested-rehearsal--pve-form-and-pve-certs)
-    - [Tasks](#tasks-1)
-    - [Success Criteria](#success-criteria-1)
-  - [Phase 3: Nested PXE rehearsal](#phase-3-nested-pxe-rehearsal)
-    - [Tasks](#tasks-2)
-    - [Success Criteria](#success-criteria-2)
-  - [Phase 4: Hardware preparation](#phase-4-hardware-preparation)
-    - [Tasks](#tasks-3)
-    - [Success Criteria](#success-criteria-3)
-  - [Phase 5: The drill](#phase-5-the-drill)
-    - [Tasks](#tasks-4)
-    - [Success Criteria](#success-criteria-4)
-  - [Phase 6: Convergence pass and fold-back](#phase-6-convergence-pass-and-fold-back)
-    - [Tasks](#tasks-5)
-    - [Success Criteria](#success-criteria-5)
-  - [Phase 7: Release and closure](#phase-7-release-and-closure)
-    - [Tasks](#tasks-6)
-    - [Success Criteria](#success-criteria-6)
+  - [Phase 1: Preparation on the existing hosts](#phase-1-preparation-on-the-existing-hosts)
+  - [Phase 2: Form and certify the real cluster](#phase-2-form-and-certify-the-real-cluster)
+  - [Phase 3: Talos artifacts and the booty environment](#phase-3-talos-artifacts-and-the-booty-environment)
+  - [Phase 4: Talos cluster creation](#phase-4-talos-cluster-creation)
+  - [Phase 5: Convergence pass and fold-back](#phase-5-convergence-pass-and-fold-back)
+  - [Phase 6: Release and closure](#phase-6-release-and-closure)
 - [Testing Plan](#testing-plan)
 - [Dependencies](#dependencies)
 - [Open Questions](#open-questions)
@@ -45,23 +30,33 @@ created: 2026-08-22
 
 ## Objective
 
-Execute INV-0001: prove on real hardware that the `bootstrap` CLI takes
-bare Proxmox nodes to a healthy Talos Kubernetes cluster by following
-[the runbook](../runbook/bootstrap-cluster.md) literally, prove the
-second full pass applies nothing, fold every deviation back into code
-and docs, and cut `tools/bootstrap/v0.1.0`.
+Execute INV-0001 the pragmatic way: use the three existing bare-metal
+PVE hosts — already installed and individually configured, not
+re-imaged — to take the `bootstrap` CLI through its entire flow for
+real: form the cluster, certify it with Cloudflare DNS-01 + ACME so the
+node UIs carry valid certificates, then create and verify a Talos
+cluster on top of it, with booty running in an operator-configured
+environment. Fold every deviation back into code and docs, prove the
+second full pass applies nothing, and cut `tools/bootstrap/v0.1.0`.
 
-This closes out IMPL-0001's six remaining hardware-gated tasks and
+This deliberately front-loads *manual* iteration: build → run → adjust
+→ re-run, recorded in INV-0001 as it happens. The isolated, VLAN'd
+nested test environment (a hoomlab-owned booty VM PXE-provisioning both
+a nested PVE cluster and the Talos cluster on top of it) is wanted —
+but designing it before ever creating a Talos cluster with this CLI
+would be speculating about requirements this run exists to discover.
+The manual run **is** that environment's requirements gathering.
+
+Why this beats a nested rehearsal first: the nested lab's value was
+avoiding expensive bare-metal round trips, and that cost does not
+exist here — PVE is already installed on all three hosts, and every
+remaining step in the flow is API calls and VMs. The area most likely
+to churn (Talos cluster creation) iterates at the same speed on the
+real cluster as it would nested.
+
+This closes out IMPL-0001's remaining hardware-gated tasks and
 discharges RFC-0001's Phase 1 success criterion: `kubectl get nodes`
 via the emitted kubeconfig shows every configured node `Ready`.
-
-The ordering principle, carried over from INV-0001's findings: every
-defect found so far came from *running* something rather than reading
-it, and hardware time is the most expensive place to find the next one.
-So the phases run each risk in the cheapest environment that can
-genuinely exercise it — workstation, then nested VMs, then hardware —
-and nothing is attempted on hardware that a nested pass could have
-caught first.
 
 **Implements:** INV-0001 (the investigation is the record; this doc is
 the work plan). Parent chain: IMPL-0001 → DESIGN-0001 → ADR-0001 →
@@ -71,332 +66,314 @@ RFC-0001 Phase 1.
 
 ### In Scope
 
-- The nested rehearsal of `pve form` and `pve certs` against a
-  pvelab-provisioned 3-node lab (IMPL-0001 Phase 2's unchecked
-  spot-check).
-- A nested PXE rehearsal — booty + proxyDHCP + TFTP + `ipxe.efi`
-  chainload against a VM — subject to OQ-4.
-- Hardware preparation, the drill itself, and the convergence pass,
-  all recorded in INV-0001's tables.
+- The full bootstrap flow on the three real PVE hosts, from their
+  *current* state: unclustered but individually configured (storage,
+  SSH keys, etc.) — not fresh installs. The gap between that reality
+  and the runbook's "must be fresh installs" prerequisite is itself in
+  scope: what joining actually preserves and destroys gets verified
+  and documented.
+- Certificates on the real cluster: Cloudflare DNS-01, Let's Encrypt
+  staging first, production once the stage converges (OQ-1), ending
+  with valid certificates on every node UI.
+- Talos cluster creation on the real cluster, with booty running in an
+  environment the operator configures manually.
 - Fold-back: every deviation becomes a code fix (with a regression
-  test), a runbook fix, or a documented decision.
-- Any upstream change pvelab needs to support the rehearsal (OQ-1),
-  consumed as a released version per IMPL-0001's scope rule.
-- Cutting `tools/bootstrap/v0.1.0` via `tools-release.yml`, and the
-  status flips that follow (IMPL-0001 → Completed, DESIGN-0001 →
-  Implemented, INV-0001 → Concluded).
+  test), a runbook fix, or a documented decision. A bunch of changes
+  are *expected* in the Talos-creation area — that is the point of the
+  run, not a failure of it.
+- The convergence pass, `tools/bootstrap/v0.1.0`, and the doc-chain
+  closure (IMPL-0001 → Completed, DESIGN-0001 → Implemented,
+  INV-0001 → Concluded).
 
 ### Out of Scope
 
-- New bootstrap CLI features. Code changes here are drill-driven fixes
+- **The isolated nested test environment** (dedicated test VLAN, a
+  hoomlab-controlled booty VM scoped to it, a nested 3-VM PVE cluster
+  PXE-installed from that booty, Talos on top — all automated). It is
+  deliberately deferred, not rejected: requirements observed during
+  this run get captured for it (Phase 6), and it becomes its own
+  design doc afterwards (OQ-4). Note it needs capabilities nothing
+  ships today — PVE-installer PXE profiles for booty and nested-VM
+  provisioning tooling in hoomlab — which is exactly why it should be
+  designed after the manual run, not before.
+- pvelab. It stays what it is — proxmox-go-sdk's own validation
+  harness and example CLI. The bootstrap CLI has no dependency on it
+  (its formation *logic* was adapted from pvelab's, but the code lives
+  in `internal/pve`), and hoomlab's future test tooling will be its
+  own, not an extension of the SDK's.
+- New bootstrap CLI features. Code changes here are run-driven fixes
   only; anything bigger gets its own doc.
 - The Hoomlab service taking ownership of the cluster (RFC-0001
-  Phase 2+).
-- Day-2 cluster operations, workload deployment, production cert
-  automation beyond the one `pve certs` re-run (OQ-5).
-- Forking booty, hclkit, or proxmox-go-sdk — gaps become upstream
-  issues/PRs consumed at released versions, exactly as IMPL-0001 did.
+  Phase 2+), and day-2 operations beyond the re-image spot-check.
 
 ## Implementation Phases
 
 Each phase builds on the previous one. A phase is complete when all its
-tasks are checked off and its success criteria are met. Phases 2 and 3
-are rehearsals: their whole purpose is to fail cheaply, so a failure
-there is a finding to fold back (fix code → re-run the rehearsal), not
-a blocker to route around.
+tasks are checked off and its success criteria are met. Failures during
+Phases 2–4 are findings: record in INV-0001's deviations table first,
+then fix-and-continue (config/environment mistakes) or fold back
+through code with a regression test (defects), re-running the stage
+either way.
 
 ---
 
-### Phase 1: Groundwork and open-question resolution
+### Phase 1: Preparation on the existing hosts
 
-Decide the open questions, close the pvelab gap they surface, and get
-every prerequisite in place so later phases spend their time running
-stages, not discovering missing pieces.
+Everything decided and staged so the first `pve form` run starts from a
+known, recoverable state. The hosts are configured, not disposable —
+so the primary choice and the backups here are what bound the blast
+radius of first contact.
 
 #### Tasks
 
-- [ ] Resolve OQ-1 through OQ-5 below and record the decisions in this
+- [ ] Resolve OQ-1 through OQ-4 below and record the decisions in this
       doc (strikethrough the losing options, IMPL-0001 style)
-- [ ] If OQ-1 = a: open the upstream proxmox-go-sdk issue/PR adding a
-      provision-only mode to `pvelab up` (the lab package already
-      separates `provision.go` from `cluster.go`; the flag skips the
-      `FormCluster` call and records the unformed state), get it
-      released, and pin the released version
-- [ ] Write the nested-lab pvelab config (`pvelab.yaml` from
-      `pvelab.example.yaml`): outer host per OQ-2, ≥3 nested nodes in
-      the reserved 9200–9399 VMID block, and — if OQ-3 = a — the ACME
-      variant with real A records for the nested node FQDNs
-- [ ] Write the nested-lab `bootstrap.hcl`: the nested nodes' endpoints
-      as the PVE nodes, LE staging `acme.directory`, and a scratch
-      Talos topology
-- [ ] Run `pvelab iso` (and `pvelab template build` for fast
-      re-provisioning — teardown/re-up cycles are the rehearsal's inner
-      loop)
-- [ ] Stage the credentials: nested-lab PVE token +
-      `root@pam` password, Cloudflare token scoped to the lab zone
-      (if OQ-3 = a), all as environment variables per the runbook —
-      never values in config
-- [ ] Confirm `just bootstrap-build` from the branch that will be
-      drilled and record the commit SHA in INV-0001's Environment table
+- [ ] Choose the primary node deliberately: the cluster is created on
+      it and its `/etc/pve` *becomes* the cluster configuration —
+      joiners get theirs replaced. The node whose local config
+      (storage definitions especially) should become cluster truth is
+      the primary
+- [ ] Back up `/etc/pve` (tar) and note `/etc/network/interfaces` on
+      all three nodes — the two-minute insurance against a botched
+      join costing real reconfiguration
+- [ ] Confirm both joiner nodes are guest-free (PVE refuses to join a
+      node with guests) and inventory what node-local config exists on
+      them (storage entries, users, tokens) so post-join losses are
+      expected, not discovered
+- [ ] Root credentials per OQ-2's decision: one shared `root@pam`
+      password across all nodes (align them), or the config model
+      grows per-node passwords first
+- [ ] Create the API token on the **primary** (`pve form` dials
+      joiners as root@pam, and every other stage dials the primary,
+      which proxies node-scoped calls cluster-wide — a token on the
+      joiners would not survive the join anyway)
+- [ ] DNS A records for every `<node>.<domain>` certificate FQDN, and
+      a Cloudflare token scoped to that zone
+- [ ] Talos boot-network prerequisites: DHCP reservations for every
+      configured Talos MAC, and `talos.endpoint`'s host resolving to
+      the first control-plane node's reserved address
+- [ ] Write the real `bootstrap.hcl` in a scratch drill directory
+      (real endpoints, MACs, VMIDs, storage, bridges; staging
+      `acme.directory` per OQ-1); export the four `HOOMLAB_*`
+      variables; `bootstrap validate` exits 0
+- [ ] Record the environment in INV-0001's table: PVE version, node
+      names/endpoints, CLI commit SHA, lab topology
 
 #### Success Criteria
 
 - Every open question below shows **Decided** with a date.
-- `pvelab status` shows the prepared ISO/template on the outer host;
-  a provision-only `up` path exists (or the OQ-1 alternative is
-  documented as the accepted risk).
-- Both config files exist, `bootstrap validate` passes against the
-  nested-lab config, and no secret value appears in either file.
+- `bootstrap validate` passes against the real config; no secret value
+  appears in it.
+- `/etc/pve` backups exist for all three nodes, the joiners are
+  guest-free, and the expected join-time config losses are written
+  down *before* the join.
 
 ---
 
-### Phase 2: Nested rehearsal — `pve form` and `pve certs`
+### Phase 2: Form and certify the real cluster
 
-First contact between the bootstrap CLI and a real PVE API. Everything
-mockpve believes about Proxmox gets tested here, where a failed run
-costs a `pvelab down && pvelab up`, not a rack visit. This checks off
-IMPL-0001 Phase 2's nested spot-check.
+First contact between the CLI and real Proxmox. The end state you
+actually want: the three hosts clustered, quorate, and serving their
+UIs with valid certificates.
 
 #### Tasks
 
-- [ ] `pvelab up` (provision-only): ≥3 fresh, unformed nested PVE
-      nodes, API reachable on all of them
-- [ ] `bootstrap validate` then `bootstrap pve form --dry-run` against
-      the nested lab; confirm the survey lists create-cluster, one
-      join per non-primary node, and cluster-quorate as pending
-- [ ] `bootstrap pve form`: cluster created on the primary, nodes
-      joined serially, quorum verified
-- [ ] Interruption test: tear down, re-provision, run `pve form` again
-      and kill it after the first join completes; re-run and confirm it
-      picks up at the first unjoined node and converges
-- [ ] `bootstrap pve certs` against LE staging (OQ-3): account
-      registered, Cloudflare plugin created, per-node domains wired,
-      orders complete
-- [ ] Certificate drift test: rotate the Cloudflare token value and
-      re-run `pve certs`; confirm the plugin step goes pending and the
-      new credentials are pushed
-- [ ] Convergence: re-run both stages and confirm each reports every
-      step done, `0 steps applied`
-- [ ] Record every mockpve-vs-Proxmox discrepancy found; fix code +
-      mockpve seeding + tests for each, and re-run the rehearsal until
-      it passes clean from a fresh `pvelab up`
+- [ ] `bootstrap pve form --dry-run`: the survey lists create-cluster,
+      one join per joiner, and cluster-quorate as pending, and touches
+      nothing
+- [ ] `bootstrap pve form`: cluster created on the primary, joiners
+      joined serially, quorum verified; every node's UI reachable
+      afterwards
+- [ ] Verify the join-wipe reality against the prediction from
+      Phase 1: what survived on the joiners, what was replaced;
+      re-declare any joiner-local storage cluster-wide; amend the
+      runbook's "fresh installs" prerequisite to the precise truth
+- [ ] `bootstrap pve certs` against LE staging until it converges
+      cleanly (account, Cloudflare plugin, per-node domains, orders)
+- [ ] Per OQ-1: flip `acme.directory` to production and re-run — every
+      node UI presents a valid browser-trusted certificate
+- [ ] Convergence: re-run both stages; each reports every step done,
+      nothing applied
+- [ ] Record every real-Proxmox-vs-mockpve discrepancy in INV-0001;
+      fix code + mockpve seeding + tests for each
 
 #### Success Criteria
 
-- A fresh provision-only lab goes from unformed nodes to a quorate,
-  staging-certified cluster using only `bootstrap` commands, with the
-  interruption re-run converging.
+- One command formed the cluster from the hosts' real starting state;
+  interruptions (if any occurred) converged on re-run.
+- All three node UIs serve valid production certificates.
 - The second pass of both stages applies nothing.
-- Every discrepancy found is folded back (code, mockpve, runbook) and
-  IMPL-0001's Phase 2 spot-check task is checked off.
+- The runbook's prerequisites section now tells the truth about
+  non-fresh nodes.
 
 ---
 
-### Phase 3: Nested PXE rehearsal
+### Phase 3: Talos artifacts and the booty environment
 
-The riskiest untested seam is the PXE handshake — proxyDHCP answering
-alongside a real DHCP server, TFTP serving `ipxe.efi`, the embedded
-chain script reaching booty. All of it can be exercised against a
-nested VM before any hardware is touched. Subject to OQ-4; if decided
-against, strike this phase and the risk lands in Phase 5.
+The handoff point between the CLI's output and the operator-managed
+booty instance. Booty's environment is configured manually this run —
+by design; what that configuration turns out to require is input for
+the future test environment's design.
 
 #### Tasks
 
-- [ ] Set up the boot segment per OQ-4's decision (isolated bridge on
-      the outer host with a scoped DHCP, or the drill's real boot
-      network) and start booty there via the emitted `booty-run.sh`
-- [ ] `bootstrap talos emit` + `talos ipxe` with `booty.url` pointing
-      at the rehearsal booty host; copy the tree over and restart booty
-- [ ] Create one UEFI test VM on the boot bridge matching the
-      `talos vms` spec (ovmf + q35, no pre-enrolled keys, virtio NIC
-      with a configured MAC, empty disk, order=scsi0;net0)
-- [ ] Watch the full chain on the VM console and booty logs: proxyDHCP
-      offer → TFTP `ipxe.efi` fetch → embedded chain script →
-      `/ipxe?mac=…` → kernel/initramfs download → Talos boots with
-      `talos.config` pointing at booty
-- [ ] Verify the DHCP coexistence claim: the VM gets its IP from the
-      real DHCP server and its boot path from booty's proxyDHCP, and
-      no non-PXE client on the segment is affected
-- [ ] Record findings in INV-0001; fold back any fix (booty flags in
-      the emitted launcher, VM spec, runbook wording) and re-run
+- [ ] `bootstrap talos secrets`; back up `secrets.yaml` immediately
+      (destination decided in Phase 1's config task)
+- [ ] `bootstrap talos emit` and `bootstrap talos ipxe` against the
+      real config
+- [ ] Stand up booty where it will serve the boot network (operator
+      task, manual configuration); copy the emitted tree over
+- [ ] Compare the manual booty invocation against the emitted
+      `booty-run.sh` — every deliberate difference gets noted in
+      INV-0001 (the launcher encodes the sharp edges; where the manual
+      setup diverges, either the launcher or the runbook is wrong for
+      this environment, and that is a finding)
+- [ ] Runbook step 7 verification before any VM exists: `/boot.ipxe`,
+      `/ipxe?mac=…`, `/machine-config?mac=…` for a configured MAC
+      (right role + hostname), 404 for an unconfigured MAC, boot
+      assets served at full length
 
 #### Success Criteria
 
-- A VM with an empty disk chainloads the built `ipxe.efi`, fetches its
-  machineconfig from booty by MAC, and begins a Talos install — the
-  INV-0001 pre-drill task "verify the built ipxe.efi actually
-  chainloads" gets checked without hardware.
-- The existing DHCP server on the segment keeps working for everything
-  else.
+- booty serves the emitted catalog, templates, and boot assets on the
+  real boot network, verified by the runbook's curl checks.
+- `secrets.yaml` is backed up and 0600; a `talos secrets` re-run
+  leaves it alone.
+- Every manual-vs-emitted-launcher difference is recorded, not
+  shrugged off.
 
 ---
 
-### Phase 4: Hardware preparation
+### Phase 4: Talos cluster creation
 
-Everything the runbook's "Before you start" section requires, made
-true on the real lab — so drill day starts at `bootstrap validate`,
-not at cabling.
+The part that has never run anywhere, and the reason this whole run
+exists. Expect changes — the loop is run → record → fix → rebuild →
+re-run, with INV-0001 as the log.
 
 #### Tasks
 
-- [ ] Fresh Proxmox VE installs on every physical node (nodes other
-      than the primary MUST be fresh — joining wipes them); record PVE
-      version, node names, and endpoints in INV-0001's Environment
-      table
-- [ ] Create the drill API token and confirm the `root@pam` password
-      works on every node
-- [ ] Boot network ready: DHCP reservations for every configured Talos
-      MAC, and `talos.endpoint`'s host resolving to the first
-      control-plane node's reserved address
-- [ ] DNS A records for every `<node>.<domain>` cert FQDN, and the
-      Cloudflare token scoped to that zone
-- [ ] Booty host ready on the boot segment (per OQ-2/OQ-4 decisions):
-      docker installed, reachable at the `talos.booty.url` the config
-      names
-- [ ] Write the real `bootstrap.hcl` in a scratch drill directory:
-      real endpoints, MACs, VMIDs, storage, bridges; LE staging
-      directory for the drill
-- [ ] Export the four `HOOMLAB_*` variables; `bootstrap validate`
-      exits 0
-- [ ] Decide and note the `secrets.yaml` backup destination before it
-      exists (the runbook says back it up; pick where, now)
+- [ ] `bootstrap talos vms`: every configured VM created on its node
+      and started
+- [ ] Watch the full first-boot cycle per VM (booty logs +
+      `qm terminal`): proxyDHCP/PXE → `ipxe.efi` chainload → per-MAC
+      boot script → kernel/initramfs → Talos install → reboot from
+      disk into Talos; record per-VM notes in INV-0001
+- [ ] `bootstrap talos bootstrap`: etcd bootstrapped against the
+      endpoint (first control-plane node), `talosconfig` +
+      `kubeconfig` written 0600 under `<output>/out/`
+- [ ] `bootstrap talos health` passes within the wait
+- [ ] `kubectl --kubeconfig <output>/out/kubeconfig get nodes`: every
+      configured node `Ready` — fill INV-0001's 12-step drill table as
+      each step lands
+- [ ] For every failure along the way: deviations table first, then
+      the fix — CLI defects get a regression test and a rebuilt
+      binary; environment/config mistakes get a runbook amendment if
+      the runbook could have prevented them
 
 #### Success Criteria
 
-- `bootstrap validate` passes against the real config.
-- Every prerequisite in the runbook's "Before you start" is literally
-  true and checked here — nothing left to discover on drill day.
+- All 12 rows of INV-0001's drill-results table filled in; row 12 is
+  every node `Ready` — RFC-0001's Phase 1 criterion, demonstrated.
+- Credential files were never overwritten by any re-run along the way.
+- Every deviation encountered is recorded with its resolution.
 
 ---
 
-### Phase 5: The drill
-
-The event itself. Run **from the runbook, not from memory** — a wrong
-or missing runbook step is a finding, not something to work around
-silently. Results land in INV-0001's 12-step table as they happen.
-
-#### Tasks
-
-- [ ] Steps 1–7: `validate` → `pve form` → `pve certs` →
-      `talos secrets` (backup taken immediately) → `talos emit` →
-      `talos ipxe` → copy tree + start booty; verify booty serves
-      before creating any VM
-- [ ] Step 8: `talos vms` — every configured VM created and running on
-      its node
-- [ ] Step 9: watch the PXE → install → reboot-into-Talos cycle on
-      every VM (booty logs + `qm terminal`); record per-VM notes
-- [ ] Steps 10–12: `talos bootstrap` → `talos health` →
-      `kubectl get nodes` shows every configured node `Ready`
-- [ ] Fill INV-0001's drill-results table row by row as each step
-      completes — including the rows that just say `pass`
-- [ ] For any failure: record it in the deviations table first, then
-      decide — fix-and-continue (config/env mistakes) or
-      stop-and-fold-back (code/runbook defects, which return via
-      Phase 6)
-
-#### Success Criteria
-
-- All 12 rows of INV-0001's drill-results table filled in, and row 12
-  is every node `Ready` — RFC-0001's Phase 1 success criterion,
-  demonstrated.
-- `secrets.yaml` backed up; `talosconfig`/`kubeconfig` written 0600
-  and never overwritten by any re-run.
-
----
-
-### Phase 6: Convergence pass and fold-back
+### Phase 5: Convergence pass and fold-back
 
 The property the Hoomlab service will later rely on: taking ownership
-converges on no-op. Then every deviation becomes a durable fix.
+converges on no-op. Then the findings become durable.
 
 #### Tasks
 
 - [ ] Re-run every stage in order against the live cluster
       (`pve form`, `pve certs`, `talos secrets`, `talos emit`,
-      `talos ipxe`, `talos vms`, `talos bootstrap`, `talos health`)
-      and fill INV-0001's convergence table with the applied count per
+      `talos ipxe`, `talos vms`, `talos bootstrap`, `talos health`);
+      fill INV-0001's convergence table with the applied count per
       stage
 - [ ] For any stage that applied something: diagnose the re-fired
-      step, fix the Check (with a regression test reproducing the
-      false-pending), and re-run that stage to no-op
-- [ ] Fold back every deviation recorded in Phase 5: code fix with
-      regression test, runbook fix, or a documented
-      accepted-behavior note — no deviation left unresolved
-- [ ] Re-image test (the runbook's claim): wipe one worker's disk,
-      reboot, confirm it PXE-boots and rejoins; note the observed
-      behavior in INV-0001
-- [ ] If any fold-back changed stage behavior: re-run the affected
-      stages on the lab and confirm they still pass and still converge
+      step, fix its Check with a regression test reproducing the
+      false-pending, re-run to no-op
+- [ ] Re-image spot-check: wipe one worker's disk and reboot; confirm
+      it PXE-boots, reinstalls, and rejoins — the runbook's re-imaging
+      claim, verified
+- [ ] Close out the deviations table: every row has a resolution
+      (code fix with test, runbook fix, or documented
+      accepted-behavior note)
+- [ ] All gates green on the fold-back branch: `just bootstrap-lint` /
+      `bootstrap-test` / `bootstrap-build`, `govulncheck`,
+      `markdownlint`, `yamllint`
 
 #### Success Criteria
 
-- Every row of the convergence table reads `0` (or the documented
+- Every convergence-table row reads `0` (or the documented
   equivalent), with any exception fixed and re-verified — not
   explained away.
-- The deviations table has a resolution in every row; each code fix
-  carries a test that fails without it.
-- All bootstrap gates stay green (`just bootstrap-lint` /
-  `bootstrap-test` / `bootstrap-build`, `govulncheck`).
+- The re-image cycle works as the runbook describes.
+- No unresolved deviation remains.
 
 ---
 
-### Phase 7: Release and closure
+### Phase 6: Release and closure
 
-The drill passed; make it official and close the paper trail.
+The run passed; make it official, and turn what it taught into the
+next doc.
 
 #### Tasks
 
 - [ ] Merge the fold-back branch(es) to `main` with `dont-release`
       (tools stay off the service release train)
 - [ ] Dispatch `tools-release.yml` with tool=`bootstrap`,
-      version=`v0.1.0` — cuts tag `tools/bootstrap/v0.1.0` and
-      publishes the binary archives; verify
+      version=`v0.1.0`; verify the `tools/bootstrap/v0.1.0` tag, the
+      GitHub release with binary archives, and that
       `go install github.com/donaldgifford/hoomlab/tools/bootstrap@v0.1.0`
       resolves
-- [ ] If OQ-5 = a: flip `acme.directory` to production (remove the
-      staging line) and re-run `bootstrap pve certs` on the live
-      cluster; every node gets a production certificate
-- [ ] Complete INV-0001: Conclusion answered, Environment table filled,
-      status → **Concluded**
-- [ ] Check off IMPL-0001's six remaining tasks, status → **Completed**
+- [ ] Complete INV-0001: Conclusion answered, Environment table
+      filled, status → **Concluded**
+- [ ] IMPL-0001: annotate the nested spot-check task per OQ-3's
+      decision, check off the remaining tasks, status → **Completed**
 - [ ] DESIGN-0001 status → **Implemented**
-- [ ] Update the runbook's `[unverified]` markers to reflect what the
-      drill verified; `docz update` for the index tables
+- [ ] Update the runbook's `[unverified]` markers to match what this
+      run verified; `docz update` for the index tables
+- [ ] Seed the future test environment doc per OQ-4's decision,
+      carrying the requirements this run observed (what booty's
+      environment needed, what nested provisioning must provide, what
+      a PVE-installer PXE profile would take)
 - [ ] This doc: all boxes checked, status → **Completed**
 
 #### Success Criteria
 
-- `tools/bootstrap/v0.1.0` exists as a tag and a GitHub release with
-  binary archives, and `go install …@v0.1.0` works.
-- The doc chain is consistent: RFC-0001 Phase 1 criterion demonstrated,
+- `tools/bootstrap/v0.1.0` exists and installs.
+- The doc chain is consistent: RFC-0001 Phase 1 demonstrated,
   IMPL-0001 Completed, DESIGN-0001 Implemented, INV-0001 Concluded,
-  runbook markers updated, no stale `[unverified]` on anything the
-  drill covered.
+  runbook current, and the test-environment follow-up captured rather
+  than lost.
 
 ## Testing Plan
 
 This IMPL *is* a testing plan — the phases are the tests. What keeps
 CI honest alongside them:
 
-- Every drill-driven code fix lands with a regression test that fails
-  without the fix (the Phase 6 fold-back rule), keeping `tools-ci.yml`
-  the gate for the code half of every finding.
-- mockpve discrepancies found in Phase 2 are fixed in the *seeding*,
-  so the unit suite's model of Proxmox tightens with each finding.
-- The rehearsal and drill themselves stay deliberately out of CI
-  (IMPL-0001's testing plan already decided the e2e drill is not a
-  merge gate); their record is INV-0001.
+- Every run-driven code fix lands with a regression test that fails
+  without the fix, keeping `tools-ci.yml` the gate for the code half
+  of every finding.
+- Real-Proxmox discrepancies found in Phase 2 are fixed in mockpve's
+  *seeding*, so the unit suite's model of Proxmox tightens with each
+  finding.
+- The run itself stays deliberately out of CI (IMPL-0001 already
+  decided the e2e drill is not a merge gate); its record is INV-0001.
 
 ## Dependencies
 
-- `proxmox-go-sdk` — pvelab for the nested lab; possibly a new release
-  carrying the provision-only mode (OQ-1).
-- A physical PVE-capable outer host for Phases 2–3 (OQ-2), and the
-  full homelab hardware for Phases 4–6.
-- Cloudflare-managed DNS zone for cert FQDNs; Let's Encrypt staging
-  and production.
-- The booty host: a Linux machine with docker on the boot segment.
-- `tools-release.yml` (already merged) for Phase 7.
+- The three bare-metal PVE hosts in their current state, and the
+  authority to cluster them (this run changes them permanently —
+  joining replaces the joiners' `/etc/pve`).
+- A Cloudflare-managed DNS zone for the certificate FQDNs; Let's
+  Encrypt staging and production.
+- An operator-configured booty environment on the boot network
+  (manual this run, by design).
+- DHCP control on the boot network (reservations for the Talos MACs).
+- `tools-release.yml` (already merged) for Phase 6.
 
 ## Open Questions
 
@@ -404,100 +381,75 @@ Answer each with the letter of the chosen option (**a** is my
 recommendation), or **other** with your own. Decisions get recorded
 inline, IMPL-0001 style.
 
-**OQ-1 — pvelab always forms the cluster; the rehearsal needs unformed
-nodes. How do we get them?** `pvelab up` unconditionally calls
-`lab.FormCluster` after provisioning, but Phase 2's whole point is
-letting `bootstrap pve form` do the forming against fresh nodes.
+**OQ-1 — Certificate CA sequencing: staging first, or straight to
+production?** The end state is valid production certificates on every
+node UI. The question is only the path while the certs stage is being
+exercised for the first time against real Proxmox and real Cloudflare.
 
-- **a (recommended):** Upstream a provision-only mode to pvelab
-  (`up --no-form` or equivalent) in proxmox-go-sdk. The lab package
-  already separates provisioning (`provision.go`) from formation
-  (`cluster.go`), so the change is small; hoomlab consumes it at a
-  released version, per the existing scope rule. Bonus: the flag is
-  exactly what any future consumer rehearsing cluster formation needs.
-- b: Provision with pvelab as-is (formed), then rehearse only the
-  *convergence* half of `pve form` — re-run against the already-formed
-  cluster and confirm no-op. The create/join path stays untested until
-  the drill.
-- c: pvelab up, then manually unform the nested cluster
-  (`pvecm`-level surgery on each node) before running `pve form`.
-  Fragile, and tests a state no real operator starts from.
-- d: Skip pvelab; hand-provision three nested PVE VMs for the
-  rehearsal. Loses the teardown/re-up automation, which is the
-  rehearsal's inner loop.
+- **a (recommended):** Staging until `pve certs` converges cleanly,
+  then flip `acme.directory` to production and re-run once. Iterating
+  a first-contact stage directly against production LE risks
+  rate-limiting the domain (production limits are strict and last up
+  to a week); the flip costs one extra command and also proves the
+  staging→production transition works.
+- b: Straight to production. One less re-run if everything works
+  first try; an expensive week if the stage has a retry bug.
 
-**OQ-2 — Where does the nested lab run?** pvelab needs an outer
-physical PVE host, but the drill needs every homelab node freshly
-installed.
+**OQ-2 — `pve form` assumes one shared root password. Your hosts, your
+call.** `applyJoin` dials each joining node as `root@pam` with the
+single `root_password` config value, and sends that same value as the
+cluster password in the join spec — the design assumes all nodes share
+it.
 
-- **a (recommended):** Install PVE on one homelab node early and use
-  it as the interim outer host for Phases 2–3, then re-install it
-  fresh in Phase 4 before the drill. No extra hardware, and the
-  re-install cost is one node.
-- b: Use a separate always-on machine (existing server, spare box)
-  as a permanent lab host, keeping the drill nodes untouched until
-  Phase 4. Cleaner separation if such a box exists.
-- c: Skip the nested rehearsal entirely; accept that first contact
-  with a real PVE API happens during the drill. Cheapest now, most
-  expensive per defect found later.
+- **a (recommended):** Align all three hosts to one root password for
+  the run (rotate afterwards if wanted). No code change, matches the
+  design's assumption, and the password is only load-bearing during
+  joins.
+- b: Extend the config model to per-node root passwords before first
+  contact. More faithful to hosts as they are, but it changes config
+  schema + validation + form + runbook ahead of any evidence the
+  simpler model fails.
 
-**OQ-3 — Rehearse `pve certs` nested, or defer certificates to the
-drill?** DNS-01 doesn't care that the nodes are nested — it needs A
-records for the nested FQDNs and a Cloudflare token; pvelab even ships
-an ACME variant config (`pvelab-acme.example.yaml`) for exactly this.
+**OQ-3 — IMPL-0001's "nested spot-check" checkbox: what satisfies
+it?** The pragmatic path replaces the nested `pve form` rehearsal with
+first contact on the real cluster.
 
-- **a (recommended):** Rehearse nested against LE staging. The certs
-  stage is mockpve-only today (ACME account/plugin/domain-slot/order
-  handling), and DNS-01 timing was called out in INV-0001 as a likely
-  failure mode — cheap to test nested, annoying to debug on drill day.
-- b: Defer to the drill. Saves setting up lab DNS records, spends
-  drill time on first-contact ACME debugging instead.
+- **a (recommended):** Annotate the task as superseded — the real
+  three-node formation in Phase 2 is a strictly stronger validation
+  than a nested rehearsal of the same stage — and check it off when
+  Phase 2 passes, with a pointer to INV-0001.
+- b: Leave it unchecked until the future nested test environment
+  exists and runs it nested. Keeps the letter of the task; blocks
+  IMPL-0001's completion on tooling that is deliberately deferred.
 
-**OQ-4 — Rehearse the PXE handshake nested (Phase 3), or accept it as
-drill risk?** The chain — proxyDHCP beside the real DHCP, TFTP,
-`ipxe.efi`, chain script, machineconfig fetch — is the least-tested
-seam and one of INV-0001's top expected failure modes.
+**OQ-4 — Where does the future isolated test environment get
+captured?** The VLAN'd, booty-driven nested environment (PXE-installed
+nested PVE cluster + Talos on top) is wanted, deliberately deferred,
+and this run generates its requirements.
 
-- **a (recommended):** Rehearse it nested on the outer host with a
-  UEFI test VM (Phase 3 as written). The whole handshake is
-  virtualizable, and it's the one place a defect would otherwise cost
-  repeated physical reboot cycles on drill day.
-- b: Rehearse only booty's HTTP surface (already done in INV-0001
-  pre-drill) and take the DHCP/TFTP/chainload path cold in the drill.
-  Drops Phase 3 entirely.
-- c: Partial: test only TFTP + chainload on an isolated bridge where
-  booty is the sole DHCP answer. Covers the binary but not the
-  proxyDHCP-coexistence claim.
-
-**OQ-5 — Are production certificates in scope for Phase 7?** The
-runbook says: staging for the drill, re-run against production once
-proven.
-
-- **a (recommended):** Yes — the production `pve certs` re-run is a
-  Phase 7 task. It's one command, it's the actual end state the
-  homelab wants, and it proves the staging→production flip works
-  while the paper trail is still open.
-- b: No — close this IMPL at the staging-proven point and treat
-  production certs as routine operations outside the drill's record.
+- **a (recommended):** Collect requirements in INV-0001 as they're
+  observed during the run, then write a DESIGN doc after Phase 6 with
+  the real inputs in hand. The manual run is the requirements
+  gathering; the design comes after the evidence.
+- b: Open a placeholder INV/DESIGN doc now and append to it during
+  the run. Captures intent earlier, at the cost of a doc that's
+  mostly empty until the run finishes anyway.
 
 ## References
 
 - [INV-0001](../investigation/0001-bootstrap-cli-hardware-acceptance-drill.md)
   — the investigation this implements; holds the result tables
 - [Runbook: bare Proxmox nodes → healthy Talos
-  cluster](../runbook/bootstrap-cluster.md) — the procedure Phases 5–6
-  follow
+  cluster](../runbook/bootstrap-cluster.md) — the procedure Phases 2–5
+  follow (amended along the way where reality disagrees)
 - [IMPL-0001](0001-bootstrap-cli.md) — the code-complete predecessor
-  whose six remaining tasks this closes
+  this closes out
 - [DESIGN-0001](../design/0001-bootstrap-cli.md) — convergence model
   and stage design
 - [ADR-0001](../adr/0001-bootstrap-cli-and-service.md) — the layering
-  decision (pvelab as the SDK's reference CLI)
+  decision (the SDK owns pvelab; hoomlab owns its own flow)
 - [RFC-0001](../rfc/0001-hoomlab-a-self-hosted-cloud-for-homelab-environments.md)
   — Phase 1 success criterion
-- [proxmox-go-sdk `cmd/pvelab`](https://github.com/donaldgifford/proxmox-go-sdk)
-  — the nested-lab harness (`iso` / `up` / `down` / `status` /
-  `template`), plus `pvelab-acme.example.yaml` for the OQ-3 variant
 - [`tools-release.yml`](../../.github/workflows/tools-release.yml) —
-  the Phase 7 release mechanism (workflow_dispatch, tag
+  the Phase 6 release mechanism (workflow_dispatch, tag
   `tools/bootstrap/vX.Y.Z`)
