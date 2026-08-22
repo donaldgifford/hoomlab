@@ -29,8 +29,11 @@ jobs:
         id: filter
         with:
           filters: |
+            # Root-module paths only — tools/ has its own nested modules
+            # and its own path-gated tools-ci.yml.
             go:
-              - '**/*.go'
+              - 'cmd/**'
+              - 'internal/**'
               - 'go.mod'
               - 'go.sum'
             docker:
@@ -41,7 +44,8 @@ jobs:
               - 'charts/**'
               - 'ct.yaml'
             workflows:
-              - '.github/workflows/**'
+              - '.github/workflows/ci.yml'
+              - '.github/workflows/release.yml'
 
   labeler:
     name: Label PR

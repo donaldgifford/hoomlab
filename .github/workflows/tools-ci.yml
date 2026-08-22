@@ -1,0 +1,76 @@
+---
+# yaml-language-server: $schema=https://www.schemastore.org/github-workflow.json
+# CI for the nested Go modules under tools/ (currently tools/bootstrap,
+# the Proxmox + Talos bootstrap CLI — ADR-0001). Path-gated at the
+# workflow level: it runs only when tools/ (or this file) changes, and
+# the main ci.yml's filters are scoped to the root module, so a
+# tools-only PR runs exactly this workflow and nothing else.
+name: Tools CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "tools/**"
+      - ".github/workflows/tools-ci.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "tools/**"
+      - ".github/workflows/tools-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint (${{ matrix.tool }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        tool: [bootstrap]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: tools/${{ matrix.tool }}/go.mod
+          cache-dependency-path: tools/${{ matrix.tool }}/go.sum
+
+      # Uses the repo-root .golangci.yml — golangci-lint searches upward
+      # from the working directory for its config.
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.12.2
+          working-directory: tools/${{ matrix.tool }}
+
+  test:
+    name: Test (${{ matrix.tool }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        tool: [bootstrap]
+    defaults:
+      run:
+        working-directory: tools/${{ matrix.tool }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: tools/${{ matrix.tool }}/go.mod
+          cache-dependency-path: tools/${{ matrix.tool }}/go.sum
+
+      - name: Run unit tests
+        run: go test -v -race ./...
+
+      - name: Verify the module builds
+        run: go build ./...
+
+      - name: Run govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...

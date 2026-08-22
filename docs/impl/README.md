@@ -28,4 +28,9 @@ docz create impl "Your Implementation Title"
 - **Cancelled**: Plan was abandoned
 
 <!-- BEGIN DOCZ AUTO-GENERATED -->
+## All Implementation Plans
+
+| ID | Title | Status | Date | Author | Link |
+|----|-------|--------|------|--------|------|
+| IMPL-0001 | Bootstrap CLI | In Progress | 2026-08-20 | Donald Gifford | [0001-bootstrap-cli.md](0001-bootstrap-cli.md) |
 <!-- END DOCZ AUTO-GENERATED -->

@@ -28,4 +28,9 @@ docz create design "Your Design Title"
 - **Abandoned**: Design was not pursued
 
 <!-- BEGIN DOCZ AUTO-GENERATED -->
+## All Design
+
+| ID | Title | Status | Date | Author | Link |
+|----|-------|--------|------|--------|------|
+| DESIGN-0001 | Bootstrap CLI | In Review | 2026-08-17 | Donald Gifford | [0001-bootstrap-cli.md](0001-bootstrap-cli.md) |
 <!-- END DOCZ AUTO-GENERATED -->

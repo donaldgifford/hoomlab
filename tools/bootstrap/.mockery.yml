@@ -1,0 +1,11 @@
+---
+# mockery v3 — mocks for the narrow Talos client interface (IMPL-0001
+# Phase 6). Regenerate with: mise x -- mockery
+packages:
+  github.com/donaldgifford/hoomlab/tools/bootstrap/internal/talos:
+    config:
+      dir: internal/talos/mocks
+      pkgname: talosmocks
+      filename: "client.go"
+    interfaces:
+      Client: {}

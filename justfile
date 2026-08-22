@@ -11,6 +11,7 @@ set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
 # skipped silently when the file is absent.
 import? 'docker.just'
 import? 'helm.just'
+import? 'tools.just'
 
 project_name      := "hoomlab"
 project_owner     := "donaldgifford"

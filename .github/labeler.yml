@@ -37,6 +37,11 @@ helm:
       - any-glob-to-any-file: ct.yaml
       - any-glob-to-any-file: helm.just
 
+tools:
+  - changed-files:
+      - any-glob-to-any-file: tools/**
+      - any-glob-to-any-file: tools.just
+
 docker:
   - changed-files:
       - any-glob-to-any-file: Dockerfile

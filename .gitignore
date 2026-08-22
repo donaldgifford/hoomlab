@@ -63,3 +63,8 @@ site/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Bootstrap CLI operator-owned files (IMPL-0001): the Talos secrets
+# bundle must never land in git; bootstrap-out/ is regenerable output.
+secrets.yaml
+bootstrap-out/
