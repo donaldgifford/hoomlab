@@ -140,9 +140,9 @@ against production once the flow is proven.
 | iPXE | `v1.21.1`, built in `debian:bookworm-slim`, `linux/amd64` |
 | Talos Image Factory schematic | `376567…b4ba` (vanilla, no extensions) |
 | proxmox-go-sdk | `v0.11.0` |
-| Proxmox VE | *(record at drill time)* |
+| Proxmox VE | `9.2.10` on r740a (live 2026-08-22); r640a/srv01 confirm at drill time |
 | Workstation | *(record at drill time)* |
-| Lab topology | *(record at drill time: nodes, bridges, storage, DHCP)* |
+| Lab topology | Nodes: `r740a` 10.10.11.20 (primary, R740xd, `fast`/`tank` pools), `r640a` 10.10.11.21, `srv01` 10.10.11.40 (NVMe-mirror `local-zfs`). Networks: mgmt/API 10.10.11.0/24 (`vmbr0`), storage 10.10.13.0/24 (`stor0`), corosync 10.10.15.0/24 (`sync0`); guests on VLAN-aware `vmbr1` (10 GbE). Cluster `shart`, cert domain `shart.sh`, Talos domain `fartlab.dev`. Datasets `fast/vm`/`tank/vm` pre-created on both dells; pool roots (live Garage data) off-limits to PVE. Snapshot: [bootstrap-handoff](../runbook/bootstrap-handoff.md), verified 2026-08-22/23. DHCP: *(record at drill time)* |
 
 ## Findings
 

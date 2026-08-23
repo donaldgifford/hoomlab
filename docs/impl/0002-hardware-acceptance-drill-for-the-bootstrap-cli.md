@@ -139,23 +139,34 @@ radius of first contact.
 - [x] Resolve OQ-1 through OQ-4 below and record the decisions in this
       doc (strikethrough the losing options, IMPL-0001 style) —
       decided 2026-08-22
-- [ ] Choose the primary node deliberately: the cluster is created on
+- [x] Choose the primary node deliberately: the cluster is created on
       it and its `/etc/pve` *becomes* the cluster configuration —
       joiners get theirs replaced. The node whose local config
       (storage definitions especially) should become cluster truth is
-      the primary
+      the primary — **decided 2026-08-23: `r740a`** (largest storage
+      node; the handoff snapshot verified all three carry byte-identical
+      installer-default `/etc/pve`, so nothing on the joiners is
+      contested, and the one delta worth keeping — the `root@pam!sdk`
+      token — lives on r740a and survives as primary)
 - [ ] Back up `/etc/pve` (tar) and note `/etc/network/interfaces` on
       all three nodes — the two-minute insurance against a botched
       join costing real reconfiguration
-- [ ] Confirm both joiner nodes are guest-free (PVE refuses to join a
+- [x] Confirm both joiner nodes are guest-free (PVE refuses to join a
       node with guests) and inventory what node-local config exists on
       them (storage entries, users, tokens) so post-join losses are
-      expected, not discovered
-- [ ] Confirm the `root@pam` password is identical on all three nodes
+      expected, not discovered — **verified 2026-08-22/23** (handoff
+      snapshot): zero guests on all three; joiner `/etc/pve` is
+      installer-default and byte-identical to the primary's
+      (`storage.cfg` = `local` + `local-zfs`, `user.cfg` = root only,
+      `datacenter.cfg` = one line). **Predicted join loss: nothing** —
+      the replace is a same-content overwrite
+- [x] Confirm the `root@pam` password is identical on all three nodes
       (OQ-2: the nodes were built from per-node answer files with
       node-specific ansible on top, but access credentials are already
       set everywhere — align via ansible if they differ; `pve form`
-      dials every joiner with the single configured password)
+      dials every joiner with the single configured password) —
+      **confirmed 2026-08-23**: the answer files set one root password
+      fleet-wide; seeded in 1Password (`pve-root`, homelab vault)
 - [ ] Create the API token on the **primary** (`pve form` dials
       joiners as root@pam, and every other stage dials the primary,
       which proxies node-scoped calls cluster-wide — a token on the
@@ -167,8 +178,18 @@ radius of first contact.
       the first control-plane node's reserved address
 - [ ] Write the real `bootstrap.hcl` in a scratch drill directory
       (real endpoints, MACs, VMIDs, storage, bridges; staging
-      `acme.directory` per OQ-1); export the four `HOOMLAB_*`
-      variables; `bootstrap validate` exits 0
+      `acme.directory` per OQ-1); inject the four `HOOMLAB_*`
+      variables at runtime via `op run --env-file` (no 1Password
+      integration in the CLI — the wrapper is the integration);
+      `bootstrap validate` exits 0. Settled inputs (2026-08-23):
+      cluster name `shart`; cert domain `shart.sh`; endpoints by mgmt
+      IP (r740a `10.10.11.20`, r640a `10.10.11.21`, srv01
+      `10.10.11.40`); each node's `address` = its sync0 IP
+      (`10.10.15.20/.21/.40` — the decided corosync link0; the CLI
+      carries a single link, so mgmt-as-link1 redundancy is a
+      post-formation manual step if wanted); join order = config
+      order (r640a, then srv01); VMIDs per the 100s infra / 200s CP /
+      300s workers convention
 - [ ] Record the environment in INV-0001's table: PVE version, node
       names/endpoints, CLI commit SHA, lab topology
 - [ ] The goal-1 gate: with the predictions, backups, and dry-runs in
@@ -412,8 +433,10 @@ CI honest alongside them:
 
 ## Open Questions
 
-All four decided **a** on 2026-08-22 and folded into the phase tasks
-above. The reasoning stays for the record.
+OQ-1 through OQ-4 decided **a** on 2026-08-22 and folded into the
+phase tasks above; the reasoning stays for the record. OQ-5 (added
+2026-08-23) is **open** — it gates Phase 4's Talos config, not the
+formation and certs work in Phases 1–3.
 
 **OQ-1 — Certificate CA sequencing: staging first, or straight to
 production?** The end state is valid production certificates on every
@@ -498,6 +521,26 @@ demonstrably does.
 - ~~b: Open a placeholder INV/DESIGN doc now and append to it during
   the run. Captures intent earlier, at the cost of a doc that is
   mostly empty until the run finishes anyway.~~
+
+**OQ-5 — Do the Talos VM NICs on `vmbr1` need a VLAN tag?** **Open**
+(2026-08-23). The guest bridge `vmbr1` is VLAN-aware and its trunk
+ports pass tagged traffic, but whether the Talos boot/machine network
+reaches guests untagged (native VLAN on the trunk) or requires
+`tag=<vlan>` on `net0` is undecided. The CLI currently renders `net0`
+without VLAN-tag support — if a tag is required, that is a small
+config-schema + VM-spec change (with tests) that must land before
+Phase 4's `talos vms`.
+
+- **a (recommended):** Read the answer off the network config (UniFi
+  port profiles for the guest trunks): if the Talos network arrives
+  tagged, add an optional VLAN field to the Talos config rendered as
+  `tag=` on `net0`; if it is the native VLAN, no change needed.
+  Resolve before writing the full (three-node + Talos) config, so
+  Phase 4 starts unblocked.
+- **b:** Re-profile the trunk ports so the Talos VLAN is native,
+  avoiding the code change. Bends the network to the tool's current
+  limitation and special-cases the Talos VLAN on ports that
+  deliberately trunk everything.
 
 ## References
 
