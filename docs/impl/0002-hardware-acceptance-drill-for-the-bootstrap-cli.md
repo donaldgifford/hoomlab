@@ -187,7 +187,8 @@ radius of first contact.
       `10.10.11.40`); each node's `address` = its sync0 IP
       (`10.10.15.20/.21/.40` — the decided corosync link0; the CLI
       carries a single link, so mgmt-as-link1 redundancy is a
-      post-formation manual step if wanted); join order = config
+      post-formation manual step if wanted — procedure noted in the
+      runbook, SDK follow-up filed in Phase 6); join order = config
       order (r640a, then srv01); VMIDs per the 100s infra / 200s CP /
       300s workers convention
 - [ ] Record the environment in INV-0001's table: PVE version, node
@@ -395,6 +396,17 @@ next doc.
       built on the production cluster this run created, validated
       against the production cluster and Talos cluster as the
       reference
+- [ ] File the multi-link corosync follow-up against proxmox-go-sdk
+      (noted 2026-08-23): the PVE API accepts `link0`–`link7` on both
+      cluster create and join, and `GET /cluster/config/nodes` exposes
+      each node's ring addresses — so links are both settable and
+      listable. Today the SDK only carries them via the untyped
+      `Extra` map (which is how bootstrap sets `link0`); the
+      enhancement is first-class typed link fields on the create/join
+      specs plus link addresses on the config-node read. Once the SDK
+      has that, bootstrap can grow a per-node second address and form
+      with `link1` redundancy directly instead of the manual
+      post-formation `corosync.conf` edit the runbook documents
 - [ ] This doc: all boxes checked, status → **Completed**
 
 #### Success Criteria

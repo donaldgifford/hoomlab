@@ -186,6 +186,27 @@ Interruption-safe: re-run and it picks up at the first unjoined node.
 > again during joins — installing real ones is what the *next* stage
 > is for.
 
+### Post-formation (manual, optional): redundant corosync links
+
+The CLI declares a single corosync link per node — each node's
+`address` becomes `link0` on create/join, and that is the only link
+the formed cluster has. If the link0 network goes down, the cluster
+loses quorum and pmxcfs goes read-only until it returns.
+
+Adding a redundant `link1` afterwards is supported by PVE but is a
+**manual `corosync.conf` edit**, not an API call: follow the pvecm
+docs' procedure (copy `/etc/pve/corosync.conf`, add a `ring1_addr`
+per node in the nodelist and a second `interface` entry under
+`totem`, bump `config_version`, move the copy into place — corosync
+reloads live). Do it any time after formation; no re-form needed.
+Note the redundancy is only as real as the physical paths: a node
+whose two link networks share one cable (e.g. a tagged VLAN riding
+the same copper) keeps a single physical failure domain.
+
+The PVE cluster API itself accepts `link0`–`link7` on both create and
+join, so first-class multi-link support is an SDK/CLI enhancement,
+not a protocol gap — tracked in IMPL-0002 Phase 6.
+
 ## 4. `pve certs`
 
 **`[unverified — needs the lab]`**
