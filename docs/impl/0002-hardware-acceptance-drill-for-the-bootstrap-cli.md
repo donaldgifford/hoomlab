@@ -169,10 +169,14 @@ radius of first contact.
       dials every joiner with the single configured password) —
       **confirmed 2026-08-23**: the answer files set one root password
       fleet-wide; seeded in 1Password (`pve-root`, homelab vault)
-- [ ] Create the API token on the **primary** (`pve form` dials
+- [x] Create the API token on the **primary** (`pve form` dials
       joiners as root@pam, and every other stage dials the primary,
       which proxies node-scoped calls cluster-wide — a token on the
-      joiners would not survive the join anyway)
+      joiners would not survive the join anyway) — **done 2026-08-25**:
+      dedicated `root@pam!bootstrap` (privsep=0) minted on r740a,
+      secret stored in 1Password, `op run` env file wired with
+      `HOOMLAB_PVE_TOKEN_ID`/`HOOMLAB_PVE_TOKEN_SECRET`; `!sdk`
+      untouched
 - [ ] DNS A records for every `<node>.<domain>` certificate FQDN, and
       a Cloudflare token scoped to that zone
 - [ ] Talos boot-network prerequisites: DHCP reservations for every
