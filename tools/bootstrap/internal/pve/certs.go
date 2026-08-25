@@ -244,14 +244,25 @@ func (c *Certifier) pluginCheck(id string) func(context.Context) (bool, error) {
 		data := c.pluginData()
 		stored, err := decodePluginData(plugin.Data)
 		if err != nil {
-			c.log().Debug("stored plugin data undecodable, treating as drifted",
+			// Warn, not debug: an undecodable payload rotating the
+			// credentials silently cost a diagnosis round on the
+			// drill (INV-0001 deviation 6) — drift with an invisible
+			// reason must not happen again.
+			c.log().Warn("stored plugin data undecodable, treating as drifted",
 				"plugin", id, "err", err)
+			return false, nil
+		}
+		want := desiredPluginValues(data)
+		if !maps.Equal(stored, want) {
+			c.log().Info("plugin credentials differ from config",
+				"plugin", id,
+				"stored_keys", slices.Sorted(maps.Keys(stored)),
+				"config_keys", slices.Sorted(maps.Keys(want)))
 			return false, nil
 		}
 		return plugin.API == data.API() &&
 			plugin.Type != nodes.ACMEChallengeTypeStandalone &&
-			!plugin.Disable.Bool() &&
-			maps.Equal(stored, desiredPluginValues(data)), nil
+			!plugin.Disable.Bool(), nil
 	}
 }
 
@@ -481,11 +492,16 @@ func desiredPluginValues(d nodes.ACMEPluginData) map[string]string {
 // decodePluginData parses PVE's stored provider payload (base64 over
 // KEY=value lines) into a map. The comparison is structural rather
 // than byte-for-byte deliberately: real PVE round-trips the stored
-// payload in its own rendering, not the SDK's byte-exact encoding, so
-// comparing encodings re-rotated identical credentials on every run
-// (INV-0001 deviation 6, 2026-08-25).
+// payload in its own rendering, not the SDK's byte-exact encoding —
+// specifically, it re-encodes WITHOUT padding (observed live: a
+// payload length ≡ 2 mod 4), while the SDK writes padded. Both
+// renderings decode here; comparing encodings re-rotated identical
+// credentials on every run (INV-0001 deviation 6, 2026-08-25).
 func decodePluginData(encoded string) (map[string]string, error) {
 	raw, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		raw, err = base64.RawStdEncoding.DecodeString(encoded)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("decode plugin data: %w", err)
 	}

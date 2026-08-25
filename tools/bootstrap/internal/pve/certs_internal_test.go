@@ -10,6 +10,9 @@ import (
 
 func b64(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) }
 
+// rawB64 is PVE's observed rendering: base64 without padding.
+func rawB64(s string) string { return base64.RawStdEncoding.EncodeToString([]byte(s)) }
+
 // certifierFor builds a Certifier with just enough config for the
 // pure helpers under test.
 func certifierFor(directory string) *Certifier {
@@ -108,6 +111,11 @@ func TestDecodePluginData(t *testing.T) {
 		want    map[string]string
 	}{
 		{"plain", enc("CF_Token=abc"), map[string]string{"CF_Token": "abc"}},
+		// The live-cluster case (INV-0001 deviation 6): PVE re-encodes
+		// the stored payload without padding; the padded decode fails
+		// and the fallback must carry it. "CF_Token=abcd" is 13 bytes
+		// → 18 raw-base64 chars, ≢ 0 mod 4, undecodable as padded.
+		{"unpadded (PVE rendering)", rawB64("CF_Token=abcd"), map[string]string{"CF_Token": "abcd"}},
 		{"trailing newline", enc("CF_Token=abc\n"), map[string]string{"CF_Token": "abc"}},
 		{"crlf and blank lines", enc("CF_Token=abc\r\n\r\n"), map[string]string{"CF_Token": "abc"}},
 		{"multi-key any order", enc("B=2\nA=1"), map[string]string{"A": "1", "B": "2"}},

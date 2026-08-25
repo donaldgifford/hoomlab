@@ -272,13 +272,16 @@ func TestCertsStagingToProductionFlip(t *testing.T) {
 // TestCertsToleratesServerNormalizedPluginData is the INV-0001
 // deviation 6 regression (2026-08-25): real PVE stores the credential
 // payload in its own rendering rather than the SDK's byte-exact
-// encoding, and the byte-comparing check rotated identical
-// credentials on every run. Seed the plugin the way a normalizing
-// server would store it — same values, trailing newline — and the
-// check must read done.
+// encoding — unpadded base64 over newline-terminated KEY=value lines
+// (observed live: a stored length ≡ 2 mod 4). Seed the plugin exactly
+// that way — same values, PVE's rendering — and the check must read
+// done rather than rotating identical credentials forever.
 func TestCertsToleratesServerNormalizedPluginData(t *testing.T) {
 	cfg := certsCluster()
-	normalized := base64.StdEncoding.EncodeToString([]byte("CF_Token=" + cfSecret + "\n"))
+	normalized := base64.RawStdEncoding.EncodeToString([]byte("CF_Token=" + cfSecret + "\n"))
+	if len(normalized)%4 == 0 {
+		t.Fatal("test payload decodes as padded base64 too — pick a length that exercises the fallback")
+	}
 	certifier := seededCertifier(t, cfg, normalized)
 
 	res := runCerts(t, certifier)
