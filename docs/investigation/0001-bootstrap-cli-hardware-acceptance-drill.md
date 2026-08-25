@@ -134,7 +134,7 @@ against production once the flow is proven.
 
 | Component | Version / Value |
 | --- | --- |
-| bootstrap CLI | built from `b7968c4` (`feat/impl-hardware-drill`, clean tree) via `just bootstrap-build` → `build/bin/bootstrap` (first build `4b443ea` retired by the create-as-root fold-back) |
+| bootstrap CLI | built from `99b9416` (`feat/impl-hardware-drill`, clean tree) via `just bootstrap-build` → `build/bin/bootstrap` (prior builds `4b443ea`, `b7968c4` retired by fold-backs) |
 | Talos | `v1.13.8` (machinery `v1.13.9`) |
 | Kubernetes | `v1.36.3` (machinery default) |
 | booty | `v0.2.1` — image `ghcr.io/donaldgifford/booty:0.2.1` |
@@ -266,6 +266,7 @@ bug: record which step re-fired and why.
 | --- | --- | --- | --- |
 | 2026-08-25 | `pve form --dry-run` | Reported `2 of 2 steps pending` while the token credential was invalid (a typo in the 1P env reference → HTTP 401 on every read). Checks deliberately swallow read errors as "pending" (the design routes real errors to apply), so dry-run cannot distinguish "step pending" from "cannot authenticate at all" — first contact started on false confidence. | Operator error fixed (the typo). The UX gap stands as a finding: a fail-fast credential check at stage start (or surfacing repeated check errors at info level) would have caught it. Candidate improvement, not yet scheduled. |
 | 2026-08-25 | `pve form`, `create-cluster` | r740a rejected the create with `HTTP 403: Permission check failed (user != root@pam)`. PVE reserves `POST /cluster/config` for the literal root@pam user; the API token authenticates as `root@pam!bootstrap` and can never pass, privsep or not. DESIGN-0001's credential split (token for the create) was wrong — mockpve happily accepted token-authed creates, hiding it. | Code fix `b7968c4`: `applyCreate` dials with root@pam password credentials; the shared test dialer now enforces the root-only rule on formation writes (named regression fails pre-fix with the lab's exact error); DESIGN-0001 secrets table + example config amended. mockpve enforcement upstream in proxmox-go-sdk noted as an SDK follow-up. |
+| 2026-08-25 | `pve certs`, `acme-account` | Same 403, second organ: `POST /cluster/acme/account` carries no permissions block, and PVE defaults such endpoints to root@pam only. Verified in pve-manager source that it is the *only* reserved call in the stage — plugins, node config, and certificate orders are `Sys.Modify`-gated, so the token covers everything else, renewals included. A root-equivalent user/token cannot work around it: the check is identity, not privilege. | Code fix `99b9416`: lazy `DialRoot` session used by exactly the account write (a converged re-run or renewal never authenticates as root); two-mock regression pins the registration to the root session; DESIGN-0001 table + example config amended again. |
 
 ## Conclusion
 
