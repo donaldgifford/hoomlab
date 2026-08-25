@@ -177,8 +177,12 @@ radius of first contact.
       secret stored in 1Password, `op run` env file wired with
       `HOOMLAB_PVE_TOKEN_ID`/`HOOMLAB_PVE_TOKEN_SECRET`; `!sdk`
       untouched
-- [ ] DNS A records for every `<node>.<domain>` certificate FQDN, and
-      a Cloudflare token scoped to that zone
+- [x] DNS A records for every `<node>.<domain>` certificate FQDN, and
+      a Cloudflare token scoped to that zone — **done 2026-08-25**:
+      `r740a`/`r640a`/`srv01.shart.sh` → mgmt IPs (DNS-only), verified
+      resolving via 1.1.1.1; zone-scoped token minted, in 1Password,
+      injected as `HOOMLAB_CLOUDFLARE_API_TOKEN`, verified against the
+      zones API (`success: true`, zone visible)
 - [ ] Talos boot-network prerequisites: DHCP reservations for every
       configured Talos MAC, and `talos.endpoint`'s host resolving to
       the first control-plane node's reserved address
