@@ -15,9 +15,11 @@
 cluster "homelab" {
   # ── Stage 1: pve form ─────────────────────────────────────────────
   pve {
-    # API token for every PVE call. The one thing the token cannot do
-    # is join a node to the cluster — joins are issued on the joining
-    # node and require an existing member's root@pam password.
+    # API token for every PVE read and non-formation write. The
+    # formation writes are the token's blind spot: PVE reserves
+    # cluster create and join for the literal root@pam user, so both
+    # dial with root_password (joins additionally because a token
+    # would not survive the join wiping the joiner's local config).
     token_id      = env("HOOMLAB_PVE_TOKEN_ID")
     token_secret  = env("HOOMLAB_PVE_TOKEN_SECRET")
     root_password = env("HOOMLAB_PVE_ROOT_PASSWORD")

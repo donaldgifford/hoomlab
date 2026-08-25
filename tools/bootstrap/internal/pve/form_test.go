@@ -2,6 +2,8 @@ package pve_test
 
 import (
 	"context"
+	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -40,18 +42,41 @@ type writeCounter struct {
 	joinHosts []string
 }
 
-// countingAPI wraps a cluster.API, bumping the counter on every write.
-type countingAPI struct {
-	cluster.API
-	c *writeCounter
+// tokenAuthed reports whether creds is the token flavor. The
+// Credentials interface is opaque, so the concrete type is the only
+// observable difference between token and user credentials out here.
+func tokenAuthed(creds api.Credentials) bool {
+	return reflect.TypeOf(creds) == reflect.TypeOf(api.TokenCredentials("id", "secret"))
 }
 
+// countingAPI wraps a cluster.API, bumping the counter on every write
+// — and enforcing real PVE's auth model on the formation writes:
+// POST /cluster/config and /cluster/config/join are reserved for the
+// literal root@pam user, so a token-dialed connection gets the exact
+// 403 real Proxmox returns (INV-0001 deviation, 2026-08-25). Reads
+// pass regardless, matching the server.
+type countingAPI struct {
+	cluster.API
+	c     *writeCounter
+	token bool
+}
+
+// errRootOnly mirrors the server's rejection verbatim so tests fail
+// the way the lab did.
+var errRootOnly = errors.New("HTTP 403: Permission check failed (user != root@pam)")
+
 func (a countingAPI) CreateCluster(ctx context.Context, spec *cluster.ClusterCreateSpec) error {
+	if a.token {
+		return errRootOnly
+	}
 	a.c.writes++
 	return a.API.CreateCluster(ctx, spec)
 }
 
 func (a countingAPI) JoinCluster(ctx context.Context, spec *cluster.JoinSpec) error {
+	if a.token {
+		return errRootOnly
+	}
 	a.c.writes++
 	a.c.joinHosts = append(a.c.joinHosts, spec.Hostname)
 	return a.API.JoinCluster(ctx, spec)
@@ -68,8 +93,8 @@ func newTestFormer(t *testing.T, mock *mockpve.Server, cfg *config.Cluster) (*pv
 	counter := &writeCounter{}
 	return &pve.Former{
 		Cluster: cfg,
-		Dial: func(context.Context, string, api.Credentials) (cluster.API, error) {
-			return countingAPI{API: svc, c: counter}, nil
+		Dial: func(_ context.Context, _ string, creds api.Credentials) (cluster.API, error) {
+			return countingAPI{API: svc, c: counter, token: tokenAuthed(creds)}, nil
 		},
 		PollInterval:  5 * time.Millisecond,
 		JoinCeiling:   250 * time.Millisecond,
@@ -137,6 +162,30 @@ func TestFormFreshCluster(t *testing.T) {
 	}
 	if got, want := strings.Join(members(t, former), ","), "pve-01,pve-02,pve-03"; got != want {
 		t.Errorf("membership = %q, want %q", got, want)
+	}
+}
+
+// TestFormWritesRejectTokenAuth is the INV-0001 regression
+// (2026-08-25): real PVE reserves cluster create/join for the literal
+// root@pam user, and the enforcing test dialer mirrors that rejection.
+// Formation succeeding under that rule proves both formation writes
+// dial with root@pam password credentials — against the pre-fix code
+// (create dialed with the API token) this fails exactly the way the
+// first hardware contact did.
+func TestFormWritesRejectTokenAuth(t *testing.T) {
+	mock := newFormationMock(t)
+	former, counter := newTestFormer(t, mock, testCluster())
+	stage, err := former.Steps()
+	if err != nil {
+		t.Fatalf("Steps() error: %v", err)
+	}
+
+	var r steps.Runner
+	if _, err := r.Run(context.Background(), stage); err != nil {
+		t.Fatalf("formation failed under the root-only write rule: %v", err)
+	}
+	if counter.writes != 3 {
+		t.Errorf("writes = %d, want 3 (create + 2 joins, all as root@pam)", counter.writes)
 	}
 }
 
