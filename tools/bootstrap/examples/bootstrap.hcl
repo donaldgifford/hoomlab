@@ -15,10 +15,10 @@
 cluster "homelab" {
   # ── Stage 1: pve form ─────────────────────────────────────────────
   pve {
-    # API token for every PVE read and non-formation write. The
-    # formation writes are the token's blind spot: PVE reserves
-    # cluster create and join for the literal root@pam user, so both
-    # dial with root_password (joins additionally because a token
+    # API token for every PVE read and most writes. PVE reserves a
+    # few endpoints for the literal root@pam user — cluster create,
+    # cluster join, and ACME account registration — and those dial
+    # with root_password instead (joins additionally because a token
     # would not survive the join wiping the joiner's local config).
     token_id      = env("HOOMLAB_PVE_TOKEN_ID")
     token_secret  = env("HOOMLAB_PVE_TOKEN_SECRET")

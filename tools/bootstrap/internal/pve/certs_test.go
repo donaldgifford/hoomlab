@@ -47,13 +47,23 @@ func newCertifier(t *testing.T, cfg *config.Cluster) (*pve.Certifier, *strings.B
 	t.Cleanup(cleanup)
 
 	var logBuf strings.Builder
+	svc := nodes.NewService(client, version.Capabilities{})
 	return &pve.Certifier{
-		Cluster: cfg,
-		Nodes:   nodes.NewService(client, version.Capabilities{}),
-		Tasks:   tasks.NewService(client),
-		Now:     func() time.Time { return time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC) },
-		Log:     slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		Cluster:  cfg,
+		Nodes:    svc,
+		Tasks:    tasks.NewService(client),
+		DialRoot: sameServiceRoot(svc),
+		Now:      func() time.Time { return time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC) },
+		Log:      slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})),
 	}, &logBuf
+}
+
+// sameServiceRoot is the single-mock tests' DialRoot: the mock does
+// not distinguish principals, so the root session is the same service.
+// TestCertsAccountRegistersAsRoot is where the two sessions are told
+// apart.
+func sameServiceRoot(svc *nodes.Service) func(context.Context) (*nodes.Service, error) {
+	return func(context.Context) (*nodes.Service, error) { return svc, nil }
 }
 
 func runCerts(t *testing.T, c *pve.Certifier) steps.Result {
@@ -139,6 +149,75 @@ func TestCertsFreshRun(t *testing.T) {
 
 	if strings.Contains(logBuf.String(), cfSecret) {
 		t.Errorf("log output leaks the provider token:\n%s", logBuf.String())
+	}
+}
+
+// TestCertsAccountRegistersAsRoot is the INV-0001 regression
+// (2026-08-25, deviation 3): POST /cluster/acme/account carries no
+// permissions block, and PVE defaults such endpoints to root@pam only
+// — r740a rejected the token-dialed registration with HTTP 403
+// "user != root@pam". The account write must go through DialRoot while
+// everything else stays on the token session. Two separate mocks play
+// the two sessions; the account must land on the root side only —
+// against the pre-fix code (registration via the token session) the
+// account lands on the token mock and this fails.
+func TestCertsAccountRegistersAsRoot(t *testing.T) {
+	cfg := certsCluster()
+
+	tokenMock := mockpve.New()
+	tokenMock.SeedVersion("9.2.1", "9.2", "test")
+	for _, n := range cfg.PVE.Nodes {
+		tokenMock.AddNode(n.Name)
+	}
+	tokenClient, cleanup := tokenMock.NewClient()
+	t.Cleanup(cleanup)
+	tokenNodes := nodes.NewService(tokenClient, version.Capabilities{})
+
+	rootMock := mockpve.New()
+	rootMock.SeedVersion("9.2.1", "9.2", "test")
+	rootClient, rootCleanup := rootMock.NewClient()
+	t.Cleanup(rootCleanup)
+	rootNodes := nodes.NewService(rootClient, version.Capabilities{})
+
+	rootDials := 0
+	certifier := &pve.Certifier{
+		Cluster: cfg,
+		Nodes:   tokenNodes,
+		// The registration task runs on the root side, so the waiter
+		// polls there too.
+		Tasks: tasks.NewService(rootClient),
+		DialRoot: func(context.Context) (*nodes.Service, error) {
+			rootDials++
+			return rootNodes, nil
+		},
+		Now: func() time.Time { return time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC) },
+	}
+
+	var r steps.Runner
+	res, err := r.Run(context.Background(), certifier.Steps()[:1])
+	if err != nil {
+		t.Fatalf("account step Run() error: %v", err)
+	}
+	if res.Applied != 1 {
+		t.Fatalf("applied = %d, want the account registration", res.Applied)
+	}
+	if rootDials != 1 {
+		t.Errorf("DialRoot called %d times, want exactly 1", rootDials)
+	}
+
+	onRoot, err := rootNodes.ListACMEAccounts(context.Background())
+	if err != nil {
+		t.Fatalf("ListACMEAccounts(root side): %v", err)
+	}
+	if !slices.Contains(onRoot, "default") {
+		t.Errorf("root-side accounts = %v, want the registration to land here", onRoot)
+	}
+	onToken, err := tokenNodes.ListACMEAccounts(context.Background())
+	if err != nil {
+		t.Fatalf("ListACMEAccounts(token side): %v", err)
+	}
+	if slices.Contains(onToken, "default") {
+		t.Errorf("token-side accounts = %v — the registration went through the token session, which real PVE rejects with 403", onToken)
 	}
 }
 
@@ -236,12 +315,14 @@ func seededCertifier(t *testing.T, cfg *config.Cluster, pluginData string) *pve.
 	t.Cleanup(cleanup)
 
 	var logBuf strings.Builder
+	svc := nodes.NewService(client, version.Capabilities{})
 	return &pve.Certifier{
-		Cluster: cfg,
-		Nodes:   nodes.NewService(client, version.Capabilities{}),
-		Tasks:   tasks.NewService(client),
-		Now:     func() time.Time { return time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC) },
-		Log:     slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		Cluster:  cfg,
+		Nodes:    svc,
+		Tasks:    tasks.NewService(client),
+		DialRoot: sameServiceRoot(svc),
+		Now:      func() time.Time { return time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC) },
+		Log:      slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})),
 	}
 }
 
@@ -327,12 +408,14 @@ func TestCertsReusesExistingDomainSlot(t *testing.T) {
 	t.Cleanup(cleanup)
 
 	var logBuf strings.Builder
+	svc := nodes.NewService(client, version.Capabilities{})
 	certifier := &pve.Certifier{
-		Cluster: cfg,
-		Nodes:   nodes.NewService(client, version.Capabilities{}),
-		Tasks:   tasks.NewService(client),
-		Now:     func() time.Time { return time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC) },
-		Log:     slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		Cluster:  cfg,
+		Nodes:    svc,
+		Tasks:    tasks.NewService(client),
+		DialRoot: sameServiceRoot(svc),
+		Now:      func() time.Time { return time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC) },
+		Log:      slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})),
 	}
 	runCerts(t, certifier)
 
@@ -381,12 +464,14 @@ func TestCertsFillsDomainSlotGap(t *testing.T) {
 	t.Cleanup(cleanup)
 
 	var logBuf strings.Builder
+	svc := nodes.NewService(client, version.Capabilities{})
 	certifier := &pve.Certifier{
-		Cluster: cfg,
-		Nodes:   nodes.NewService(client, version.Capabilities{}),
-		Tasks:   tasks.NewService(client),
-		Now:     func() time.Time { return time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC) },
-		Log:     slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		Cluster:  cfg,
+		Nodes:    svc,
+		Tasks:    tasks.NewService(client),
+		DialRoot: sameServiceRoot(svc),
+		Now:      func() time.Time { return time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC) },
+		Log:      slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})),
 	}
 	runCerts(t, certifier)
 

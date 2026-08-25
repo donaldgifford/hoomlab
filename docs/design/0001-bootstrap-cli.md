@@ -395,7 +395,7 @@ chart's `secrets.stringData`/`envFrom` — the config never changes.
 | Secret | Used by | Config reference |
 | --- | --- | --- |
 | PVE API token | all PVE reads and non-formation writes | `env("HOOMLAB_PVE_TOKEN_ID")` / `env("HOOMLAB_PVE_TOKEN_SECRET")` |
-| root@pam password | `pve form` formation writes — the create *and* the joins (amended by INV-0001, 2026-08-25: PVE reserves `POST /cluster/config` for the literal root@pam user; no API token passes its `user != root@pam` check) | `env("HOOMLAB_PVE_ROOT_PASSWORD")` |
+| root@pam password | the root@pam-reserved endpoints (amended by INV-0001, 2026-08-25): `pve form`'s create and joins, and `pve certs`' one-time ACME account registration — PVE reserves these for the literal root@pam user; no API token passes the `user != root@pam` check | `env("HOOMLAB_PVE_ROOT_PASSWORD")` |
 | Cloudflare API token | `pve certs` plugin registration | `env("HOOMLAB_CLOUDFLARE_API_TOKEN")` |
 | Talos secrets bundle | `talos emit`, `talos bootstrap` | not in config — the file at `--secrets`, generated once by `talos secrets`, operator-owned (OQ-2) |
 

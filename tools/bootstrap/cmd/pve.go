@@ -1,12 +1,14 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/spf13/cobra"
 
 	"github.com/donaldgifford/hoomlab/tools/bootstrap/internal/pve"
 	"github.com/donaldgifford/hoomlab/tools/bootstrap/internal/steps"
+	"github.com/donaldgifford/proxmox-go-sdk/proxmox/nodes"
 )
 
 func newPVECmd(opts *rootOptions) *cobra.Command {
@@ -44,6 +46,13 @@ provider token is detected and pushed the same way.`,
 				Cluster: cluster,
 				Nodes:   client.Nodes(),
 				Tasks:   client.Tasks(),
+				DialRoot: func(ctx context.Context) (*nodes.Service, error) {
+					root, err := pve.NewRootClient(ctx, cluster)
+					if err != nil {
+						return nil, err
+					}
+					return root.Nodes(), nil
+				},
 			}
 			runner := steps.Runner{DryRun: opts.dryRun, Out: cmd.OutOrStdout()}
 			res, err := runner.Run(cmd.Context(), certifier.Steps())

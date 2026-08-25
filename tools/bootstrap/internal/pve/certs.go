@@ -38,6 +38,17 @@ type Certifier struct {
 	Nodes   *nodes.Service
 	Tasks   *tasks.Service
 
+	// DialRoot opens a session authenticated as root@pam, used for
+	// exactly one call: registering the ACME account.
+	// POST /cluster/acme/account carries no permissions block, and
+	// PVE's default for such endpoints is root@pam only — the token
+	// gets HTTP 403 "user != root@pam" regardless of privileges
+	// (INV-0001, 2026-08-25). Every other write in this stage is
+	// Sys.Modify-gated and stays on the token session. Lazy so a
+	// converged re-run (renewals included) never authenticates as
+	// root at all.
+	DialRoot func(ctx context.Context) (*nodes.Service, error)
+
 	// RenewBefore is the remaining-validity floor; zero means 30 days.
 	RenewBefore time.Duration
 	// Now is the clock, for expiry checks. Nil means time.Now.
@@ -84,7 +95,8 @@ func (c *Certifier) accountCheck(ctx context.Context) (bool, error) {
 
 // applyAccount registers the ACME account, accepting the CA's current
 // terms of service read from its directory metadata rather than a
-// hardcoded URL.
+// hardcoded URL. The registration itself goes through the root@pam
+// session (see DialRoot); the metadata read stays on the token.
 func (c *Certifier) applyAccount(ctx context.Context) error {
 	var metaOpts []nodes.ACMEMetaOption
 	if c.Cluster.ACME.Directory != "" {
@@ -94,7 +106,14 @@ func (c *Certifier) applyAccount(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("read CA metadata: %w", err)
 	}
-	ref, err := c.Nodes.RegisterACMEAccount(ctx, &nodes.ACMEAccountSpec{
+	if c.DialRoot == nil {
+		return errors.New("certifier: DialRoot not configured for account registration")
+	}
+	rootNodes, err := c.DialRoot(ctx)
+	if err != nil {
+		return fmt.Errorf("dial as root@pam for account registration: %w", err)
+	}
+	ref, err := rootNodes.RegisterACMEAccount(ctx, &nodes.ACMEAccountSpec{
 		Name:      acmeAccountName,
 		Contact:   []string{c.Cluster.ACME.Email},
 		Directory: c.Cluster.ACME.Directory,
