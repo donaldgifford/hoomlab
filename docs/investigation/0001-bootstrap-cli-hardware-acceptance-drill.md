@@ -134,7 +134,7 @@ against production once the flow is proven.
 
 | Component | Version / Value |
 | --- | --- |
-| bootstrap CLI | built from `4b443ea` (`feat/impl-hardware-drill`, clean tree) via `just bootstrap-build` → `build/bin/bootstrap` |
+| bootstrap CLI | built from `b7968c4` (`feat/impl-hardware-drill`, clean tree) via `just bootstrap-build` → `build/bin/bootstrap` (first build `4b443ea` retired by the create-as-root fold-back) |
 | Talos | `v1.13.8` (machinery `v1.13.9`) |
 | Kubernetes | `v1.36.3` (machinery default) |
 | booty | `v0.2.1` — image `ghcr.io/donaldgifford/booty:0.2.1` |
@@ -229,7 +229,7 @@ Record each step as `pass`, or what actually happened. Steps 1–2 and
 
 | # | Step | Expected | Result |
 | --- | --- | --- | --- |
-| 1 | `bootstrap validate` | exit 0 | |
+| 1 | `bootstrap validate` | exit 0 | pass (2026-08-25, under the real `op run` injection) |
 | 2 | `bootstrap pve form` | cluster formed and quorate | |
 | 3 | `bootstrap pve certs` | certificates on all nodes | |
 | 4 | `bootstrap talos secrets` | `secrets.yaml`, 0600 | |
@@ -264,7 +264,8 @@ bug: record which step re-fired and why.
 
 | Date | Step | What happened | Resolution |
 | --- | --- | --- | --- |
-| | | *(no drill run yet)* | |
+| 2026-08-25 | `pve form --dry-run` | Reported `2 of 2 steps pending` while the token credential was invalid (a typo in the 1P env reference → HTTP 401 on every read). Checks deliberately swallow read errors as "pending" (the design routes real errors to apply), so dry-run cannot distinguish "step pending" from "cannot authenticate at all" — first contact started on false confidence. | Operator error fixed (the typo). The UX gap stands as a finding: a fail-fast credential check at stage start (or surfacing repeated check errors at info level) would have caught it. Candidate improvement, not yet scheduled. |
+| 2026-08-25 | `pve form`, `create-cluster` | r740a rejected the create with `HTTP 403: Permission check failed (user != root@pam)`. PVE reserves `POST /cluster/config` for the literal root@pam user; the API token authenticates as `root@pam!bootstrap` and can never pass, privsep or not. DESIGN-0001's credential split (token for the create) was wrong — mockpve happily accepted token-authed creates, hiding it. | Code fix `b7968c4`: `applyCreate` dials with root@pam password credentials; the shared test dialer now enforces the root-only rule on formation writes (named regression fails pre-fix with the lab's exact error); DESIGN-0001 secrets table + example config amended. mockpve enforcement upstream in proxmox-go-sdk noted as an SDK follow-up. |
 
 ## Conclusion
 
