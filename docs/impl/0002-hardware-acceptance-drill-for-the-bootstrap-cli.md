@@ -251,9 +251,13 @@ node before it ever touches the other two.
       (2 of 2 steps applied)`; `pvecm status` quorate with 1/1 votes,
       membership on `10.10.15.20` — corosync link0 landed on sync0 as
       configured; UI reachable showing `Datacenter (shart)`
-- [ ] `bootstrap pve certs` on the single node against LE staging
+- [x] `bootstrap pve certs` on the single node against LE staging
       until it converges cleanly (account, Cloudflare plugin, domain,
-      order)
+      order) — **done 2026-08-25**, three attempts, two fold-backs
+      (INV-0001 deviations 3–4: root-reserved account registration,
+      500-on-missing plugin GET): final run skipped the
+      already-registered account and applied plugin + domain + order
+      (`✓ acme certificates converged on 1 nodes, 3 steps applied`)
 - [ ] Flip `acme.directory` to production and re-run — the primary's
       UI presents a valid browser-trusted certificate (OQ-1: once
       it's correct here, it's production-correct)
