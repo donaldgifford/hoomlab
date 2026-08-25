@@ -186,12 +186,19 @@ radius of first contact.
 - [ ] Talos boot-network prerequisites: DHCP reservations for every
       configured Talos MAC, and `talos.endpoint`'s host resolving to
       the first control-plane node's reserved address
-- [ ] Write the real `bootstrap.hcl` in a scratch drill directory
+- [x] Write the real `bootstrap.hcl` in a scratch drill directory
       (real endpoints, MACs, VMIDs, storage, bridges; staging
       `acme.directory` per OQ-1); inject the four `HOOMLAB_*`
       variables at runtime via `op run --env-file` (no 1Password
       integration in the CLI — the wrapper is the integration);
-      `bootstrap validate` exits 0. Settled inputs (2026-08-23):
+      `bootstrap validate` exits 0 — **done 2026-08-25**: primary-only
+      config at `~/drill/bootstrap.hcl`, validated under `op run`
+      (`✓ cluster "shart" is valid`). r640a/srv01 staged as
+      commented-out blocks for the grow-to-three step; the `talos`
+      block carries TASK-4-marked placeholders because the schema
+      hard-requires it (a talos block with ≥1 controlplane) even for
+      the PVE-only phases — noted as a possible INV deviation if it
+      bites. Settled inputs (2026-08-23):
       cluster name `shart`; cert domain `shart.sh`; endpoints by mgmt
       IP (r740a `10.10.11.20`, r640a `10.10.11.21`, srv01
       `10.10.11.40`); each node's `address` = its sync0 IP
