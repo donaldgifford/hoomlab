@@ -183,9 +183,6 @@ radius of first contact.
       resolving via 1.1.1.1; zone-scoped token minted, in 1Password,
       injected as `HOOMLAB_CLOUDFLARE_API_TOKEN`, verified against the
       zones API (`success: true`, zone visible)
-- [ ] Talos boot-network prerequisites: DHCP reservations for every
-      configured Talos MAC, and `talos.endpoint`'s host resolving to
-      the first control-plane node's reserved address
 - [x] Write the real `bootstrap.hcl` in a scratch drill directory
       (real endpoints, MACs, VMIDs, storage, bridges; staging
       `acme.directory` per OQ-1); inject the four `HOOMLAB_*`
@@ -217,7 +214,9 @@ radius of first contact.
 
 #### Success Criteria
 
-- Every open question below shows **Decided** with a date.
+- Every open question below shows **Decided** with a date (OQ-5,
+  added 2026-08-23, is exempt: it gates Phase 4 and is resolved with
+  the boot-network task now in Phase 3).
 - `bootstrap validate` passes against the real config; no secret value
   appears in it.
 - `/etc/pve` backups exist for all three nodes, the joiners are
@@ -286,6 +285,14 @@ the future test environment's design.
 
 #### Tasks
 
+- [ ] Talos boot-network prerequisites *(moved from Phase 1,
+      2026-08-25 — deferred until the PVE cluster is up)*: decide the
+      Talos VM topology, DHCP reservations for every configured Talos
+      MAC, `talos.endpoint`'s host resolving to the first
+      control-plane node's reserved address, resolve OQ-5 (VLAN tag
+      on `net0`), and replace every `TASK-4` placeholder in
+      `bootstrap.hcl` (booty URL, endpoint, MACs, storage) with the
+      real values — the booty-testing records are the starting point
 - [ ] `bootstrap talos secrets`; back up `secrets.yaml` immediately
       (destination decided in Phase 1's config task)
 - [ ] `bootstrap talos emit` and `bootstrap talos ipxe` against the
