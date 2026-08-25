@@ -287,6 +287,58 @@ func TestCertsToleratesServerNormalizedPluginData(t *testing.T) {
 	}
 }
 
+// TestCertsReplacesForeignFrontendCertificate drives deviation 7's
+// replace path: a frontend certificate already exists (wrong SAN — a
+// hand-installed or stale certificate), so the pending order must
+// delete it first rather than issue the plain order real PVE refuses
+// while the file exists. mockpve does not model the refusal (noted
+// upstream); the decision logic itself is pinned by TestCertActionFor.
+func TestCertsReplacesForeignFrontendCertificate(t *testing.T) {
+	cfg := certsCluster()
+	node := cfg.PVE.Nodes[0].Name
+	fqdn := node + "." + cfg.ACME.Domain
+
+	mock := mockpve.New()
+	mock.SeedVersion("9.2.1", "9.2", "test")
+	for _, n := range cfg.PVE.Nodes {
+		mock.AddNode(n.Name)
+	}
+	mock.AddNodeCertificate(node, "pveproxy-ssl.pem") // SAN = node name, not the FQDN
+
+	client, cleanup := mock.NewClient()
+	t.Cleanup(cleanup)
+	svc := nodes.NewService(client, version.Capabilities{})
+	certifier := &pve.Certifier{
+		Cluster:  cfg,
+		Nodes:    svc,
+		Tasks:    tasks.NewService(client),
+		DialRoot: sameServiceRoot(svc),
+		Now:      func() time.Time { return time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC) },
+	}
+	runCerts(t, certifier)
+
+	certs, err := certifier.Nodes.GetNodeCertificates(context.Background(), node)
+	if err != nil {
+		t.Fatalf("GetNodeCertificates: %v", err)
+	}
+	var frontends int
+	for _, c := range certs {
+		if c.Filename == "pveproxy-ssl.pem" {
+			frontends++
+			if !slices.Contains(c.SAN, fqdn) {
+				t.Errorf("frontend cert SAN = %v, want it replaced with one covering %s", c.SAN, fqdn)
+			}
+		}
+	}
+	if frontends != 1 {
+		t.Errorf("found %d frontend certificates, want exactly 1", frontends)
+	}
+
+	if again := runCerts(t, certifier); again.Applied != 0 {
+		t.Errorf("re-run applied = %d, want 0", again.Applied)
+	}
+}
+
 func TestCertsTokenRotation(t *testing.T) {
 	certifier, _ := newCertifier(t, certsCluster())
 	runCerts(t, certifier)

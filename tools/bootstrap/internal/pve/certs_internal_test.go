@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/donaldgifford/hoomlab/tools/bootstrap/internal/config"
+	"github.com/donaldgifford/proxmox-go-sdk/proxmox/nodes"
 )
 
 func b64(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) }
@@ -45,6 +46,51 @@ func TestIssuerMatchesCA(t *testing.T) {
 			if got := certifierFor(tt.directory).issuerMatchesCA(tt.issuer); got != tt.want {
 				t.Errorf("issuerMatchesCA(%q) with directory %q = %v, want %v",
 					tt.issuer, tt.directory, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestCertActionFor pins the converge path for a pending certificate
+// step (INV-0001 deviation 7): PVE's order refuses while a frontend
+// certificate exists and the SDK exposes no force, so the path is
+// picked from the existing file — plain order when absent, renew when
+// the certificate is right but expiring, delete-then-order when it is
+// wrong (CA flip, SAN change).
+func TestCertActionFor(t *testing.T) {
+	const fqdn = "r740a.shart.sh"
+	right := nodes.Certificate{
+		Filename: "pveproxy-ssl.pem",
+		Issuer:   "C=US, O=Let's Encrypt, CN=R13", SAN: []string{fqdn},
+	}
+	staging := nodes.Certificate{
+		Filename: "pveproxy-ssl.pem",
+		Issuer:   "C=US, O=Let's Encrypt, CN=(STAGING) Dastardly Durum YR1", SAN: []string{fqdn},
+	}
+	foreignSAN := nodes.Certificate{
+		Filename: "pveproxy-ssl.pem",
+		Issuer:   "CN=whatever", SAN: []string{"other.example"},
+	}
+	selfSigned := nodes.Certificate{
+		Filename: "pve-ssl.pem",
+		Issuer:   "O=PVE Cluster Manager CA", SAN: []string{"r740a"},
+	}
+
+	tests := []struct {
+		name  string
+		certs []nodes.Certificate
+		want  certAction
+	}{
+		{"no frontend cert", []nodes.Certificate{selfSigned}, certActionOrder},
+		{"right cert expiring", []nodes.Certificate{selfSigned, right}, certActionRenew},
+		{"staging cert under production", []nodes.Certificate{selfSigned, staging}, certActionReplace},
+		{"foreign SAN", []nodes.Certificate{foreignSAN}, certActionReplace},
+	}
+	c := certifierFor("") // production default
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := c.certActionFor(tt.certs, fqdn); got != tt.want {
+				t.Errorf("certActionFor = %v, want %v", got, tt.want)
 			}
 		})
 	}

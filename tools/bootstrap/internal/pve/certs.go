@@ -30,6 +30,10 @@ const (
 	// default CA when a registration names no directory, and this
 	// config's default when acme.directory is unset.
 	leProductionDirectory = "https://acme-v02.api.letsencrypt.org/directory"
+	// frontendCertFilename is the pveproxy certificate file PVE
+	// serves the UI/API with — the one the ACME order installs and
+	// the one whose presence makes a plain reorder refuse.
+	frontendCertFilename = "pveproxy-ssl.pem"
 )
 
 // Certifier builds the Stage 2 step list: ACME account, the DNS-01
@@ -82,7 +86,7 @@ func (c *Certifier) Steps() []steps.Step {
 			steps.Step{
 				Name:  "acme-cert-" + n.Name,
 				Check: c.certCheck(n.Name, fqdn),
-				Apply: c.applyOrder(n.Name),
+				Apply: c.applyOrder(n.Name, fqdn),
 			},
 		)
 	}
@@ -353,12 +357,67 @@ func (c *Certifier) issuerMatchesCA(issuer string) bool {
 	return !strings.Contains(issuer, "(STAGING)")
 }
 
-// applyOrder orders (or renews) the node certificate and awaits the
-// worker. A DNS-01 order waits on the CA resolving the challenge
-// record — a live order runs on the order of minutes, so the wait is
-// bounded only by the command's context.
-func (c *Certifier) applyOrder(node string) func(context.Context) error {
+// certAction is how applyOrder converges a pending certificate step.
+type certAction int
+
+const (
+	certActionOrder   certAction = iota // no frontend certificate — plain order
+	certActionRenew                     // right certificate, merely expiring — renew in place
+	certActionReplace                   // wrong certificate (CA flip, SAN change) — delete, then order
+)
+
+// certActionFor decides the converge path for a node whose
+// certificate step is pending. PVE's order endpoint refuses while a
+// frontend certificate file exists and the SDK exposes no force
+// (INV-0001 deviation 7, 2026-08-25), so the existing file dictates
+// the path: absent means a plain order; present and otherwise right
+// means the certificate is merely inside the renewal window, which
+// PVE's renew verb handles without force; present and wrong means
+// delete the frontend certificate and order fresh — a brief
+// self-signed window, entered only when the served certificate is
+// already wrong.
+func (c *Certifier) certActionFor(certs []nodes.Certificate, fqdn string) certAction {
+	for i := range certs {
+		cert := &certs[i]
+		if cert.Filename != frontendCertFilename {
+			continue
+		}
+		if slices.Contains(cert.SAN, fqdn) && c.issuerMatchesCA(cert.Issuer) {
+			return certActionRenew
+		}
+		return certActionReplace
+	}
+	return certActionOrder
+}
+
+// applyOrder converges the node certificate per certActionFor and
+// awaits the worker. A DNS-01 order waits on the CA resolving the
+// challenge record — a live order runs on the order of minutes, so
+// the wait is bounded only by the command's context.
+func (c *Certifier) applyOrder(node, fqdn string) func(context.Context) error {
 	return func(ctx context.Context) error {
+		certs, err := c.Nodes.GetNodeCertificates(ctx, node)
+		if err != nil {
+			return fmt.Errorf("get certificates of %s: %w", node, err)
+		}
+		switch c.certActionFor(certs, fqdn) {
+		case certActionRenew:
+			ref, err := c.Nodes.RenewNodeCertificate(ctx, node)
+			if err != nil {
+				return fmt.Errorf("renew certificate for %s: %w", node, err)
+			}
+			if err := c.waitTask(ctx, ref, "certificate renewal for "+node); err != nil {
+				return err
+			}
+			c.log().Info("certificate renewed", "node", node)
+			return nil
+		case certActionReplace:
+			if err := c.Nodes.DeleteCustomCertificate(ctx, node); err != nil {
+				return fmt.Errorf("delete stale certificate of %s: %w", node, err)
+			}
+			c.log().Info("stale certificate removed before reorder", "node", node)
+		case certActionOrder:
+		}
 		ref, err := c.Nodes.OrderNodeCertificate(ctx, node)
 		if err != nil {
 			return fmt.Errorf("order certificate for %s: %w", node, err)
