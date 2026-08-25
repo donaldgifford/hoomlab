@@ -148,9 +148,11 @@ radius of first contact.
       installer-default `/etc/pve`, so nothing on the joiners is
       contested, and the one delta worth keeping — the `root@pam!sdk`
       token — lives on r740a and survives as primary)
-- [ ] Back up `/etc/pve` (tar) and note `/etc/network/interfaces` on
+- [x] Back up `/etc/pve` (tar) and note `/etc/network/interfaces` on
       all three nodes — the two-minute insurance against a botched
-      join costing real reconfiguration
+      join costing real reconfiguration — **done 2026-08-25**: pulled
+      off-node to the workstation (`~/drill/backups/`, per-node
+      `<node>-etc-pve-2026-08-25.tgz` + `<node>-interfaces-2026-08-25`)
 - [x] Confirm both joiner nodes are guest-free (PVE refuses to join a
       node with guests) and inventory what node-local config exists on
       them (storage entries, users, tokens) so post-join losses are
