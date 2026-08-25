@@ -14,7 +14,6 @@ import (
 	"github.com/donaldgifford/hoomlab/tools/bootstrap/internal/config"
 	"github.com/donaldgifford/hoomlab/tools/bootstrap/internal/steps"
 	"github.com/donaldgifford/proxmox-go-sdk/proxmox/nodes"
-	"github.com/donaldgifford/proxmox-go-sdk/proxmox/pverr"
 	"github.com/donaldgifford/proxmox-go-sdk/proxmox/tasks"
 )
 
@@ -129,17 +128,33 @@ func (c *Certifier) applyAccount(ctx context.Context) error {
 	return nil
 }
 
+// findACMEPlugin returns the plugin with the given ID from the
+// cluster's plugin index, with found reporting whether it exists.
+// Existence goes through the index deliberately: real PVE answers a
+// by-ID GET on a missing plugin with HTTP 500 "ACME plugin '<id>' not
+// defined" rather than a 404 (INV-0001, 2026-08-25), so a by-ID read
+// cannot distinguish "not created yet" from a genuine server error.
+func (c *Certifier) findACMEPlugin(ctx context.Context, id string) (plugin *nodes.ACMEPlugin, found bool, err error) {
+	plugins, err := c.Nodes.ListACMEPlugins(ctx)
+	if err != nil {
+		return nil, false, fmt.Errorf("list acme plugins: %w", err)
+	}
+	for i := range plugins {
+		if plugins[i].Plugin == id {
+			return &plugins[i], true, nil
+		}
+	}
+	return nil, false, nil
+}
+
 // pluginCheck is done when the plugin exists, is a DNS plugin for the
 // right provider, is enabled, and stores exactly the credentials the
 // config resolves to — a rotated token flips this back to pending.
 func (c *Certifier) pluginCheck(id string) func(context.Context) (bool, error) {
 	return func(ctx context.Context) (bool, error) {
-		plugin, err := c.Nodes.GetACMEPlugin(ctx, id)
-		if errors.Is(err, pverr.ErrNotFound) {
-			return false, nil
-		}
-		if err != nil {
-			return false, fmt.Errorf("get acme plugin %s: %w", id, err)
+		plugin, found, err := c.findACMEPlugin(ctx, id)
+		if err != nil || !found {
+			return false, err
 		}
 		data := c.pluginData()
 		return plugin.API == data.API() &&
@@ -154,9 +169,11 @@ func (c *Certifier) pluginCheck(id string) func(context.Context) (bool, error) {
 func (c *Certifier) applyPlugin(id string) func(context.Context) error {
 	return func(ctx context.Context) error {
 		data := c.pluginData()
-		existing, err := c.Nodes.GetACMEPlugin(ctx, id)
+		existing, found, err := c.findACMEPlugin(ctx, id)
 		switch {
-		case errors.Is(err, pverr.ErrNotFound):
+		case err != nil:
+			return err
+		case !found:
 			if err := c.Nodes.CreateACMEPlugin(ctx, &nodes.ACMEPluginSpec{
 				ID:   id,
 				Type: nodes.ACMEChallengeTypeDNS,
@@ -165,8 +182,6 @@ func (c *Certifier) applyPlugin(id string) func(context.Context) error {
 				return fmt.Errorf("create acme plugin %s: %w", id, err)
 			}
 			c.log().Info("acme plugin registered", "plugin", id)
-		case err != nil:
-			return fmt.Errorf("get acme plugin %s: %w", id, err)
 		default:
 			if err := c.Nodes.UpdateACMEPlugin(ctx, id, &nodes.ACMEPluginUpdate{
 				Data:   data,
