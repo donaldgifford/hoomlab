@@ -231,7 +231,7 @@ Record each step as `pass`, or what actually happened. Steps 1–2 and
 | --- | --- | --- | --- |
 | 1 | `bootstrap validate` | exit 0 | pass (2026-08-25, under the real `op run` injection) |
 | 2 | `bootstrap pve form` | cluster formed and quorate | single-node pass (2026-08-25): cluster of one formed and quorate, corosync on sync0 (`10.10.15.20`); grow-to-three pending |
-| 3 | `bootstrap pve certs` | certificates on all nodes | |
+| 3 | `bootstrap pve certs` | certificates on all nodes | single-node pass (2026-08-25): staging convergence, then the staging→production flip as a real transition (deviations 3–7 en route) — primary serves `C=US, O=Let's Encrypt, CN=YR1` for `r740a.shart.sh` (openssl-verified); back-to-back re-runs skip all 4 steps, 0 applied; extend-to-joiners pending |
 | 4 | `bootstrap talos secrets` | `secrets.yaml`, 0600 | |
 | 5 | `bootstrap talos emit` | full tree under `bootstrap-out/booty/` | |
 | 6 | `bootstrap talos ipxe` | `boot/ipxe.efi` built | |

@@ -258,9 +258,17 @@ node before it ever touches the other two.
       500-on-missing plugin GET): final run skipped the
       already-registered account and applied plugin + domain + order
       (`✓ acme certificates converged on 1 nodes, 3 steps applied`)
-- [ ] Flip `acme.directory` to production and re-run — the primary's
+- [x] Flip `acme.directory` to production and re-run — the primary's
       UI presents a valid browser-trusted certificate (OQ-1: once
-      it's correct here, it's production-correct)
+      it's correct here, it's production-correct) — **done 2026-08-25**,
+      four attempts, three fold-backs (INV-0001 deviations 5–7: CA-blind
+      checks no-opped the flip; the plugin step rotated identical
+      credentials until PVE's plaintext read-shape was understood; the
+      order refused over the installed staging cert until
+      delete-then-order). Final state: issuer `C=US, O=Let's Encrypt,
+      CN=YR1`, subject `r740a.shart.sh` (openssl-verified), and
+      back-to-back re-runs skip all four steps
+      (`✓ acme certificates converged on 1 nodes, 0 steps applied`)
 - [ ] Grow to three: expand the config to all nodes;
       `pve form --dry-run` shows exactly the two joins pending;
       `pve form` joins them serially, full quorum verified, every UI
