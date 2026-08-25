@@ -20,6 +20,7 @@ created: 2026-08-21
 - [Findings](#findings)
   - [Pre-drill: defects found by running the emitted artifacts](#pre-drill-defects-found-by-running-the-emitted-artifacts)
   - [Pre-drill: what has been verified without hardware](#pre-drill-what-has-been-verified-without-hardware)
+  - [Phase 1 gate: go (2026-08-25)](#phase-1-gate-go-2026-08-25)
   - [Drill results](#drill-results)
   - [Convergence pass](#convergence-pass)
   - [Deviations from the runbook](#deviations-from-the-runbook)
@@ -133,7 +134,7 @@ against production once the flow is proven.
 
 | Component | Version / Value |
 | --- | --- |
-| bootstrap CLI | this branch (pre-`v0.1.0`) |
+| bootstrap CLI | built from `4b443ea` (`feat/impl-hardware-drill`, clean tree) via `just bootstrap-build` → `build/bin/bootstrap` |
 | Talos | `v1.13.8` (machinery `v1.13.9`) |
 | Kubernetes | `v1.36.3` (machinery default) |
 | booty | `v0.2.1` — image `ghcr.io/donaldgifford/booty:0.2.1` |
@@ -141,7 +142,7 @@ against production once the flow is proven.
 | Talos Image Factory schematic | `376567…b4ba` (vanilla, no extensions) |
 | proxmox-go-sdk | `v0.11.0` |
 | Proxmox VE | `9.2.10` on r740a (live 2026-08-22); r640a/srv01 confirm at drill time |
-| Workstation | *(record at drill time)* |
+| Workstation | macOS 26.5.2, arm64 (Apple Silicon), Go 1.26.6; secrets injected via `op run --env-file` |
 | Lab topology | Nodes: `r740a` 10.10.11.20 (primary, R740xd, `fast`/`tank` pools), `r640a` 10.10.11.21, `srv01` 10.10.11.40 (NVMe-mirror `local-zfs`). Networks: mgmt/API 10.10.11.0/24 (`vmbr0`), storage 10.10.13.0/24 (`stor0`), corosync 10.10.15.0/24 (`sync0`); guests on VLAN-aware `vmbr1` (10 GbE). Cluster `shart`, cert domain `shart.sh`, Talos domain `fartlab.dev`. Datasets `fast/vm`/`tank/vm` pre-created on both dells; pool roots (live Garage data) off-limits to PVE. Snapshot: [bootstrap-handoff](../runbook/bootstrap-handoff.md), verified 2026-08-22/23. DHCP: *(record at drill time)* |
 
 ## Findings
@@ -197,6 +198,29 @@ container:
 That discharges IMPL-0001 Phase 4's manual-smoke success criterion.
 What it does **not** cover is the actual PXE handshake — proxyDHCP,
 TFTP, and a machine chainloading `ipxe.efi` — which needs a machine.
+
+### Phase 1 gate: go (2026-08-25)
+
+**Decision: GO** — bootstrap as it stands is acceptable to run against
+the production nodes. Made on the evidence below, with the operator
+running every command:
+
+- OQ-1 through OQ-4 decided; OQ-5 (VLAN tag on `net0`) deferred with
+  the boot-network task to IMPL-0002 Phase 3 — it gates nothing
+  before `talos vms`.
+- `/etc/pve` tarballs and `/etc/network/interfaces` copies pulled
+  off-node for all three nodes.
+- All three nodes verified guest-free with byte-identical
+  installer-default `/etc/pve`; the predicted join loss on the
+  joiners is *nothing* (same-content overwrite).
+- Fleet-wide `root@pam` password confirmed; dedicated
+  `root@pam!bootstrap` token (privsep=0) minted on r740a and proven
+  against the live API.
+- `<node>.shart.sh` A records resolving via 1.1.1.1; the zone-scoped
+  Cloudflare token verified against the zones API.
+- The primary-only config validates under the real `op run`
+  injection; `pve form --dry-run` against r740a reported 2 of 2 steps
+  pending, nothing applied.
 
 ### Drill results
 

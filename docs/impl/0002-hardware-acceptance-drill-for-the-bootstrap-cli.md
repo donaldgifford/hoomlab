@@ -205,12 +205,16 @@ radius of first contact.
       runbook, SDK follow-up filed in Phase 6); join order = config
       order (r640a, then srv01); VMIDs per the 100s infra / 200s CP /
       300s workers convention
-- [ ] Record the environment in INV-0001's table: PVE version, node
-      names/endpoints, CLI commit SHA, lab topology
-- [ ] The goal-1 gate: with the predictions, backups, and dry-runs in
+- [x] Record the environment in INV-0001's table: PVE version, node
+      names/endpoints, CLI commit SHA, lab topology — **done
+      2026-08-25**: CLI built from `4b443ea` via `just
+      bootstrap-build`; topology and workstation rows filled
+      (r640a/srv01 `pveversion` confirmed at first join)
+- [x] The goal-1 gate: with the predictions, backups, and dry-runs in
       hand, make the explicit go/no-go call that bootstrap as it
       stands is acceptable to run against the production nodes, and
-      record it in INV-0001
+      record it in INV-0001 — **GO, 2026-08-25**, recorded in
+      INV-0001 with the evidence; the operator runs every command
 
 #### Success Criteria
 
