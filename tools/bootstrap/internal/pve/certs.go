@@ -6,14 +6,15 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/donaldgifford/hoomlab/tools/bootstrap/internal/config"
 	"github.com/donaldgifford/hoomlab/tools/bootstrap/internal/steps"
 	"github.com/donaldgifford/proxmox-go-sdk/proxmox/nodes"
+	"github.com/donaldgifford/proxmox-go-sdk/proxmox/pverr"
 	"github.com/donaldgifford/proxmox-go-sdk/proxmox/tasks"
 )
 
@@ -25,6 +26,10 @@ const (
 	// the certificate step goes pending again — renewal is the same
 	// command re-run.
 	defaultRenewBefore = 30 * 24 * time.Hour
+	// leProductionDirectory is Let's Encrypt production — PVE's
+	// default CA when a registration names no directory, and this
+	// config's default when acme.directory is unset.
+	leProductionDirectory = "https://acme-v02.api.letsencrypt.org/directory"
 )
 
 // Certifier builds the Stage 2 step list: ACME account, the DNS-01
@@ -84,19 +89,101 @@ func (c *Certifier) Steps() []steps.Step {
 	return list
 }
 
-func (c *Certifier) accountCheck(ctx context.Context) (bool, error) {
-	accounts, err := c.Nodes.ListACMEAccounts(ctx)
-	if err != nil {
-		return false, fmt.Errorf("list acme accounts: %w", err)
+// desiredDirectory is the CA directory the config asks for.
+func (c *Certifier) desiredDirectory() string {
+	if c.Cluster.ACME.Directory != "" {
+		return c.Cluster.ACME.Directory
 	}
-	return slices.Contains(accounts, acmeAccountName), nil
+	return leProductionDirectory
 }
 
-// applyAccount registers the ACME account, accepting the CA's current
-// terms of service read from its directory metadata rather than a
-// hardcoded URL. The registration itself goes through the root@pam
-// session (see DialRoot); the metadata read stays on the token.
+// accountCheck is done when the account exists AND is registered
+// against the configured CA directory — flipping acme.directory
+// (staging → production, OQ-1) reopens this step. INV-0001 deviation
+// 5 (2026-08-25): the previous name-only check read the staging
+// account as done after the flip and the whole stage no-opped. A
+// stored directory the server does not report (empty) counts as
+// matching.
+func (c *Certifier) accountCheck(ctx context.Context) (bool, error) {
+	dir, exists, err := c.accountDirectory(ctx)
+	if err != nil || !exists {
+		return false, err
+	}
+	if dir != "" && dir != c.desiredDirectory() {
+		c.log().Info("acme account registered against a different CA",
+			"account", acmeAccountName, "have", dir, "want", c.desiredDirectory())
+		return false, nil
+	}
+	return true, nil
+}
+
+// accountDirectory reports whether the account exists and which CA
+// directory it is registered against. Reads are token-first; the
+// per-account GET falls back through the root session on a 403 —
+// PVE's account endpoints default to root@pam-only and the drill has
+// only proven the index readable by a token.
+func (c *Certifier) accountDirectory(ctx context.Context) (dir string, exists bool, err error) {
+	accounts, err := c.Nodes.ListACMEAccounts(ctx)
+	if err != nil {
+		return "", false, fmt.Errorf("list acme accounts: %w", err)
+	}
+	if !slices.Contains(accounts, acmeAccountName) {
+		return "", false, nil
+	}
+	acct, err := c.Nodes.GetACMEAccount(ctx, acmeAccountName)
+	if errors.Is(err, pverr.ErrForbidden) {
+		c.log().Info("account read denied to the token, retrying as root@pam",
+			"account", acmeAccountName)
+		rootNodes, rootErr := c.dialRootNodes(ctx)
+		if rootErr != nil {
+			return "", true, rootErr
+		}
+		acct, err = rootNodes.GetACMEAccount(ctx, acmeAccountName)
+	}
+	if err != nil {
+		return "", true, fmt.Errorf("get acme account %s: %w", acmeAccountName, err)
+	}
+	return acct.Directory, true, nil
+}
+
+// dialRootNodes opens the root@pam session, guarding the seam.
+func (c *Certifier) dialRootNodes(ctx context.Context) (*nodes.Service, error) {
+	if c.DialRoot == nil {
+		return nil, errors.New("certifier: DialRoot not configured")
+	}
+	svc, err := c.DialRoot(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("dial as root@pam: %w", err)
+	}
+	return svc, nil
+}
+
+// applyAccount converges the ACME account: register when absent,
+// deactivate-and-re-register when it exists against a different CA
+// (the staging → production flip). Both writes go through the root
+// session — every account write is root@pam-reserved. The CA's terms
+// of service are read from its directory metadata rather than a
+// hardcoded URL; that read stays on the token.
 func (c *Certifier) applyAccount(ctx context.Context) error {
+	rootNodes, err := c.dialRootNodes(ctx)
+	if err != nil {
+		return err
+	}
+	_, exists, err := c.accountDirectory(ctx)
+	if err != nil {
+		return err
+	}
+	if exists {
+		ref, err := rootNodes.DeactivateACMEAccount(ctx, acmeAccountName)
+		if err != nil {
+			return fmt.Errorf("deactivate acme account %s: %w", acmeAccountName, err)
+		}
+		if err := c.waitTask(ctx, ref, "acme account deactivation"); err != nil {
+			return err
+		}
+		c.log().Info("acme account deactivated for CA change", "account", acmeAccountName)
+	}
+
 	var metaOpts []nodes.ACMEMetaOption
 	if c.Cluster.ACME.Directory != "" {
 		metaOpts = append(metaOpts, nodes.WithACMEDirectory(c.Cluster.ACME.Directory))
@@ -104,13 +191,6 @@ func (c *Certifier) applyAccount(ctx context.Context) error {
 	meta, err := c.Nodes.GetACMEMeta(ctx, metaOpts...)
 	if err != nil {
 		return fmt.Errorf("read CA metadata: %w", err)
-	}
-	if c.DialRoot == nil {
-		return errors.New("certifier: DialRoot not configured for account registration")
-	}
-	rootNodes, err := c.DialRoot(ctx)
-	if err != nil {
-		return fmt.Errorf("dial as root@pam for account registration: %w", err)
 	}
 	ref, err := rootNodes.RegisterACMEAccount(ctx, &nodes.ACMEAccountSpec{
 		Name:      acmeAccountName,
@@ -124,7 +204,8 @@ func (c *Certifier) applyAccount(ctx context.Context) error {
 	if err := c.waitTask(ctx, ref, "acme account registration"); err != nil {
 		return err
 	}
-	c.log().Info("acme account registered", "account", acmeAccountName)
+	c.log().Info("acme account registered", "account", acmeAccountName,
+		"directory", c.desiredDirectory())
 	return nil
 }
 
@@ -157,10 +238,16 @@ func (c *Certifier) pluginCheck(id string) func(context.Context) (bool, error) {
 			return false, err
 		}
 		data := c.pluginData()
+		stored, err := decodePluginData(plugin.Data)
+		if err != nil {
+			c.log().Debug("stored plugin data undecodable, treating as drifted",
+				"plugin", id, "err", err)
+			return false, nil
+		}
 		return plugin.API == data.API() &&
 			plugin.Type != nodes.ACMEChallengeTypeStandalone &&
 			!plugin.Disable.Bool() &&
-			plugin.Data == encodePluginData(data), nil
+			maps.Equal(stored, desiredPluginValues(data)), nil
 	}
 }
 
@@ -235,7 +322,8 @@ func (c *Certifier) applyDomain(node, fqdn, pluginID string) func(context.Contex
 }
 
 // certCheck is done when a certificate covering the FQDN is installed
-// with more than RenewBefore validity left.
+// with more than RenewBefore validity left, issued by an acceptable
+// CA (see issuerMatchesCA).
 func (c *Certifier) certCheck(node, fqdn string) func(context.Context) (bool, error) {
 	return func(ctx context.Context) (bool, error) {
 		certs, err := c.Nodes.GetNodeCertificates(ctx, node)
@@ -244,9 +332,25 @@ func (c *Certifier) certCheck(node, fqdn string) func(context.Context) (bool, er
 		}
 		deadline := c.now().Add(c.renewBefore()).Unix()
 		return slices.ContainsFunc(certs, func(cert nodes.Certificate) bool {
-			return slices.Contains(cert.SAN, fqdn) && cert.NotAfter > deadline
+			return slices.Contains(cert.SAN, fqdn) &&
+				cert.NotAfter > deadline &&
+				c.issuerMatchesCA(cert.Issuer)
 		}), nil
 	}
+}
+
+// issuerMatchesCA rejects a staging-issued certificate when the
+// desired CA is Let's Encrypt production — the staging → production
+// flip must reopen the order (INV-0001 deviation 5, 2026-08-25:
+// without this the installed staging certificate satisfied the
+// SAN + validity check and the flip no-opped). Staging and custom
+// CAs express no issuer opinion; the heuristic exists for the one
+// documented transition (OQ-1).
+func (c *Certifier) issuerMatchesCA(issuer string) bool {
+	if c.desiredDirectory() != leProductionDirectory {
+		return true
+	}
+	return !strings.Contains(issuer, "(STAGING)")
 }
 
 // applyOrder orders (or renews) the node certificate and awaits the
@@ -301,26 +405,40 @@ func slotFor(existing []nodes.ACMEDomain, fqdn string) int {
 	return idx
 }
 
-// encodePluginData mirrors the SDK's wire encoding of provider
-// credentials (proxmox/nodes.encodePluginData: sorted KEY=value lines,
-// empty values omitted, newline-joined, std base64) so pluginCheck can
-// compare the stored payload against the config without decoding
-// secrets. The round-trip test against mockpve pins the two in sync.
-func encodePluginData(d nodes.ACMEPluginData) string {
+// desiredPluginValues is the provider credential map the config
+// resolves to, with empty values dropped — the SDK omits them on the
+// wire, so they can never appear in the stored payload.
+func desiredPluginValues(d nodes.ACMEPluginData) map[string]string {
 	values := d.Data()
-	keys := make([]string, 0, len(values))
+	out := make(map[string]string, len(values))
 	for k, v := range values {
-		if v == "" {
+		if v != "" {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+// decodePluginData parses PVE's stored provider payload (base64 over
+// KEY=value lines) into a map. The comparison is structural rather
+// than byte-for-byte deliberately: real PVE round-trips the stored
+// payload in its own rendering, not the SDK's byte-exact encoding, so
+// comparing encodings re-rotated identical credentials on every run
+// (INV-0001 deviation 6, 2026-08-25).
+func decodePluginData(encoded string) (map[string]string, error) {
+	raw, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return nil, fmt.Errorf("decode plugin data: %w", err)
+	}
+	out := make(map[string]string)
+	for _, line := range strings.Split(string(raw), "\n") {
+		if line = strings.TrimSpace(line); line == "" {
 			continue
 		}
-		keys = append(keys, k)
+		k, v, _ := strings.Cut(line, "=")
+		out[k] = v
 	}
-	sort.Strings(keys)
-	lines := make([]string, 0, len(keys))
-	for _, k := range keys {
-		lines = append(lines, k+"="+values[k])
-	}
-	return base64.StdEncoding.EncodeToString([]byte(strings.Join(lines, "\n")))
+	return out, nil
 }
 
 func (c *Certifier) log() *slog.Logger {

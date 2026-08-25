@@ -231,6 +231,62 @@ func TestCertsReRunIsNoOp(t *testing.T) {
 	}
 }
 
+// TestCertsStagingToProductionFlip is the INV-0001 deviation 5
+// regression (2026-08-25): with a name-only account check and an
+// expiry-only cert check, flipping acme.directory after a staging run
+// converged on nothing and the cluster kept serving staging
+// certificates. The flip must reopen the account and re-register it
+// against the new CA (deactivate + register).
+func TestCertsStagingToProductionFlip(t *testing.T) {
+	cfg := certsCluster()
+	cfg.ACME.Directory = "https://acme-staging-v02.api.letsencrypt.org/directory"
+	certifier, _ := newCertifier(t, cfg)
+	runCerts(t, certifier)
+
+	before, err := certifier.Nodes.GetACMEAccount(context.Background(), "default")
+	if err != nil {
+		t.Fatalf("GetACMEAccount: %v", err)
+	}
+	if before.Directory != cfg.ACME.Directory {
+		t.Fatalf("staging account directory = %q, want %q", before.Directory, cfg.ACME.Directory)
+	}
+
+	certifier.Cluster.ACME.Directory = "" // Let's Encrypt production
+	res := runCerts(t, certifier)
+	if res.Applied != 1 {
+		t.Errorf("flip Run() applied = %d, want exactly the account re-registration", res.Applied)
+	}
+	after, err := certifier.Nodes.GetACMEAccount(context.Background(), "default")
+	if err != nil {
+		t.Fatalf("GetACMEAccount after flip: %v", err)
+	}
+	if after.Directory == before.Directory {
+		t.Error("account still registered against the staging directory after the flip")
+	}
+
+	if again := runCerts(t, certifier); again.Applied != 0 {
+		t.Errorf("post-flip re-run applied = %d, want 0", again.Applied)
+	}
+}
+
+// TestCertsToleratesServerNormalizedPluginData is the INV-0001
+// deviation 6 regression (2026-08-25): real PVE stores the credential
+// payload in its own rendering rather than the SDK's byte-exact
+// encoding, and the byte-comparing check rotated identical
+// credentials on every run. Seed the plugin the way a normalizing
+// server would store it — same values, trailing newline — and the
+// check must read done.
+func TestCertsToleratesServerNormalizedPluginData(t *testing.T) {
+	cfg := certsCluster()
+	normalized := base64.StdEncoding.EncodeToString([]byte("CF_Token=" + cfSecret + "\n"))
+	certifier := seededCertifier(t, cfg, normalized)
+
+	res := runCerts(t, certifier)
+	if res.Applied != 7 {
+		t.Errorf("applied = %d, want 7 (the normalized-but-identical plugin must be skipped)", res.Applied)
+	}
+}
+
 func TestCertsTokenRotation(t *testing.T) {
 	certifier, _ := newCertifier(t, certsCluster())
 	runCerts(t, certifier)
