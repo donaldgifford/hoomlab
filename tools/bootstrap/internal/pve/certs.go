@@ -242,16 +242,7 @@ func (c *Certifier) pluginCheck(id string) func(context.Context) (bool, error) {
 			return false, err
 		}
 		data := c.pluginData()
-		stored, err := decodePluginData(plugin.Data)
-		if err != nil {
-			// Warn, not debug: an undecodable payload rotating the
-			// credentials silently cost a diagnosis round on the
-			// drill (INV-0001 deviation 6) — drift with an invisible
-			// reason must not happen again.
-			c.log().Warn("stored plugin data undecodable, treating as drifted",
-				"plugin", id, "err", err)
-			return false, nil
-		}
+		stored := decodePluginData(plugin.Data)
 		want := desiredPluginValues(data)
 		if !maps.Equal(stored, want) {
 			c.log().Info("plugin credentials differ from config",
@@ -489,21 +480,23 @@ func desiredPluginValues(d nodes.ACMEPluginData) map[string]string {
 	return out
 }
 
-// decodePluginData parses PVE's stored provider payload (base64 over
-// KEY=value lines) into a map. The comparison is structural rather
-// than byte-for-byte deliberately: real PVE round-trips the stored
-// payload in its own rendering, not the SDK's byte-exact encoding —
-// specifically, it re-encodes WITHOUT padding (observed live: a
-// payload length ≡ 2 mod 4), while the SDK writes padded. Both
-// renderings decode here; comparing encodings re-rotated identical
-// credentials on every run (INV-0001 deviation 6, 2026-08-25).
-func decodePluginData(encoded string) (map[string]string, error) {
-	raw, err := base64.StdEncoding.DecodeString(encoded)
+// decodePluginData parses the provider payload a server returns for
+// an ACME plugin into a KEY=value map. Servers disagree on the read
+// shape (INV-0001 deviation 6, 2026-08-25): the SDK submits the
+// payload base64-encoded and mockpve returns that base64 verbatim,
+// but real PVE returns the DECODED lines — observed live as "illegal
+// base64 data at input byte 2", the '_' of CF_Token. So: decode when
+// the payload is valid base64 (either padding), otherwise parse it as
+// the plaintext it already is. The cases stay unambiguous in practice
+// because KEY=value lines contain mid-string '=' and '_', which no
+// base64 alphabet allows.
+func decodePluginData(payload string) map[string]string {
+	raw, err := base64.StdEncoding.DecodeString(payload)
 	if err != nil {
-		raw, err = base64.RawStdEncoding.DecodeString(encoded)
+		raw, err = base64.RawStdEncoding.DecodeString(payload)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("decode plugin data: %w", err)
+		raw = []byte(payload) // real PVE: already decoded
 	}
 	out := make(map[string]string)
 	for _, line := range strings.Split(string(raw), "\n") {
@@ -513,7 +506,7 @@ func decodePluginData(encoded string) (map[string]string, error) {
 		k, v, _ := strings.Cut(line, "=")
 		out[k] = v
 	}
-	return out, nil
+	return out
 }
 
 func (c *Certifier) log() *slog.Logger {

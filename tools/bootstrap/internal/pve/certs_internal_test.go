@@ -100,9 +100,10 @@ func TestCertActionFor(t *testing.T) {
 }
 
 // TestDecodePluginData pins the structural comparison shape (INV-0001
-// deviation 6): trailing newlines, CRLF, blank lines, and line order
-// must not affect the decoded map; values containing '=' split on the
-// first only.
+// deviation 6): the payload arrives base64-encoded from mockpve but
+// as decoded plaintext from real PVE, and trailing newlines, CRLF,
+// blank lines, and line order must not affect the map; values
+// containing '=' split on the first only.
 func TestDecodePluginData(t *testing.T) {
 	enc := b64
 	tests := []struct {
@@ -110,23 +111,21 @@ func TestDecodePluginData(t *testing.T) {
 		payload string
 		want    map[string]string
 	}{
-		{"plain", enc("CF_Token=abc"), map[string]string{"CF_Token": "abc"}},
-		// The live-cluster case (INV-0001 deviation 6): PVE re-encodes
-		// the stored payload without padding; the padded decode fails
-		// and the fallback must carry it. "CF_Token=abcd" is 13 bytes
-		// → 18 raw-base64 chars, ≢ 0 mod 4, undecodable as padded.
-		{"unpadded (PVE rendering)", rawB64("CF_Token=abcd"), map[string]string{"CF_Token": "abcd"}},
-		{"trailing newline", enc("CF_Token=abc\n"), map[string]string{"CF_Token": "abc"}},
+		{"base64 (mockpve rendering)", enc("CF_Token=abc"), map[string]string{"CF_Token": "abc"}},
+		{"unpadded base64", rawB64("CF_Token=abcd"), map[string]string{"CF_Token": "abcd"}},
+		// The live-cluster case: real PVE returns the decoded lines —
+		// the '_' and mid-string '=' make them invalid as base64, so
+		// the plaintext path must carry them.
+		{"plaintext (real PVE rendering)", "CF_Token=abc", map[string]string{"CF_Token": "abc"}},
+		{"plaintext trailing newline", "CF_Token=abc\n", map[string]string{"CF_Token": "abc"}},
+		{"base64 trailing newline", enc("CF_Token=abc\n"), map[string]string{"CF_Token": "abc"}},
 		{"crlf and blank lines", enc("CF_Token=abc\r\n\r\n"), map[string]string{"CF_Token": "abc"}},
 		{"multi-key any order", enc("B=2\nA=1"), map[string]string{"A": "1", "B": "2"}},
-		{"value containing equals", enc("K=a=b"), map[string]string{"K": "a=b"}},
+		{"value containing equals", "K=a=b", map[string]string{"K": "a=b"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := decodePluginData(tt.payload)
-			if err != nil {
-				t.Fatalf("decodePluginData: %v", err)
-			}
+			got := decodePluginData(tt.payload)
 			if len(got) != len(tt.want) {
 				t.Fatalf("decoded %v, want %v", got, tt.want)
 			}
@@ -136,9 +135,5 @@ func TestDecodePluginData(t *testing.T) {
 				}
 			}
 		})
-	}
-
-	if _, err := decodePluginData("not-base64!"); err == nil {
-		t.Error("decodePluginData accepted invalid base64, want error")
 	}
 }

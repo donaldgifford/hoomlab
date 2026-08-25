@@ -270,23 +270,20 @@ func TestCertsStagingToProductionFlip(t *testing.T) {
 }
 
 // TestCertsToleratesServerNormalizedPluginData is the INV-0001
-// deviation 6 regression (2026-08-25): real PVE stores the credential
-// payload in its own rendering rather than the SDK's byte-exact
-// encoding — unpadded base64 over newline-terminated KEY=value lines
-// (observed live: a stored length ≡ 2 mod 4). Seed the plugin exactly
-// that way — same values, PVE's rendering — and the check must read
-// done rather than rotating identical credentials forever.
+// deviation 6 regression (2026-08-25): real PVE returns the stored
+// credential payload as DECODED plaintext KEY=value lines, not the
+// base64 the SDK submitted (observed live: "illegal base64 data at
+// input byte 2" — the '_' of CF_Token), and every encoding-shaped
+// comparison rotated identical credentials on each run. Seed the
+// plugin exactly the way real PVE renders it and the check must read
+// done.
 func TestCertsToleratesServerNormalizedPluginData(t *testing.T) {
 	cfg := certsCluster()
-	normalized := base64.RawStdEncoding.EncodeToString([]byte("CF_Token=" + cfSecret + "\n"))
-	if len(normalized)%4 == 0 {
-		t.Fatal("test payload decodes as padded base64 too — pick a length that exercises the fallback")
-	}
-	certifier := seededCertifier(t, cfg, normalized)
+	certifier := seededCertifier(t, cfg, "CF_Token="+cfSecret+"\n")
 
 	res := runCerts(t, certifier)
 	if res.Applied != 7 {
-		t.Errorf("applied = %d, want 7 (the normalized-but-identical plugin must be skipped)", res.Applied)
+		t.Errorf("applied = %d, want 7 (the plaintext-but-identical plugin must be skipped)", res.Applied)
 	}
 }
 
