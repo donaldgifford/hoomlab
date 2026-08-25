@@ -230,7 +230,7 @@ Record each step as `pass`, or what actually happened. Steps 1–2 and
 | # | Step | Expected | Result |
 | --- | --- | --- | --- |
 | 1 | `bootstrap validate` | exit 0 | pass (2026-08-25, under the real `op run` injection) |
-| 2 | `bootstrap pve form` | cluster formed and quorate | |
+| 2 | `bootstrap pve form` | cluster formed and quorate | single-node pass (2026-08-25): cluster of one formed and quorate, corosync on sync0 (`10.10.15.20`); grow-to-three pending |
 | 3 | `bootstrap pve certs` | certificates on all nodes | |
 | 4 | `bootstrap talos secrets` | `secrets.yaml`, 0600 | |
 | 5 | `bootstrap talos emit` | full tree under `bootstrap-out/booty/` | |

@@ -243,9 +243,14 @@ node before it ever touches the other two.
 
 #### Tasks
 
-- [ ] Single node first: with a primary-only `bootstrap.hcl`,
+- [x] Single node first: with a primary-only `bootstrap.hcl`,
       `pve form --dry-run` then `pve form` — the cluster of one
-      created on the primary, quorate, UI reachable
+      created on the primary, quorate, UI reachable — **done
+      2026-08-25** (third attempt; the first two produced INV-0001's
+      deviation rows 1–2): `✓ cluster "shart" formed and quorate
+      (2 of 2 steps applied)`; `pvecm status` quorate with 1/1 votes,
+      membership on `10.10.15.20` — corosync link0 landed on sync0 as
+      configured; UI reachable showing `Datacenter (shart)`
 - [ ] `bootstrap pve certs` on the single node against LE staging
       until it converges cleanly (account, Cloudflare plugin, domain,
       order)
