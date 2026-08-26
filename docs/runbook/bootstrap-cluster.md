@@ -44,12 +44,26 @@ the whole point of running the drill from here rather than from memory.
 **In the lab:**
 
 - **Proxmox VE installed on every node**, API reachable at the
-  endpoints you will put in the config. Every node other than the
-  primary must be a *fresh install* — joining wipes a node's local
-  configuration.
-- **A PVE API token and the root password.** The token drives every
-  API call except cluster joins; joins are issued on the joining node
-  and need an existing member's `root@pam` password.
+  endpoints you will put in the config. Nodes other than the primary
+  need not be fresh installs, but joining replaces a joiner's
+  `/etc/pve` **wholesale** with the cluster's — storage definitions,
+  users, tokens, firewall rules, jobs, all of it — and PVE refuses to
+  join a node that has guests. Node-local state outside `/etc/pve`
+  (ZFS pools, network config, SSH keys) survives. So the real
+  prerequisite is: joiners must be **guest-free** and hold no
+  cluster-level config you are not prepared to lose; anything worth
+  keeping must be re-declared cluster-wide after the join. Watch the
+  reverse hazard too — after growth, every unrestricted storage entry
+  in the cluster config is live on *every* node (the stock
+  `local-zfs` will bind each node's `rpool/data`); pin entries with
+  `nodes` restrictions where a pool must not take VM disks.
+- **A PVE API token and the root password.** PVE reserves cluster
+  creation, node joins, and ACME account registration for the literal
+  `root@pam` user — no token or root-equivalent user passes the
+  identity check — so those calls authenticate with the root
+  password; the token drives everything else, renewals included.
+  Converged re-runs touch the password only for the account-directory
+  read fallback.
 - **A Cloudflare API token** with DNS-edit permission on the
   certificate domain's zone. Cloudflare is the only DNS-01 provider
   the certs stage supports (ADR-0001), and config validation enforces

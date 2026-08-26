@@ -269,14 +269,36 @@ node before it ever touches the other two.
       CN=YR1`, subject `r740a.shart.sh` (openssl-verified), and
       back-to-back re-runs skip all four steps
       (`✓ acme certificates converged on 1 nodes, 0 steps applied`)
-- [ ] Grow to three: expand the config to all nodes;
+- [x] Grow to three: expand the config to all nodes;
       `pve form --dry-run` shows exactly the two joins pending;
       `pve form` joins them serially, full quorum verified, every UI
-      reachable
-- [ ] Verify the join-wipe reality against the prediction from
+      reachable — **done 2026-08-25, first try** (the first stage run
+      of the drill needing zero fold-backs): dry-run read create done
+      + both joins and the quorate check pending; the real run joined
+      r640a then srv01 serially, each join waiting out quorum (2 then
+      3 members) before declaring applied, leaving the quorate step
+      already satisfied (`✓ cluster "shart" formed and quorate, 2 of 4
+      steps applied`); `pvecm status`: 3/3 votes, quorate, membership
+      `10.10.15.20/.21/.40` — every corosync link0 on sync0. The join
+      dials went through each joiner's `:8006` endpoint, so pveproxy
+      demonstrably answers on all three; browser UIs get eyeballed
+      with the production-cert extension
+- [x] Verify the join-wipe reality against the prediction from
       Phase 1: what survived on the joiners, what was replaced;
       re-declare any joiner-local storage cluster-wide; amend the
-      runbook's "fresh installs" prerequisite to the precise truth
+      runbook's "fresh installs" prerequisite to the precise truth —
+      **done 2026-08-25**: `/etc/pve` replaced wholesale as predicted;
+      both joiners serve the cluster's `storage.cfg` (stock `local` +
+      `local-zfs` only), and since Phase 1 verified the joiners were
+      byte-identical installer defaults, the predicted **zero loss**
+      is the observed reality — nothing to re-declare. Node-local
+      state outside `/etc/pve` (ZFS pools, network config) survived
+      intact. One finding: the unrestricted stock `local-zfs`
+      (`rpool/data`) is now active on *all three* nodes — including
+      the Dells' BOSS devices, where VM disks are forbidden — so the
+      Phase 3 storage task picks up restricting it alongside the
+      deliberate `fast/vm`/`tank/vm` declarations. Runbook
+      prerequisites amended to the precise truth
 - [ ] `bootstrap pve certs` (production) extends to the joiners:
       domains wired, orders complete, all three node UIs presenting
       valid certificates
@@ -314,6 +336,14 @@ the future test environment's design.
       on `net0`), and replace every `TASK-4` placeholder in
       `bootstrap.hcl` (booty URL, endpoint, MACs, storage) with the
       real values — the booty-testing records are the starting point
+- [ ] VM storage declarations *(added 2026-08-25 from the Phase 2
+      join-wipe findings)*: create the `fast/vm` (and `tank/vm` if
+      used) datasets and declare them as node-restricted zfspool
+      storage — PVE must never touch the `fast`/`tank` pool roots
+      (live Garage data) — and restrict the stock `local-zfs` with a
+      `nodes` list (or disable it): post-join it is active on all
+      three nodes and would happily place VM disks on the Dells' BOSS
+      `rpool/data`, which is forbidden
 - [ ] `bootstrap talos secrets`; back up `secrets.yaml` immediately
       (destination decided in Phase 1's config task)
 - [ ] `bootstrap talos emit` and `bootstrap talos ipxe` against the
