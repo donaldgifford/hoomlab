@@ -231,7 +231,7 @@ Record each step as `pass`, or what actually happened. Steps 1–2 and
 | --- | --- | --- | --- |
 | 1 | `bootstrap validate` | exit 0 | pass (2026-08-25, under the real `op run` injection) |
 | 2 | `bootstrap pve form` | cluster formed and quorate | pass (2026-08-25): cluster of one formed and quorate first, then grown to three by re-running against the expanded config — r640a and srv01 joined serially, first try, zero fold-backs; `pvecm status` 3/3 votes, quorate, membership `10.10.15.20/.21/.40` (all corosync link0 on sync0). Join-wipe verified: `/etc/pve` replaced wholesale, zero loss as predicted (joiners were installer-default) |
-| 3 | `bootstrap pve certs` | certificates on all nodes | single-node pass (2026-08-25): staging convergence, then the staging→production flip as a real transition (deviations 3–7 en route) — primary serves `C=US, O=Let's Encrypt, CN=YR1` for `r740a.shart.sh` (openssl-verified); back-to-back re-runs skip all 4 steps, 0 applied; extend-to-joiners pending |
+| 3 | `bootstrap pve certs` | certificates on all nodes | pass (2026-08-25/26): staging convergence on the primary, the staging→production flip as a real transition (deviations 3–7 en route), then the extension to both joiners first-try — all three nodes serve production certificates (`C=US, O=Let's Encrypt, CN=YR1`; subjects `r740a`/`r640a`/`srv01.shart.sh`, openssl-verified) |
 | 4 | `bootstrap talos secrets` | `secrets.yaml`, 0600 | |
 | 5 | `bootstrap talos emit` | full tree under `bootstrap-out/booty/` | |
 | 6 | `bootstrap talos ipxe` | `boot/ipxe.efi` built | |
@@ -248,8 +248,8 @@ Every stage re-run; each should apply nothing.
 
 | Stage | Steps applied on second pass | Notes |
 | --- | --- | --- |
-| `pve form` | | |
-| `pve certs` | | |
+| `pve form` | 0 of 4 (2026-08-26) | create + both joins + quorate all skip against the live three-node cluster |
+| `pve certs` | 0 of 8 (2026-08-26) | account, plugin, and per-node config/cert ×3 all skip with production certificates installed; run back to back with `pve form`. One root@pam login per run remains (the account-directory read fallback) — expected, by design |
 | `talos secrets` | | |
 | `talos emit` | | |
 | `talos ipxe` | | |

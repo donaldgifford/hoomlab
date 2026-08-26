@@ -299,13 +299,27 @@ node before it ever touches the other two.
       Phase 3 storage task picks up restricting it alongside the
       deliberate `fast/vm`/`tank/vm` declarations. Runbook
       prerequisites amended to the precise truth
-- [ ] `bootstrap pve certs` (production) extends to the joiners:
+- [x] `bootstrap pve certs` (production) extends to the joiners:
       domains wired, orders complete, all three node UIs presenting
-      valid certificates
-- [ ] Convergence: re-run both stages; each reports every step done,
-      nothing applied
-- [ ] Record every real-Proxmox-vs-mockpve discrepancy in INV-0001;
-      fix code + mockpve seeding + tests for each
+      valid certificates — **done 2026-08-26, first try**: the four
+      already-done steps (account, plugin, both r740a) skipped while
+      config + order applied for each joiner — the plaintext plugin
+      fix proven under mixed skip/apply conditions
+      (`✓ acme certificates converged on 3 nodes, 4 steps applied`);
+      openssl-verified production issuer (`CN=YR1`) with subjects
+      `r640a.shart.sh` and `srv01.shart.sh`
+- [x] Convergence: re-run both stages; each reports every step done,
+      nothing applied — **done 2026-08-26**: `pve form` skipped all 4
+      steps, `pve certs` skipped all 8, back to back
+      (`0 steps applied` on both) — the full idempotency claim on the
+      real three-node production-certified cluster
+- [x] Record every real-Proxmox-vs-mockpve discrepancy in INV-0001;
+      fix code + mockpve seeding + tests for each — **done for the
+      in-repo half** (deviations 2, 4, 6, 7 each carry a code fix and
+      a regression test seeded with the real server's shape); the
+      mockpve-seeding half lives upstream in proxmox-go-sdk and is
+      consolidated into a Phase 6 filing task so it lands as an issue,
+      not a footnote
 
 #### Success Criteria
 
@@ -482,6 +496,17 @@ next doc.
       has that, bootstrap can grow a per-node second address and form
       with `link1` redundancy directly instead of the manual
       post-formation `corosync.conf` edit the runbook documents
+- [ ] File the mockpve-parity follow-ups against proxmox-go-sdk
+      collected by Phase 2's deviations, so the mock's model of
+      Proxmox tightens to what the lab proved: enforce root@pam-only
+      on cluster create/join and ACME account endpoints (deviation 2
+      and 3 — the mock accepted token-authed calls PVE reserves);
+      answer a missing ACME plugin GET with the real 500, not a 404
+      (deviation 4); return the plugin `data` field as decoded
+      plaintext on reads, as real PVE does, instead of echoing the
+      submitted base64 (deviation 6); refuse a certificate order while
+      a custom certificate exists unless `force` is set, and grow
+      typed `force` params on order/renew (deviation 7)
 - [ ] This doc: all boxes checked, status → **Completed**
 
 #### Success Criteria
