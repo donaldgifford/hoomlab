@@ -351,13 +351,26 @@ the future test environment's design.
       `bootstrap.hcl` (booty URL, endpoint, MACs, storage) with the
       real values — the booty-testing records are the starting point
 - [ ] VM storage declarations *(added 2026-08-25 from the Phase 2
-      join-wipe findings)*: create the `fast/vm` (and `tank/vm` if
-      used) datasets and declare them as node-restricted zfspool
-      storage — PVE must never touch the `fast`/`tank` pool roots
-      (live Garage data) — and restrict the stock `local-zfs` with a
-      `nodes` list (or disable it): post-join it is active on all
-      three nodes and would happily place VM disks on the Dells' BOSS
-      `rpool/data`, which is forbidden
+      join-wipe findings; approach decided 2026-08-26)*: declared
+      **in the CLI, not by hand** — `bootstrap.hcl` grows `storage`
+      blocks under `pve` and a `pve storage` stage converges them
+      (create-if-missing, update-if-drifted, set-wise comparison of
+      `nodes`/`content` per the deviation-6 lesson), with validation
+      cross-checking every `talos.node.storage` against a declared
+      block. Blocked on SDK storage-config writes —
+      [proxmox-go-sdk#28](https://github.com/donaldgifford/proxmox-go-sdk/issues/28)
+      (`POST`/`PUT`/`DELETE /storage` + mockpve write handlers) —
+      then an SDK release and version bump here. The datasets need no
+      creating: `zfs list` (2026-08-26) shows `fast/vm` + `tank/vm`
+      already on both Dells, empty; srv01 carries no `fast`/`tank` at
+      all (rpool only). Target layout: `fast-vm`/`tank-vm` zfspool
+      entries restricted to `nodes = [r740a, r640a]` — PVE must never
+      touch the `fast`/`tank` pool roots (live Garage data) — and the
+      stock `local-zfs` restricted to srv01 (or disabled): post-join
+      it is active on all three nodes and would happily place VM
+      disks on the Dells' BOSS `rpool/data`, which is forbidden;
+      srv01's rpool is not a BOSS device and is its legitimate VM
+      home if srv01 hosts VMs
 - [ ] `bootstrap talos secrets`; back up `secrets.yaml` immediately
       (destination decided in Phase 1's config task)
 - [ ] `bootstrap talos emit` and `bootstrap talos ipxe` against the
