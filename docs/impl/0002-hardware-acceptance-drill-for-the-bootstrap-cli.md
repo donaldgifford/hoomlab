@@ -560,8 +560,8 @@ CI honest alongside them:
 
 OQ-1 through OQ-4 decided **a** on 2026-08-22 and folded into the
 phase tasks above; the reasoning stays for the record. OQ-5 (added
-2026-08-23) is **open** — it gates Phase 4's Talos config, not the
-formation and certs work in Phases 1–3.
+2026-08-23) decided **a** on 2026-08-26 — tag required, `vlan`
+attribute implemented.
 
 **OQ-1 — Certificate CA sequencing: staging first, or straight to
 production?** The end state is valid production certificates on every
@@ -647,14 +647,16 @@ demonstrably does.
   the run. Captures intent earlier, at the cost of a doc that is
   mostly empty until the run finishes anyway.~~
 
-**OQ-5 — Do the Talos VM NICs on `vmbr1` need a VLAN tag?** **Open**
-(2026-08-23). The guest bridge `vmbr1` is VLAN-aware and its trunk
-ports pass tagged traffic, but whether the Talos boot/machine network
-reaches guests untagged (native VLAN on the trunk) or requires
-`tag=<vlan>` on `net0` is undecided. The CLI currently renders `net0`
-without VLAN-tag support — if a tag is required, that is a small
-config-schema + VM-spec change (with tests) that must land before
-Phase 4's `talos vms`.
+**OQ-5 — Do the Talos VM NICs on `vmbr1` need a VLAN tag?**
+**Decided: a — yes, tagged** (2026-08-26). The UniFi `vm-trunk` port
+profile carrying `vmbr1`'s uplinks has **no native VLAN** — every
+network arrives tagged (Trusted 10, Servers 11, Untrusted 12,
+Homelab 13, Storage 14) — so an untagged VM NIC is on no network at
+all. The Talos VMs live on Servers (11), so `net0` needs `tag=11`.
+Implemented at `1215d93`: the talos node block grows an optional
+`vlan` attribute (802.1Q-range validated, omitted = untagged)
+rendered as `tag=` on the PVE side of `net0`; PVE strips the tag
+before the guest, so the firmware PXE path is unaffected.
 
 - **a (recommended):** Read the answer off the network config (UniFi
   port profiles for the guest trunks): if the Talos network arrives
