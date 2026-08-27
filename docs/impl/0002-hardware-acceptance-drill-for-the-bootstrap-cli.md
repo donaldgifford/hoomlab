@@ -380,11 +380,12 @@ the future test environment's design.
       protection live. One fold-back en route (deviation 8: missing
       storage GET 500s, fixed index-based) and two mockpve parity
       findings reported on PR #30. Runbook gained §4 with the stage.
-      **Residual:** when the SDK release lands — bump `go.mod`, drop
-      the workspace override, push the held branch commits
-      (`056ff89`…), and re-run the stage against the released
-      version as the parity check. `tank/vm` stays undeclared until
-      something references it
+      **Residual closed 2026-08-27**: v0.12.0 released with both
+      parity fixes (its 500-on-missing mock immediately caught a
+      stale test assertion — parity earning its keep), `go.mod`
+      bumped, workspace override dropped, held commits pushed, and
+      the parity re-run against the released build applied 0.
+      `tank/vm` stays undeclared until something references it
 - [x] `bootstrap talos secrets`; back up `secrets.yaml` immediately
       (destination decided in Phase 1's config task) — **done
       2026-08-27**: bundle generated 0600 (`ls -la` verified), backed
