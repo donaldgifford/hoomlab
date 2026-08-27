@@ -5,7 +5,7 @@ go 1.26.6
 require (
 	github.com/donaldgifford/booty v0.2.1
 	github.com/donaldgifford/hclkit v0.2.0
-	github.com/donaldgifford/proxmox-go-sdk v0.11.0
+	github.com/donaldgifford/proxmox-go-sdk v0.12.0
 	github.com/hashicorp/hcl/v2 v2.24.0
 	github.com/siderolabs/talos/pkg/machinery v1.13.9
 	github.com/spf13/cobra v1.10.2

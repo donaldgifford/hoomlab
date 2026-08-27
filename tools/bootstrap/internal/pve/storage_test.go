@@ -2,7 +2,6 @@ package pve_test
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"strings"
 	"testing"
@@ -11,7 +10,6 @@ import (
 	"github.com/donaldgifford/hoomlab/tools/bootstrap/internal/pve"
 	"github.com/donaldgifford/hoomlab/tools/bootstrap/internal/steps"
 	"github.com/donaldgifford/proxmox-go-sdk/proxmox/mockpve"
-	"github.com/donaldgifford/proxmox-go-sdk/proxmox/pverr"
 	"github.com/donaldgifford/proxmox-go-sdk/proxmox/storage"
 	"github.com/donaldgifford/proxmox-go-sdk/proxmox/types"
 	"github.com/donaldgifford/proxmox-go-sdk/proxmox/version"
@@ -195,8 +193,18 @@ func TestStorageDryRun(t *testing.T) {
 	if res.Pending != 2 {
 		t.Errorf("dry run reported %d pending, want 2", res.Pending)
 	}
-	if _, err := svc.GetDatastore(context.Background(), "fast"); !errors.Is(err, pverr.ErrNotFound) {
-		t.Errorf("dry run created storage fast (read err = %v)", err)
+	// Absence is asserted through the index, the same way the stage
+	// resolves existence: as of SDK v0.12.0 the mock mirrors real
+	// PVE's by-ID wart (HTTP 500 on a missing entry — INV-0001
+	// deviation 8), so ErrNotFound never fires there.
+	list, err := svc.ListDatastores(context.Background())
+	if err != nil {
+		t.Fatalf("list storage: %v", err)
+	}
+	for _, ds := range list {
+		if ds.Storage == "fast" {
+			t.Error("dry run created storage fast")
+		}
 	}
 }
 
