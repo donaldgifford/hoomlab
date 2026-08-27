@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/hashicorp/hcl/v2"
 )
@@ -35,6 +36,101 @@ func (c *Cluster) ValidateAndNormalize() hcl.Diagnostics {
 	diags = append(diags, c.validateStorage()...)
 	diags = append(diags, c.validateACME()...)
 	diags = append(diags, c.validateTalos()...)
+	diags = append(diags, c.validateTalosCluster()...)
+	diags = append(diags, c.validateProfiles()...)
+	return diags
+}
+
+// validateTalosCluster checks the completion surface: the cni value
+// is one of the known three (empty meaning flannel), cilium requires
+// its pin block, and a cilium block without cni = "cilium" is an
+// error rather than silently inert config.
+func (c *Cluster) validateTalosCluster() hcl.Diagnostics {
+	tc := c.Talos.Cluster
+	if tc == nil {
+		return nil
+	}
+	var diags hcl.Diagnostics
+
+	switch tc.CNI {
+	case "", CNIFlannel, CNINone:
+	case CNICilium:
+		if tc.Cilium == nil {
+			diags = append(diags, errf("Missing cilium block",
+				"talos cluster: cni %q requires a cilium block pinning version, values, and gateway_api_version.",
+				CNICilium))
+		}
+	default:
+		diags = append(diags, errf("Invalid talos cluster cni",
+			"talos cluster: cni %q must be %q, %q, or %q (empty means %q).",
+			tc.CNI, CNICilium, CNIFlannel, CNINone, CNIFlannel))
+	}
+
+	if tc.Cilium != nil && tc.CNI != CNICilium {
+		diags = append(diags, errf("Cilium block without cni cilium",
+			"talos cluster: a cilium block is declared but cni is %q; set cni = %q or drop the block.",
+			tc.CNI, CNICilium))
+	}
+	if tc.Cilium != nil {
+		for _, pin := range []struct{ name, value string }{
+			{"version", tc.Cilium.Version},
+			{"gateway_api_version", tc.Cilium.GatewayAPIVersion},
+		} {
+			if pin.value != "" && !strings.HasPrefix(pin.value, "v") {
+				diags = append(diags, errf("Unprefixed version pin",
+					"talos cluster cilium: %s %q needs the \"v\" prefix — it lands verbatim in image references and manifest URLs.",
+					pin.name, pin.value))
+			}
+		}
+	}
+	return diags
+}
+
+// validateProfiles checks the extension profiles: unique names,
+// non-empty org/name extension entries, node references that resolve,
+// and mutual exclusion with schematic_id — one pins a single image
+// for every node, the other derives images, and declaring both makes
+// the config's intent ambiguous.
+func (c *Cluster) validateProfiles() hcl.Diagnostics {
+	var diags hcl.Diagnostics
+
+	if len(c.Talos.Profiles) > 0 && c.Talos.SchematicID != "" {
+		diags = append(diags, errf("Both schematic_id and profiles declared",
+			"talos: schematic_id pins one image for every node while profile blocks derive images from extensions; declare one or the other."))
+	}
+
+	declared := make(map[string]struct{}, len(c.Talos.Profiles))
+	for i := range c.Talos.Profiles {
+		p := &c.Talos.Profiles[i]
+		if _, dup := declared[p.Name]; dup {
+			diags = append(diags, errf("Duplicate profile name",
+				"talos profile %q is declared more than once.", p.Name))
+			continue
+		}
+		declared[p.Name] = struct{}{}
+
+		if len(p.Extensions) == 0 {
+			diags = append(diags, errf("Empty profile",
+				"talos profile %q declares no extensions; a profile exists to bake extensions into the image.", p.Name))
+		}
+		for _, ext := range p.Extensions {
+			if !strings.Contains(ext, "/") || strings.ContainsAny(ext, " \t") {
+				diags = append(diags, errf("Invalid extension name",
+					"talos profile %q: extension %q must be the factory's org/name form, e.g. \"siderolabs/qemu-guest-agent\".",
+					p.Name, ext))
+			}
+		}
+	}
+
+	for i := range c.Talos.Nodes {
+		n := &c.Talos.Nodes[i]
+		for _, ref := range n.Profiles {
+			if _, ok := declared[ref]; !ok {
+				diags = append(diags, errf("Unknown profile reference",
+					"talos node %q: profiles entry %q names no declared profile block.", n.Name, ref))
+			}
+		}
+	}
 	return diags
 }
 

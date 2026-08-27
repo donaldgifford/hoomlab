@@ -108,12 +108,71 @@ type Talos struct {
 	// machineconfigs install. Empty means the default of the machinery
 	// release this CLI was built against.
 	KubernetesVersion string `hcl:"kubernetes_version,optional"`
-	// SchematicID selects a Talos Image Factory schematic for the
-	// downloaded boot assets and the installer image. Empty means the
-	// vanilla no-extensions schematic (IMPL-0001 OQ-1).
-	SchematicID string      `hcl:"schematic_id,optional"`
-	Booty       Booty       `hcl:"booty,block"`
-	Nodes       []TalosNode `hcl:"node,block"`
+	// SchematicID pins one Image Factory schematic for every node's
+	// boot assets and installer image. Empty means the vanilla
+	// no-extensions schematic (IMPL-0001 OQ-1). Mutually exclusive
+	// with profile blocks, which derive schematics instead.
+	SchematicID string `hcl:"schematic_id,optional"`
+	// Cluster opts into the cluster-completion surface (DESIGN-0002):
+	// CNI choice, Cilium delivery, and the completion knobs the
+	// emitted machineconfigs then carry (topology node labels, kubelet
+	// serving-certificate rotation). Absent means the legacy surface —
+	// machinery defaults, flannel included.
+	Cluster  *TalosCluster  `hcl:"cluster,block"`
+	Profiles []TalosProfile `hcl:"profile,block"`
+	Booty    Booty          `hcl:"booty,block"`
+	Nodes    []TalosNode    `hcl:"node,block"`
+}
+
+// The valid TalosCluster.CNI values. Empty defaults to flannel — the
+// machinery default, made explicit here so "no opinion" and "flannel"
+// mean the same thing on purpose.
+const (
+	CNICilium  = "cilium"
+	CNIFlannel = "flannel"
+	CNINone    = "none"
+)
+
+// TalosCluster selects the cluster network. With cni = "cilium" the
+// emitted machineconfigs disable the built-in CNI and kube-proxy and
+// deliver Cilium via manifest injection at bootstrap (DESIGN-0002
+// Cilium delivery); the cilium block is then required. With "none"
+// the operator brings their own CNI. Flannel needs no block of its
+// own — the block's presence is what turns the completion knobs on.
+type TalosCluster struct {
+	CNI    string        `hcl:"cni,optional"`
+	Cilium *CiliumConfig `hcl:"cilium,block"`
+}
+
+// CiliumConfig pins the Cilium delivery. Values names the
+// operator-supplied Helm values file, resolved relative to the config
+// file and validated at load time — YAML shape, the KubePrism
+// invariant (k8sServiceHost localhost:7445), and kube-proxy
+// replacement, because the emitted machineconfigs disable kube-proxy
+// and a values file that doesn't replace it would strand the cluster.
+type CiliumConfig struct {
+	// Version is the Cilium release the install Job pins, e.g.
+	// "v1.18.5".
+	Version string `hcl:"version"`
+	// Values is the path to the Helm values file, relative to the
+	// config file. Load rewrites it absolute.
+	Values string `hcl:"values"`
+	// GatewayAPIVersion pins the Gateway API CRD set delivered via
+	// extraManifests before Cilium starts, e.g. "v1.4.1".
+	GatewayAPIVersion string `hcl:"gateway_api_version"`
+	// CLIVersion pins the cilium-cli image the install Job runs.
+	// Empty means the release this CLI was tested against.
+	CLIVersion string `hcl:"cli_version,optional"`
+}
+
+// TalosProfile is a named, composable extension set (DESIGN-0002
+// extensions model, adopted from the packer generation). Nodes
+// reference profiles; emit flattens each node's profiles into an
+// Image Factory schematic, so the extensions are baked into the boot
+// and installer images — the only time that decision can be made.
+type TalosProfile struct {
+	Name       string   `hcl:"name,label"`
+	Extensions []string `hcl:"extensions"`
 }
 
 // Booty locates the operator-run booty container serving the PXE
@@ -155,4 +214,7 @@ type TalosNode struct {
 	// the guest, so the firmware's PXE stack still sees plain
 	// Ethernet. Zero means untagged.
 	VLAN int `hcl:"vlan,optional"`
+	// Profiles names the extension profiles baked into this node's
+	// boot image. Empty means the vanilla no-extensions image.
+	Profiles []string `hcl:"profiles,optional"`
 }

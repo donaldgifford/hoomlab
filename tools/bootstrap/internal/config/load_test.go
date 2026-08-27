@@ -267,6 +267,100 @@ func TestLoad(t *testing.T) {
 			wantErrs: []string{"Invalid talos node vlan"},
 		},
 		{
+			name: "invalid cluster cni",
+			mutate: replace(`booty {`, `cluster {
+      cni = "calico"
+    }
+    booty {`),
+			wantErrs: []string{"Invalid talos cluster cni", `cni "calico"`},
+		},
+		{
+			name: "cilium cni without cilium block",
+			mutate: replace(`booty {`, `cluster {
+      cni = "cilium"
+    }
+    booty {`),
+			wantErrs: []string{"Missing cilium block"},
+		},
+		{
+			name: "cilium block without cni cilium",
+			mutate: replace(`booty {`, `cluster {
+      cilium {
+        version             = "v1.18.5"
+        values              = "cilium-values.yaml"
+        gateway_api_version = "v1.4.1"
+      }
+    }
+    booty {`),
+			wantErrs: []string{"Cilium block without cni cilium"},
+		},
+		{
+			name: "unprefixed cilium version pin",
+			mutate: replace(`booty {`, `cluster {
+      cni = "cilium"
+      cilium {
+        version             = "1.18.5"
+        values              = "cilium-values.yaml"
+        gateway_api_version = "v1.4.1"
+      }
+    }
+    booty {`),
+			wantErrs: []string{"Unprefixed version pin", `version "1.18.5"`},
+		},
+		{
+			name: "profile accepted",
+			mutate: func(s string) string {
+				s = replace(`booty {`, `profile "base" {
+      extensions = ["siderolabs/qemu-guest-agent", "siderolabs/iscsi-tools"]
+    }
+    booty {`)(s)
+				return replace(`bridge   = "vmbr0"`, `bridge   = "vmbr0"
+      profiles = ["base"]`)(s)
+			},
+		},
+		{
+			name: "duplicate profile name",
+			mutate: replace(`booty {`, `profile "base" {
+      extensions = ["siderolabs/qemu-guest-agent"]
+    }
+    profile "base" {
+      extensions = ["siderolabs/iscsi-tools"]
+    }
+    booty {`),
+			wantErrs: []string{"Duplicate profile name"},
+		},
+		{
+			name: "empty profile",
+			mutate: replace(`booty {`, `profile "base" {
+      extensions = []
+    }
+    booty {`),
+			wantErrs: []string{"Empty profile"},
+		},
+		{
+			name: "invalid extension name",
+			mutate: replace(`booty {`, `profile "base" {
+      extensions = ["qemu-guest-agent"]
+    }
+    booty {`),
+			wantErrs: []string{"Invalid extension name", "org/name form"},
+		},
+		{
+			name: "unknown profile reference",
+			mutate: replace(`bridge   = "vmbr0"`, `bridge   = "vmbr0"
+      profiles = ["gpu"]`),
+			wantErrs: []string{"Unknown profile reference", `"gpu"`},
+		},
+		{
+			name: "schematic_id with profiles",
+			mutate: replace(`booty {`, `schematic_id = "deadbeef"
+    profile "base" {
+      extensions = ["siderolabs/qemu-guest-agent"]
+    }
+    booty {`),
+			wantErrs: []string{"Both schematic_id and profiles declared"},
+		},
+		{
 			name:     "non-http pve endpoint",
 			mutate:   replace(`endpoint = "https://10.0.10.11:8006"`, `endpoint = "ftp://10.0.10.11"`),
 			wantErrs: []string{"Invalid pve node endpoint", "scheme must be http or https"},
@@ -353,6 +447,128 @@ func TestLoad(t *testing.T) {
 			}
 			if cluster != nil {
 				t.Error("Load() returned a cluster alongside errors, want nil")
+			}
+			for _, want := range tt.wantErrs {
+				if !strings.Contains(rendered, want) {
+					t.Errorf("diagnostics missing %q:\n%s", want, rendered)
+				}
+			}
+		})
+	}
+}
+
+// ciliumHCL is validHCL with the full cilium completion surface: the
+// cluster block references cilium-values.yaml relative to the config,
+// so each test writes its own values file beside the config.
+var ciliumHCL = strings.Replace(validHCL, "    booty {", `    cluster {
+      cni = "cilium"
+      cilium {
+        version             = "v1.18.5"
+        values              = "cilium-values.yaml"
+        gateway_api_version = "v1.4.1"
+      }
+    }
+    booty {`, 1)
+
+// validCiliumValues is the minimal values content that satisfies the
+// load-time checks: kube-proxy replacement and the KubePrism endpoint.
+const validCiliumValues = `kubeProxyReplacement: true
+k8sServiceHost: localhost
+k8sServicePort: 7445
+ipam:
+  mode: kubernetes
+`
+
+// TestLoadCiliumValues covers the values-file validation DESIGN-0002
+// requires: the file is operator input sealed into machineconfigs, so
+// it is checked at load. The maglev case is a regression seeded with
+// the archive's actual bug — a lost indent under "loadBalancer:" that
+// shipped "algorithm" as a bogus top-level key for the cluster's
+// whole life.
+func TestLoadCiliumValues(t *testing.T) {
+	tests := []struct {
+		name string
+		// values is the file content; empty means don't write the file.
+		values   string
+		wantErrs []string
+	}{
+		{
+			name:   "valid values accepted",
+			values: validCiliumValues,
+		},
+		{
+			name:     "missing values file",
+			wantErrs: []string{"Unreadable cilium values file"},
+		},
+		{
+			name:     "not yaml",
+			values:   "kubeProxyReplacement: true\n\t- what",
+			wantErrs: []string{"Invalid cilium values file"},
+		},
+		{
+			name: "maglev indentation regression",
+			values: `kubeProxyReplacement: true
+k8sServiceHost: localhost
+k8sServicePort: 7445
+loadBalancer:
+algorithm: maglev
+`,
+			wantErrs: []string{"Null top-level cilium value", `"loadBalancer" has no value`},
+		},
+		{
+			name: "kube-proxy replacement missing",
+			values: `k8sServiceHost: localhost
+k8sServicePort: 7445
+`,
+			wantErrs: []string{"Cilium values do not replace kube-proxy"},
+		},
+		{
+			name: "kubeprism host wrong",
+			values: `kubeProxyReplacement: true
+k8sServiceHost: 10.10.11.51
+k8sServicePort: 7445
+`,
+			wantErrs: []string{"Cilium values miss the KubePrism host"},
+		},
+		{
+			name: "kubeprism port wrong",
+			values: `kubeProxyReplacement: true
+k8sServiceHost: localhost
+k8sServicePort: 6443
+`,
+			wantErrs: []string{"Cilium values miss the KubePrism port", "7445"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setTestEnv(t)
+			path := writeConfig(t, ciliumHCL)
+			if tt.values != "" {
+				valuesPath := filepath.Join(filepath.Dir(path), "cilium-values.yaml")
+				if err := os.WriteFile(valuesPath, []byte(tt.values), 0o600); err != nil {
+					t.Fatalf("write values: %v", err)
+				}
+			}
+
+			cluster, diags := Load(path)
+			rendered := renderDiags(t, diags)
+
+			if len(tt.wantErrs) == 0 {
+				if diags.HasErrors() {
+					t.Fatalf("Load() failed:\n%s", rendered)
+				}
+				// The relative values path must come back absolute, so
+				// emit can read it from any working directory.
+				got := cluster.Talos.Cluster.Cilium.Values
+				if !filepath.IsAbs(got) {
+					t.Errorf("Cilium.Values = %q, want an absolute path", got)
+				}
+				return
+			}
+
+			if !diags.HasErrors() {
+				t.Fatalf("Load() succeeded, want errors %q", tt.wantErrs)
 			}
 			for _, want := range tt.wantErrs {
 				if !strings.Contains(rendered, want) {
