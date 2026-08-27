@@ -40,6 +40,20 @@ cluster "homelab" {
       endpoint = "https://10.0.10.13:8006"
       address  = "10.0.10.13"
     }
+
+    # Cluster storage the talos VMs reference, converged by
+    # `bootstrap pve storage` (create-if-missing, update-if-drifted).
+    # Declared fields are opinions; fields a block omits are never
+    # touched on an existing entry. nodes = [...] restricts an entry
+    # to specific hosts; sparse = true is zfspool thin provisioning.
+    # Declaring ANY storage block requires every talos node's storage
+    # to reference a declared block; with no blocks the stage is a
+    # no-op and talos nodes may reference pre-existing storage.
+    storage "local-zfs" {
+      type    = "zfspool"
+      pool    = "rpool/data"
+      content = ["images", "rootdir"]
+    }
   }
 
   # ── Stage 2: pve certs ────────────────────────────────────────────

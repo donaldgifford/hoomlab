@@ -32,8 +32,71 @@ const (
 // details only.
 func (c *Cluster) ValidateAndNormalize() hcl.Diagnostics {
 	diags := c.validatePVE()
+	diags = append(diags, c.validateStorage()...)
 	diags = append(diags, c.validateACME()...)
 	diags = append(diags, c.validateTalos()...)
+	return diags
+}
+
+// validateStorage checks the declared storage blocks: unique names,
+// the per-type required backing field, and node restrictions that
+// name declared pve nodes. When any block is declared, every talos
+// node's storage must reference one — declaring storage opts the
+// config into CLI-managed storage, and a dangling reference is then
+// a typo, not a pre-existing entry. With zero blocks the cross-check
+// is off: the config may rely on storage that already exists.
+func (c *Cluster) validateStorage() hcl.Diagnostics {
+	var diags hcl.Diagnostics
+
+	pveNodes := make(map[string]struct{}, len(c.PVE.Nodes))
+	for _, n := range c.PVE.Nodes {
+		pveNodes[n.Name] = struct{}{}
+	}
+
+	declared := make(map[string]struct{}, len(c.PVE.Storage))
+	for i := range c.PVE.Storage {
+		s := &c.PVE.Storage[i]
+		if _, dup := declared[s.Name]; dup {
+			diags = append(diags, errf("Duplicate storage name",
+				"pve storage %q is declared more than once.", s.Name))
+			continue
+		}
+		declared[s.Name] = struct{}{}
+
+		switch s.Type {
+		case "":
+			diags = append(diags, errf("Missing storage type",
+				"pve storage %q: type is required.", s.Name))
+		case "zfspool":
+			if s.Pool == "" {
+				diags = append(diags, errf("Missing storage pool",
+					"pve storage %q: type zfspool requires pool (the dataset, e.g. \"fast/vm\").", s.Name))
+			}
+		case "dir":
+			if s.Path == "" {
+				diags = append(diags, errf("Missing storage path",
+					"pve storage %q: type dir requires path.", s.Name))
+			}
+		}
+
+		for _, n := range s.Nodes {
+			if _, ok := pveNodes[n]; !ok {
+				diags = append(diags, errf("Unknown storage node restriction",
+					"pve storage %q: nodes entry %q names no declared pve node.", s.Name, n))
+			}
+		}
+	}
+
+	if len(c.PVE.Storage) > 0 {
+		for i := range c.Talos.Nodes {
+			n := &c.Talos.Nodes[i]
+			if _, ok := declared[n.Storage]; !ok {
+				diags = append(diags, errf("Undeclared talos node storage",
+					"talos node %q: storage %q matches no declared pve storage block (declaring any storage opts into CLI-managed storage).",
+					n.Name, n.Storage))
+			}
+		}
+	}
 	return diags
 }
 

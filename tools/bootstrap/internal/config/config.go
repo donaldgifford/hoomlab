@@ -39,13 +39,37 @@ func (c *Cluster) PrimaryNode() (node PVENode, ok bool) {
 	return PVENode{}, false
 }
 
-// PVE describes the Proxmox side: API credentials (env() references)
-// and the physical nodes the cluster is formed from (Stage 1).
+// PVE describes the Proxmox side: API credentials (env() references),
+// the physical nodes the cluster is formed from (Stage 1), and the
+// cluster storage entries the VMs depend on (the pve storage stage).
 type PVE struct {
-	TokenID      string    `hcl:"token_id"`
-	TokenSecret  string    `hcl:"token_secret"`
-	RootPassword string    `hcl:"root_password"`
-	Nodes        []PVENode `hcl:"node,block"`
+	TokenID      string       `hcl:"token_id"`
+	TokenSecret  string       `hcl:"token_secret"`
+	RootPassword string       `hcl:"root_password"`
+	Nodes        []PVENode    `hcl:"node,block"`
+	Storage      []PVEStorage `hcl:"storage,block"`
+}
+
+// PVEStorage is one declared cluster storage entry, converged by the
+// pve storage stage: created when missing, updated in place when a
+// declared field drifted. Declared fields are the CLI's opinion —
+// an empty list or false bool means "no opinion", so settings the
+// block does not name are never touched on an existing entry (the
+// stock local-zfs keeps its content types when only nodes is
+// declared). Identity is fixed: type (and path, for dir storage)
+// cannot be converged by update, so a mismatch on an existing entry
+// is an error, never a delete-and-recreate — deletion could orphan
+// VM disks. List-valued fields are sets on the PVE side; declaration
+// order never matters.
+type PVEStorage struct {
+	Name    string   `hcl:"name,label"`
+	Type    string   `hcl:"type"`             // "zfspool", "dir", ... (create-fixed)
+	Pool    string   `hcl:"pool,optional"`    // zfspool dataset, e.g. "fast/vm"
+	Path    string   `hcl:"path,optional"`    // dir backing path (create-fixed)
+	Content []string `hcl:"content,optional"` // "images", "rootdir", "iso", ...
+	Nodes   []string `hcl:"nodes,optional"`   // node restriction; empty = no opinion
+	Sparse  bool     `hcl:"sparse,optional"`  // zfspool thin provisioning
+	Disable bool     `hcl:"disable,optional"`
 }
 
 // PVENode is one Proxmox node. Exactly one node sets primary = true;

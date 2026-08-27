@@ -198,6 +198,63 @@ func TestLoad(t *testing.T) {
       vlan     = 11`),
 		},
 		{
+			name: "storage block accepted",
+			mutate: replace(`node "pve-01" {`, `storage "local-zfs" {
+      type  = "zfspool"
+      pool  = "rpool/data"
+      nodes = ["pve-01"]
+    }
+    node "pve-01" {`),
+		},
+		{
+			name: "duplicate storage name",
+			mutate: replace(`node "pve-01" {`, `storage "local-zfs" {
+      type = "zfspool"
+      pool = "rpool/data"
+    }
+    storage "local-zfs" {
+      type = "zfspool"
+      pool = "rpool/data"
+    }
+    node "pve-01" {`),
+			wantErrs: []string{"Duplicate storage name"},
+		},
+		{
+			name: "zfspool storage without pool",
+			mutate: replace(`node "pve-01" {`, `storage "local-zfs" {
+      type = "zfspool"
+    }
+    node "pve-01" {`),
+			wantErrs: []string{"type zfspool requires pool"},
+		},
+		{
+			name: "dir storage without path",
+			mutate: replace(`node "pve-01" {`, `storage "local-zfs" {
+      type = "dir"
+    }
+    node "pve-01" {`),
+			wantErrs: []string{"type dir requires path"},
+		},
+		{
+			name: "storage restricted to unknown node",
+			mutate: replace(`node "pve-01" {`, `storage "local-zfs" {
+      type  = "zfspool"
+      pool  = "rpool/data"
+      nodes = ["pve-99"]
+    }
+    node "pve-01" {`),
+			wantErrs: []string{"Unknown storage node restriction", "pve-99"},
+		},
+		{
+			name: "talos storage reference undeclared",
+			mutate: replace(`node "pve-01" {`, `storage "other" {
+      type = "zfspool"
+      pool = "tank/vm"
+    }
+    node "pve-01" {`),
+			wantErrs: []string{"Undeclared talos node storage", `storage "local-zfs" matches no declared`},
+		},
+		{
 			name: "vlan above 802.1q range",
 			mutate: replace(`bridge   = "vmbr0"`, `bridge   = "vmbr0"
       vlan     = 4095`),
