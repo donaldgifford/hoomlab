@@ -249,6 +249,7 @@ Every stage re-run; each should apply nothing.
 | Stage | Steps applied on second pass | Notes |
 | --- | --- | --- |
 | `pve form` | 0 of 4 (2026-08-26) | create + both joins + quorate all skip against the live three-node cluster |
+| `pve storage` | 0 of 2 (2026-08-27) | first live re-run after the applying run — zero rotation on real PVE's read-back (server-materialized `mountpoint`, set-ordered lists, sparse via Extra) on the stage's first day; local-workspace build against SDK PR #30 |
 | `pve certs` | 0 of 8 (2026-08-26) | account, plugin, and per-node config/cert ×3 all skip with production certificates installed; run back to back with `pve form`. One root@pam login per run remains (the account-directory read fallback) — expected, by design |
 | `talos secrets` | | |
 | `talos emit` | | |

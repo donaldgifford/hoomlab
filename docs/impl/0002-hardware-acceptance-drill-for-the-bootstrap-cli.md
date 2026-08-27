@@ -360,27 +360,31 @@ the future test environment's design.
       Servers VLAN (11), not an isolated segment** — `10.10.14.x`
       never existed; deliberate acceptance recorded in INV-0001 and
       the runbook prerequisite amended
-- [ ] VM storage declarations *(added 2026-08-25 from the Phase 2
+- [x] VM storage declarations *(added 2026-08-25 from the Phase 2
       join-wipe findings; approach decided 2026-08-26)*: declared
-      **in the CLI, not by hand** — `bootstrap.hcl` grows `storage`
-      blocks under `pve` and a `pve storage` stage converges them
-      (create-if-missing, update-if-drifted, set-wise comparison of
-      `nodes`/`content` per the deviation-6 lesson), with validation
-      cross-checking every `talos.node.storage` against a declared
-      block. Blocked on SDK storage-config writes —
-      [proxmox-go-sdk#28](https://github.com/donaldgifford/proxmox-go-sdk/issues/28)
-      (`POST`/`PUT`/`DELETE /storage` + mockpve write handlers) —
-      then an SDK release and version bump here. The datasets need no
-      creating: `zfs list` (2026-08-26) shows `fast/vm` + `tank/vm`
-      already on both Dells, empty; srv01 carries no `fast`/`tank` at
-      all (rpool only). Target layout: `fast-vm`/`tank-vm` zfspool
-      entries restricted to `nodes = [r740a, r640a]` — PVE must never
-      touch the `fast`/`tank` pool roots (live Garage data) — and the
-      stock `local-zfs` restricted to srv01 (or disabled): post-join
-      it is active on all three nodes and would happily place VM
-      disks on the Dells' BOSS `rpool/data`, which is forbidden;
-      srv01's rpool is not a BOSS device and is its legitimate VM
-      home if srv01 hosts VMs
+      **in the CLI, not by hand** — **built and lab-verified
+      2026-08-27** against proxmox-go-sdk PR #30 (issue
+      [#28](https://github.com/donaldgifford/proxmox-go-sdk/issues/28))
+      via a local `go.work`. `bootstrap.hcl` grew `storage` blocks
+      under `pve` and the `pve storage` stage (form → storage →
+      certs) converges them: create-if-missing, update-if-drifted
+      with digest-guarded partial writes, set-wise `nodes`/`content`
+      comparison and no-opinion semantics for undeclared fields (the
+      deviation-6 lesson built in — and it held: **zero rotation on
+      the live re-run, first try**). Validation cross-checks every
+      `talos.node.storage` when any block is declared. Live result:
+      `fast` (zfspool `fast/vm`, content images, sparse) created and
+      active on both Dells; stock `local-zfs` restricted to srv01
+      with its content types untouched — `pvesm status` shows each
+      entry `disabled` outside its nodes list, the BOSS-rpool
+      protection live. One fold-back en route (deviation 8: missing
+      storage GET 500s, fixed index-based) and two mockpve parity
+      findings reported on PR #30. Runbook gained §4 with the stage.
+      **Residual:** when the SDK release lands — bump `go.mod`, drop
+      the workspace override, push the held branch commits
+      (`056ff89`…), and re-run the stage against the released
+      version as the parity check. `tank/vm` stays undeclared until
+      something references it
 - [ ] `bootstrap talos secrets`; back up `secrets.yaml` immediately
       (destination decided in Phase 1's config task)
 - [x] `bootstrap talos emit` and `bootstrap talos ipxe` against the

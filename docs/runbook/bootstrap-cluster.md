@@ -19,15 +19,16 @@ the whole point of running the drill from here rather than from memory.
 - [1. Write the config](#1-write-the-config)
 - [2. `validate`](#2-validate)
 - [3. `pve form`](#3-pve-form)
-- [4. `pve certs`](#4-pve-certs)
-- [5. `talos secrets`](#5-talos-secrets)
-- [6. `talos emit`](#6-talos-emit)
-- [7. `talos ipxe`](#7-talos-ipxe)
-- [8. Start booty](#8-start-booty-operator-step)
-- [9. `talos vms`](#9-talos-vms)
-- [10. `talos bootstrap`](#10-talos-bootstrap)
-- [11. `talos health`](#11-talos-health)
-- [12. Convergence pass](#12-convergence-pass)
+- [4. `pve storage`](#4-pve-storage)
+- [5. `pve certs`](#5-pve-certs)
+- [6. `talos secrets`](#6-talos-secrets)
+- [7. `talos emit`](#7-talos-emit)
+- [8. `talos ipxe`](#8-talos-ipxe)
+- [9. Start booty](#9-start-booty-operator-step)
+- [10. `talos vms`](#10-talos-vms)
+- [11. `talos bootstrap`](#11-talos-bootstrap)
+- [12. `talos health`](#12-talos-health)
+- [13. Convergence pass](#13-convergence-pass)
 - [Troubleshooting](#troubleshooting)
 
 ## Before you start
@@ -195,7 +196,7 @@ Expected:
 
 ```text
 ✓ cluster "homelab" formed and quorate (3 of 3 steps applied)
-next: bootstrap pve certs
+next: bootstrap pve storage
 ```
 
 Interruption-safe: re-run and it picks up at the first unjoined node.
@@ -226,7 +227,54 @@ The PVE cluster API itself accepts `link0`–`link7` on both create and
 join, so first-class multi-link support is an SDK/CLI enhancement,
 not a protocol gap — tracked in IMPL-0002 Phase 6.
 
-## 4. `pve certs`
+## 4. `pve storage`
+
+```sh
+bootstrap pve storage
+```
+
+Converges the config's `storage` blocks into cluster storage entries.
+Steps: one `storage-<name>` per declared block, in config order.
+Expected (here: one entry created over a pre-existing dataset, the
+stock `local-zfs` restricted to one node):
+
+```text
+✓ 2 storage declarations converged (2 steps applied)
+next: bootstrap pve certs
+```
+
+What the stage will and will not do:
+
+- A missing entry is **created**; an existing one is **updated in
+  place**, touching only the fields the block declares. Settings the
+  config expresses no opinion about (an empty list, an unset bool)
+  are never sent — restricting the stock `local-zfs` to one node
+  leaves its content types exactly as the installer wrote them.
+- Identity is fixed: an existing entry whose `type` (or `path`)
+  disagrees with the config is an **error**, never a
+  delete-and-recreate. Deletion could orphan VM disks; that call
+  stays with you.
+- With no `storage` blocks the stage does nothing, and Talos nodes
+  may reference pre-existing storage. Declaring *any* block turns on
+  validation: every Talos node's `storage` must then reference a
+  declared block.
+- The stage declares entries; it does not create datasets. A
+  zfspool block's `pool` (e.g. `fast/vm`) must already exist on the
+  restricted nodes — that is node provisioning, not cluster config.
+
+Two read-back behaviors that are normal, not drift: a
+node-restricted entry shows as `disabled` in `pvesm status` on the
+nodes outside its list (the restriction working, not a fault), and
+PVE materializes server-generated properties into the entry —
+creating a zfspool adds a `mountpoint` line you never declared. The
+stage compares structurally (list options are unordered sets, only
+declared fields count) for exactly these reasons.
+
+The API token covers this whole stage: storage writes are gated by
+`Datastore.Allocate`, a regular privilege check, not one of the
+root@pam-reserved endpoints.
+
+## 5. `pve certs`
 
 **`[unverified — needs the lab]`**
 
@@ -253,7 +301,7 @@ command re-run: a certificate with under 30 days of validity goes
 pending again. A rotated Cloudflare token is detected and pushed the
 same way.
 
-## 5. `talos secrets`
+## 6. `talos secrets`
 
 ```sh
 bootstrap talos secrets
@@ -277,7 +325,7 @@ one. Re-running says so and does nothing:
 
 The file is written `0600`. Back it up now; treat it like a private key.
 
-## 6. `talos emit`
+## 7. `talos emit`
 
 ```sh
 bootstrap talos emit
@@ -330,7 +378,7 @@ The `.sha256` sidecars are trust-on-first-use: the Image Factory
 publishes no authoritative checksum, so the first download records what
 arrived and later runs verify against that record.
 
-## 7. `talos ipxe`
+## 8. `talos ipxe`
 
 ```sh
 bootstrap talos ipxe
@@ -366,7 +414,7 @@ a rebuild and nothing else does:
 ✓ ipxe.efi is already built for this booty url (nothing to do)
 ```
 
-## 8. Start booty (operator step)
+## 9. Start booty (operator step)
 
 **`[unverified on real PXE — HTTP endpoints verified]`**
 
@@ -425,7 +473,7 @@ What to check in the responses:
 booty logs `catalog loaded … profiles=2 groups=<N>` at startup; if `N`
 does not equal your node count, it is serving a stale or partial tree.
 
-## 9. `talos vms`
+## 10. `talos vms`
 
 **`[unverified — needs the lab]`**
 
@@ -458,7 +506,7 @@ Proxmox node. Re-imaging a node later is: wipe its disk and reboot.
 Re-running converges: an existing VM is left alone, a stopped one is
 started.
 
-## 10. `talos bootstrap`
+## 11. `talos bootstrap`
 
 **`[unverified — needs the lab]`**
 
@@ -488,7 +536,7 @@ operator credentials, not render output — and every generated
 talosconfig carries a freshly minted client certificate, so rewriting
 would hand you new credentials on every run.
 
-## 11. `talos health`
+## 12. `talos health`
 
 **`[unverified — needs the lab]`**
 
@@ -514,7 +562,7 @@ Every configured node must show `Ready`.
 This is also the standalone verification command — run it after any
 maintenance, any time you want the cluster to prove itself.
 
-## 12. Convergence pass
+## 13. Convergence pass
 
 **`[unverified — needs the lab]`**
 
@@ -522,8 +570,9 @@ Re-run **every** stage. This no-op property is what the Hoomlab service
 later relies on when it takes ownership of the cluster.
 
 ```sh
-for stage in "pve form" "pve certs" "talos secrets" "talos emit" \
-             "talos ipxe" "talos vms" "talos bootstrap" "talos health"; do
+for stage in "pve form" "pve storage" "pve certs" "talos secrets" \
+             "talos emit" "talos ipxe" "talos vms" "talos bootstrap" \
+             "talos health"; do
   echo "== $stage"; bootstrap $stage || break
 done
 ```
