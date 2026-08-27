@@ -347,11 +347,12 @@ source of truth.
 
 ## Open Questions
 
-- **OQ-A — image pull path at bootstrap.** The install Job pulls
-  cilium-cli from quay.io and Cilium images from the VM network
-  before any cluster infra exists. The drill's boot network must
-  allow that egress, or the registry-mirrors surface moves up the
-  priority list. Verify in Phase 3's booty checks.
+- **OQ-A — image pull path at bootstrap.** *Resolved 2026-08-27*:
+  the install Job pulls cilium-cli from quay.io and Cilium images
+  from the VM network before any cluster infra exists, and the
+  drill's boot network (Servers VLAN) has that egress —
+  `https://quay.io/v2/` answers 401 from the booty host. The
+  registry-mirrors surface stays future work, not a blocker.
 - **OQ-B — embedded default values.** Ship a known-good values file
   inside bootstrap (operator file optional override), or require the
   operator file always? Leaning embedded-default once the drill

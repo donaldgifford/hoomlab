@@ -342,14 +342,24 @@ the future test environment's design.
 
 #### Tasks
 
-- [ ] Talos boot-network prerequisites *(moved from Phase 1,
+- [x] Talos boot-network prerequisites *(moved from Phase 1,
       2026-08-25 — deferred until the PVE cluster is up)*: decide the
       Talos VM topology, DHCP reservations for every configured Talos
       MAC, `talos.endpoint`'s host resolving to the first
       control-plane node's reserved address, resolve OQ-5 (VLAN tag
       on `net0`), and replace every `TASK-4` placeholder in
       `bootstrap.hcl` (booty URL, endpoint, MACs, storage) with the
-      real values — the booty-testing records are the starting point
+      real values — **done 2026-08-27**: topology is 3 CP + 3 workers,
+      one per PVE host (ctrl01–03 VMIDs 201–203, work01–03 VMIDs
+      301–303); MACs derive from VMIDs (`02:50:99:a2:<vmid-hex>`, the
+      convention lives as a comment in the config); reservations
+      `.51–.53`/`.61–.63` on the Servers network; endpoint
+      `https://10.10.11.51:6443` = ctrl01's reservation; OQ-5 decided
+      tagged (`vlan = 11` on every node, feature at `1215d93`);
+      `validate` passes (3 pve, 6 talos). **The boot network is the
+      Servers VLAN (11), not an isolated segment** — `10.10.14.x`
+      never existed; deliberate acceptance recorded in INV-0001 and
+      the runbook prerequisite amended
 - [ ] VM storage declarations *(added 2026-08-25 from the Phase 2
       join-wipe findings; approach decided 2026-08-26)*: declared
       **in the CLI, not by hand** — `bootstrap.hcl` grows `storage`
@@ -373,21 +383,45 @@ the future test environment's design.
       home if srv01 hosts VMs
 - [ ] `bootstrap talos secrets`; back up `secrets.yaml` immediately
       (destination decided in Phase 1's config task)
-- [ ] `bootstrap talos emit` and `bootstrap talos ipxe` against the
+- [x] `bootstrap talos emit` and `bootstrap talos ipxe` against the
       real config, with `talos.booty.url` pointing at the existing
-      booty service
-- [ ] Deploy the emitted tree (catalog, templates, boot assets,
+      booty service — **done 2026-08-27**: full tree rendered
+      (catalog trio, both role templates, `embed.ipxe`,
+      `booty-run.sh`), v1.13.8 kernel + initramfs downloaded with
+      TOFU `.sha256` sidecars, `ipxe.efi` built with its embed stamp
+- [x] Deploy the emitted tree (catalog, templates, boot assets,
       `ipxe.efi`) to the running booty service and restart it —
-      operator task; booty loads the catalog once at startup
-- [ ] Compare the existing service's live configuration against the
-      emitted `booty-run.sh` — every deliberate difference gets noted
-      in INV-0001 (the launcher encodes the sharp edges; where the
-      real environment diverges, either the launcher or the runbook is
-      wrong for this environment, and that is a finding)
-- [ ] Runbook step 7 verification before any VM exists: `/boot.ipxe`,
+      **done 2026-08-27**: rsynced to `ns1:~/booty`, served by the
+      ansible-managed compose (roles/booty); the new catalog is
+      demonstrably live (per-MAC responses for the new node
+      identities)
+- [x] Compare the existing service's live configuration against the
+      emitted `booty-run.sh` — **done 2026-08-27, no contradictions**:
+      the compose preserves every load-bearing flag byte-for-byte
+      (host networking, `user 0:0`, `:ro` mounts of
+      catalog/templates/boot, identical `serve` args including
+      `--proxydhcp --server-ip`). Deliberate deltas, all
+      service-ification: ansible-owned delivery and image pin,
+      `restart: unless-stopped` vs the launcher's one-shot `--rm`,
+      templated data dir. The role encodes the same sharp edges
+      independently (its DESIGN-0008 Q2 mirrors the launcher's
+      rationale) — conclusion: the launcher's flag table is the
+      contract, any delivery preserving it is equivalent; runbook
+      amended to say so
+- [x] Runbook step 7 verification before any VM exists: `/boot.ipxe`,
       `/ipxe?mac=…`, `/machine-config?mac=…` for a configured MAC
       (right role + hostname), 404 for an unconfigured MAC, boot
-      assets served at full length
+      assets served at full length — **done 2026-08-27, all pass**:
+      chain script → per-MAC script (`ctrl01`, profile
+      `talos-control`, `talos.platform=metal`, per-MAC config URL) →
+      full machineconfig (`type: controlplane`, `hostname: ctrl01`,
+      endpoint/clusterName right, no template residue); worker
+      template proven via work01's MAC (`type: worker`); unconfigured
+      MAC → 404; kernel and initramfs served byte-exact
+      (20455424 / 86170982, `wc -c` vs `Content-Length`). Bonus:
+      `https://quay.io/v2/` answers 401 from the booty host —
+      DESIGN-0002 OQ-A resolved, the segment has the egress the
+      Cilium install Job needs
 
 #### Success Criteria
 

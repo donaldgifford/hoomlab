@@ -68,11 +68,16 @@ the whole point of running the drill from here rather than from memory.
   certificate domain's zone. Cloudflare is the only DNS-01 provider
   the certs stage supports (ADR-0001), and config validation enforces
   that.
-- **A trusted, isolated boot network.** booty's `/machine-config`
+- **A boot network you trust end-to-end.** booty's `/machine-config`
   endpoint is unauthenticated plaintext HTTP and the configs it serves
-  carry the cluster PKI and join tokens. This is the standard
-  `talos.config` metal trade-off, and it means the boot segment must
-  be yours alone.
+  carry the cluster PKI and join tokens — the standard `talos.config`
+  metal trade-off. A dedicated segment is ideal but not required; a
+  shared VLAN works if you accept both consequences with eyes open:
+  every host on the segment can read the machine configs (PKI
+  included), and booty's proxyDHCP answers **every** PXE attempt
+  there — unconfigured machines chainload `ipxe.efi`, get a 404, and
+  drop to an iPXE shell, so nothing else on the segment can netboot
+  for its own purposes while booty runs.
 - **A booty host with docker** on that network, reachable at the
   `talos.booty.url` you configure. Real PXE needs `--net=host`, so
   that host's own IP is what the emitted launcher advertises.
@@ -385,6 +390,14 @@ The launcher encodes the operational sharp edges, each load-bearing:
 | `--proxydhcp --server-ip` | answers PXE alongside your existing DHCP server, advertising `ipxe.efi` over TFTP |
 
 Override the image with `BOOTY_IMAGE=…` if you need a different build.
+
+The script is a reference implementation, and the flag table above is
+the actual contract: any delivery mechanism that preserves those
+flags is equivalent. A config-managed compose service (host network
+mode, `user: "0:0"`, the same `:ro` mounts and `serve` arguments,
+plus a restart policy) is a proven substitution — just keep the
+"restart after every re-emit" rule, which no delivery mechanism can
+repeal.
 
 Verify it serves before creating any VMs — substitute a MAC from your
 config:
