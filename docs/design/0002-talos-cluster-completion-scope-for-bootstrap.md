@@ -193,8 +193,11 @@ When the config selects Cilium, `talos emit` renders machine configs
 with:
 
 - `cluster.network.cni.name: none`, `cluster.proxy.disabled: true`.
-- `cluster.extraManifests`: the Gateway API CRD set (version-pinned
-  URLs, standard channel + experimental TLSRoute) and the
+- `cluster.extraManifests`: the Gateway API CRD set Cilium's docs
+  require (seven version-pinned standard-channel URLs — TLSRoute and
+  BackendTLSPolicy graduated out of the experimental channel in
+  Gateway API v1.5, so the archive's standard+experimental split is
+  obsolete; validation floors the pin at v1.5 accordingly) and the
   kubelet-serving-cert-approver (required by
   `rotate-server-certificates`, which the emitted configs also set).
 - `cluster.inlineManifests`: the values ConfigMap and the
@@ -285,7 +288,7 @@ deferrals:
 
 Settled details beyond the sketch: `cilium` grows an optional
 `cli_version` (default: the cilium-cli release this CLI was tested
-against, v0.18.9); the cert-approver manifest is pinned in the binary
+against, v0.19.7); the cert-approver manifest is pinned in the binary
 (v0.11.1) and ships whenever the cluster block is present, because
 the emitted configs then set `rotate-server-certificates` and the two
 must travel together; `schematic_id` and `profile` blocks are
@@ -304,9 +307,9 @@ talos {
   cluster {
     cni = "cilium" # "cilium" | "flannel" (default) | "none"
     cilium {
-      version             = "v1.18.5"
+      version             = "v1.20.1"
       values              = "cilium-values.yaml" # operator file
-      gateway_api_version = "v1.4.1"
+      gateway_api_version = "v1.6.1"
     }
   }
 
@@ -384,9 +387,18 @@ source of truth.
   values, maglev indentation restored, l2announcements dropped as
   vestigial). Whether it becomes an embedded default stays open until
   the drill proves it.
-- **OQ-C — version pin cadence.** Talos, Cilium, cilium-cli, and
-  Gateway API CRDs are four independent pins with compatibility
-  coupling. Where does the compatibility statement live?
+- **OQ-C — version pin cadence.** *Resolved 2026-08-27* for where
+  the statement lives: Cilium's own docs are the authority — the
+  tested-Kubernetes row in `Documentation/network/kubernetes/
+  compatibility.rst` and the Gateway API version its `conf.py` pins —
+  read from the release branch of the Cilium being pinned, at the
+  moment of pinning. Policy: newest Cilium minor whose tested range
+  covers the Kubernetes that machinery installs, its documented
+  Gateway API release, and the current cilium-cli. Drill pins so
+  chosen: Cilium v1.20.1 (tested k8s 1.33–1.36; machinery installs
+  1.36.3) / Gateway API v1.6.1 / cilium-cli v0.19.7. Cadence — when
+  to re-derive the pins — stays open until the Hoomlab service owns
+  upgrades.
 - **OQ-D — metrics-server and cert-approver ownership.** *Resolved
   2026-08-27 as the default said*: bootstrap ships cert-approver
   (machine-config-coupled, pinned at v0.11.1 in the binary), gitops

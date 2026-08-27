@@ -100,12 +100,12 @@ cluster "homelab" {
     cluster {
       cni = "cilium" # "cilium" | "flannel" (default) | "none"
       cilium {
-        version             = "v1.18.5"
+        version             = "v1.20.1"
         values              = "cilium-values.yaml"
-        gateway_api_version = "v1.4.1"
+        gateway_api_version = "v1.6.1"
         # Optional: the cilium-cli image the install Job runs.
         # Omitted means the release this CLI was tested against.
-        # cli_version = "v0.18.9"
+        # cli_version = "v0.19.7"
       }
     }
 

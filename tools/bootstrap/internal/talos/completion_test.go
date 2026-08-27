@@ -37,9 +37,9 @@ func ciliumCluster(t *testing.T) *config.Cluster {
 	c.Talos.Cluster = &config.TalosCluster{
 		CNI: config.CNICilium,
 		Cilium: &config.CiliumConfig{
-			Version:           "v1.18.5",
+			Version:           "v1.20.1",
 			Values:            values,
-			GatewayAPIVersion: "v1.4.1",
+			GatewayAPIVersion: "v1.6.1",
 		},
 	}
 	return c
@@ -138,17 +138,32 @@ func TestCompletionCilium(t *testing.T) {
 			t.Errorf("%s: proxy disabled = %v, want true", name, got)
 		}
 
+		// Cilium 1.20's required CRD set: 7 standard-channel files
+		// (TLSRoute and BackendTLSPolicy graduated there in Gateway
+		// API v1.5), then the cert-approver.
 		extras, ok := dig(t, doc, "cluster", "extraManifests").([]any)
-		if !ok || len(extras) != 7 {
-			t.Fatalf("%s: extraManifests = %v, want 6 CRD URLs + cert-approver", name, extras)
+		if !ok || len(extras) != 8 {
+			t.Fatalf("%s: extraManifests = %v, want 7 CRD URLs + cert-approver", name, extras)
 		}
-		first, last := extras[0].(string), extras[6].(string)
-		if !strings.Contains(first, "gateway-api/v1.4.1/") ||
+		first, last := extras[0].(string), extras[7].(string)
+		if !strings.Contains(first, "gateway-api/v1.6.1/config/crd/standard/") ||
 			!strings.HasSuffix(first, "gatewayclasses.yaml") {
-			t.Errorf("%s: extraManifests[0] = %q, want the pinned gatewayclasses CRD first", name, first)
+			t.Errorf("%s: extraManifests[0] = %q, want the pinned standard-channel gatewayclasses CRD first", name, first)
+		}
+		for _, graduated := range []string{"backendtlspolicies", "tlsroutes"} {
+			found := false
+			for _, e := range extras {
+				url := e.(string)
+				if strings.Contains(url, "/standard/") && strings.Contains(url, graduated) {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("%s: extraManifests missing the standard-channel %s CRD", name, graduated)
+			}
 		}
 		if !strings.Contains(last, "kubelet-serving-cert-approver") {
-			t.Errorf("%s: extraManifests[6] = %q, want the cert-approver", name, last)
+			t.Errorf("%s: extraManifests[7] = %q, want the cert-approver", name, last)
 		}
 
 		inline, ok := dig(t, doc, "cluster", "inlineManifests").([]any)
@@ -164,8 +179,8 @@ func TestCompletionCilium(t *testing.T) {
 		}
 		install := inline[1].(map[string]any)["contents"].(string)
 		for _, want := range []string{
-			"quay.io/cilium/cilium-cli:v0.18.9",
-			"--version=v1.18.5",
+			"quay.io/cilium/cilium-cli:v0.19.7",
+			"--version=v1.20.1",
 			"backoffLimit: 10",
 			"fieldPath: status.podIP",
 		} {

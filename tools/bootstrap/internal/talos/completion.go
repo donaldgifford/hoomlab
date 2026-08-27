@@ -20,7 +20,7 @@ import (
 const (
 	// defaultCiliumCLIVersion is the cilium-cli image tag the install
 	// Job runs when the config doesn't pin cli_version.
-	defaultCiliumCLIVersion = "v0.18.9"
+	defaultCiliumCLIVersion = "v0.19.7"
 	// certApproverVersion pins the kubelet-serving-cert-approver
 	// manifest paired with rotate-server-certificates: kubelets then
 	// request serving certificates that need an approver from minute
@@ -45,19 +45,24 @@ func certApproverManifestURL() string {
 		certApproverVersion)
 }
 
-// gatewayAPICRDURLs is the pinned Gateway API CRD set: the standard
-// channel plus the experimental TLSRoute, delivered via extraManifests
-// so the CRDs exist before anything ships a Gateway (DESIGN-0002
-// T2→T3 contract). The set matches the archive's proven Gen 2 list.
+// gatewayAPICRDURLs is the pinned Gateway API CRD set Cilium's
+// Gateway API support requires, delivered via extraManifests so the
+// CRDs exist before anything ships a Gateway (DESIGN-0002 T2→T3
+// contract). The list matches Cilium 1.20's installation docs and
+// assumes the v1.5+ channel layout — TLSRoute and BackendTLSPolicy
+// graduated to the standard channel there, which is why config
+// validation floors gateway_api_version at v1.5 (the archive's Gen 2
+// era pulled TLSRoute from the experimental channel instead).
 func gatewayAPICRDURLs(version string) []string {
-	base := "https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/" + version + "/config/crd/"
+	base := "https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/" + version + "/config/crd/standard/"
 	return []string{
-		base + "standard/gateway.networking.k8s.io_gatewayclasses.yaml",
-		base + "standard/gateway.networking.k8s.io_gateways.yaml",
-		base + "standard/gateway.networking.k8s.io_httproutes.yaml",
-		base + "standard/gateway.networking.k8s.io_referencegrants.yaml",
-		base + "standard/gateway.networking.k8s.io_grpcroutes.yaml",
-		base + "experimental/gateway.networking.k8s.io_tlsroutes.yaml",
+		base + "gateway.networking.k8s.io_gatewayclasses.yaml",
+		base + "gateway.networking.k8s.io_gateways.yaml",
+		base + "gateway.networking.k8s.io_httproutes.yaml",
+		base + "gateway.networking.k8s.io_referencegrants.yaml",
+		base + "gateway.networking.k8s.io_grpcroutes.yaml",
+		base + "gateway.networking.k8s.io_backendtlspolicies.yaml",
+		base + "gateway.networking.k8s.io_tlsroutes.yaml",
 	}
 }
 

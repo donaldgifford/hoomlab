@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/hashicorp/hcl/v2"
@@ -82,8 +83,53 @@ func (c *Cluster) validateTalosCluster() hcl.Diagnostics {
 					pin.name, pin.value))
 			}
 		}
+		diags = append(diags, validateGatewayAPIFloor(tc.Cilium.GatewayAPIVersion)...)
 	}
 	return diags
+}
+
+// The oldest Gateway API release whose CRD channel layout matches the
+// manifest URLs emit renders: TLSRoute and BackendTLSPolicy graduated
+// to the standard channel in v1.5, and the emitted list points there.
+// An older pin would emit URLs that 404 — at node boot, when Talos
+// fetches extraManifests, which is the worst possible place to learn
+// it.
+const (
+	gatewayAPIFloorMajor = 1
+	gatewayAPIFloorMinor = 5
+)
+
+// validateGatewayAPIFloor enforces the CRD-layout floor on a
+// v-prefixed pin; malformed pins get their own diagnostic. A pin that
+// failed the prefix check above is skipped — one error per mistake.
+func validateGatewayAPIFloor(pin string) hcl.Diagnostics {
+	if !strings.HasPrefix(pin, "v") {
+		return nil
+	}
+	parts := strings.SplitN(strings.TrimPrefix(pin, "v"), ".", 3)
+	if len(parts) < 2 {
+		return hcl.Diagnostics{errf("Invalid gateway_api_version",
+			"talos cluster cilium: gateway_api_version %q is not a vMAJOR.MINOR[.PATCH] release.", pin)}
+	}
+	major, errMajor := strconv.Atoi(parts[0])
+	minor, errMinor := strconv.Atoi(parts[1])
+	if errMajor != nil || errMinor != nil {
+		return hcl.Diagnostics{errf("Invalid gateway_api_version",
+			"talos cluster cilium: gateway_api_version %q is not a vMAJOR.MINOR[.PATCH] release.", pin)}
+	}
+	if major < gatewayAPIFloorMajor ||
+		(major == gatewayAPIFloorMajor && minor < gatewayAPIFloorMinor) {
+		return hcl.Diagnostics{
+			errf(
+				"Gateway API pin below the CRD-layout floor",
+				"talos cluster cilium: gateway_api_version %q predates v%d.%d, where TLSRoute and BackendTLSPolicy joined the standard channel — the emitted CRD URLs would 404 at node boot.",
+				pin,
+				gatewayAPIFloorMajor,
+				gatewayAPIFloorMinor,
+			),
+		}
+	}
+	return nil
 }
 
 // validateProfiles checks the extension profiles: unique names,

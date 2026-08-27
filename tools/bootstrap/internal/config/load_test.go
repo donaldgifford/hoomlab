@@ -286,9 +286,9 @@ func TestLoad(t *testing.T) {
 			name: "cilium block without cni cilium",
 			mutate: replace(`booty {`, `cluster {
       cilium {
-        version             = "v1.18.5"
+        version             = "v1.20.1"
         values              = "cilium-values.yaml"
-        gateway_api_version = "v1.4.1"
+        gateway_api_version = "v1.6.1"
       }
     }
     booty {`),
@@ -301,11 +301,24 @@ func TestLoad(t *testing.T) {
       cilium {
         version             = "1.18.5"
         values              = "cilium-values.yaml"
-        gateway_api_version = "v1.4.1"
+        gateway_api_version = "v1.6.1"
       }
     }
     booty {`),
 			wantErrs: []string{"Unprefixed version pin", `version "1.18.5"`},
+		},
+		{
+			name: "gateway api pin below the crd-layout floor",
+			mutate: replace(`booty {`, `cluster {
+      cni = "cilium"
+      cilium {
+        version             = "v1.20.1"
+        values              = "cilium-values.yaml"
+        gateway_api_version = "v1.4.1"
+      }
+    }
+    booty {`),
+			wantErrs: []string{"Gateway API pin below the CRD-layout floor", "v1.4.1"},
 		},
 		{
 			name: "profile accepted",
@@ -463,9 +476,9 @@ func TestLoad(t *testing.T) {
 var ciliumHCL = strings.Replace(validHCL, "    booty {", `    cluster {
       cni = "cilium"
       cilium {
-        version             = "v1.18.5"
+        version             = "v1.20.1"
         values              = "cilium-values.yaml"
-        gateway_api_version = "v1.4.1"
+        gateway_api_version = "v1.6.1"
       }
     }
     booty {`, 1)

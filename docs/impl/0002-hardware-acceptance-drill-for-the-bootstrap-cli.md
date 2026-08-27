@@ -467,7 +467,7 @@ re-run, with INV-0001 as the log.
 #### Tasks
 
 - [ ] Add the completion surface to the drill config — `cluster` block
-      (cni cilium, v1.18.5 / Gateway API v1.4.1, values file adapted
+      (cni cilium, v1.20.1 / Gateway API v1.6.1, values file adapted
       from `examples/cilium-values.yaml`) and the `base` profile
       (qemu-guest-agent + iscsi-tools) referenced by all six nodes —
       then `validate`, re-run `talos emit` + `talos ipxe`, rsync the

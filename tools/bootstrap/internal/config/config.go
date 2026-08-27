@@ -152,13 +152,13 @@ type TalosCluster struct {
 // and a values file that doesn't replace it would strand the cluster.
 type CiliumConfig struct {
 	// Version is the Cilium release the install Job pins, e.g.
-	// "v1.18.5".
+	// "v1.20.1".
 	Version string `hcl:"version"`
 	// Values is the path to the Helm values file, relative to the
 	// config file. Load rewrites it absolute.
 	Values string `hcl:"values"`
 	// GatewayAPIVersion pins the Gateway API CRD set delivered via
-	// extraManifests before Cilium starts, e.g. "v1.4.1".
+	// extraManifests before Cilium starts, e.g. "v1.6.1".
 	GatewayAPIVersion string `hcl:"gateway_api_version"`
 	// CLIVersion pins the cilium-cli image the install Job runs.
 	// Empty means the release this CLI was tested against.
