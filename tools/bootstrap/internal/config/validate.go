@@ -15,6 +15,14 @@ const dnsCloudflare = "cloudflare"
 // below 100 are reserved for internal use.
 const pveVMIDMin = 100
 
+// The valid 802.1Q VLAN ID range: 0 is priority-tagged-only and 4095
+// is reserved, so a talos node's vlan must land inside this window
+// (or be omitted entirely for untagged).
+const (
+	vlanMin = 1
+	vlanMax = 4094
+)
+
 // ValidateAndNormalize runs the semantic checks gohcl decoding cannot
 // express and returns every violation as a diagnostic naming the
 // offending block and field. The "normalize" in the name is real: it
@@ -109,6 +117,12 @@ func (c *Cluster) validateTalos() hcl.Diagnostics {
 			diags = append(diags, errf("Invalid talos node vmid",
 				"talos node %q: vmid %d is below %d, the lowest ID Proxmox allows for guests.",
 				n.Name, n.VMID, pveVMIDMin))
+		}
+
+		if n.VLAN != 0 && (n.VLAN < vlanMin || n.VLAN > vlanMax) {
+			diags = append(diags, errf("Invalid talos node vlan",
+				"talos node %q: vlan %d is outside the 802.1Q range %d-%d (omit the attribute for untagged).",
+				n.Name, n.VLAN, vlanMin, vlanMax))
 		}
 
 		mac, err := NormalizeMAC(n.MAC)

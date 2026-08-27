@@ -253,6 +253,24 @@ func TestVMSpecWireFields(t *testing.T) {
 	}
 }
 
+// TestVMSpecVLANTag pins the net0 tag behavior (IMPL-0002 OQ-5): a
+// configured VLAN lands as a PVE-side tag on the NIC — the lab's
+// vm-trunk bridge has no native VLAN, so an untagged VM is on no
+// network at all — and an unset VLAN adds no tag parameter.
+func TestVMSpecVLANTag(t *testing.T) {
+	cfg := vmsCluster()
+	node := &cfg.Talos.Nodes[0]
+
+	if got := pve.VMSpec(node).Net0; strings.Contains(got, "tag=") {
+		t.Errorf("net0 = %q carries a tag with no vlan configured", got)
+	}
+
+	node.VLAN = 11
+	if got, want := pve.VMSpec(node).Net0, ",tag=11"; !strings.HasSuffix(got, want) {
+		t.Errorf("net0 = %q, want suffix %q", got, want)
+	}
+}
+
 // TestVMSpecMACMatchesConfig pins the identity binding: the MAC on the
 // NIC is the one from the config, which is the same one the emitted
 // booty group selects on. If these ever diverge the node PXE boots and

@@ -86,6 +86,10 @@ cluster "homelab" {
     # "controlplane" or "worker" (at least one controlplane). vmid is
     # unique, >= 100. mac is unique in any standard notation; the CLI
     # normalizes to lowercase-colon form everywhere it is used.
+    # vlan (optional) tags net0 on the PVE side — required when the
+    # bridge uplinks to a trunk with no native VLAN, where untagged
+    # frames go nowhere; the guest still sees plain Ethernet, so PXE
+    # is unaffected. Omit for an access-port or native-VLAN bridge.
     node "cp-01" {
       role     = "controlplane"
       pve_node = "pve-01"
@@ -96,6 +100,7 @@ cluster "homelab" {
       disk_gb  = 64
       storage  = "local-zfs"
       bridge   = "vmbr0"
+      vlan     = 11
     }
     node "cp-02" {
       role     = "controlplane"

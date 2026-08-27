@@ -193,6 +193,23 @@ func TestLoad(t *testing.T) {
 			wantErrs: []string{"vmid 42 is below 100"},
 		},
 		{
+			name: "vlan tag accepted",
+			mutate: replace(`bridge   = "vmbr0"`, `bridge   = "vmbr0"
+      vlan     = 11`),
+		},
+		{
+			name: "vlan above 802.1q range",
+			mutate: replace(`bridge   = "vmbr0"`, `bridge   = "vmbr0"
+      vlan     = 4095`),
+			wantErrs: []string{"Invalid talos node vlan", "vlan 4095 is outside the 802.1Q range 1-4094"},
+		},
+		{
+			name: "negative vlan",
+			mutate: replace(`bridge   = "vmbr0"`, `bridge   = "vmbr0"
+      vlan     = -1`),
+			wantErrs: []string{"Invalid talos node vlan"},
+		},
+		{
 			name:     "non-http pve endpoint",
 			mutate:   replace(`endpoint = "https://10.0.10.11:8006"`, `endpoint = "ftp://10.0.10.11"`),
 			wantErrs: []string{"Invalid pve node endpoint", "scheme must be http or https"},

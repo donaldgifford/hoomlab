@@ -125,4 +125,10 @@ type TalosNode struct {
 	DiskGB  int    `hcl:"disk_gb"`
 	Storage string `hcl:"storage"`
 	Bridge  string `hcl:"bridge"`
+	// VLAN tags net0 on the PVE side of the bridge (IMPL-0002 OQ-5:
+	// a trunk with no native VLAN drops untagged frames, so the tag
+	// is what puts the VM on its network). PVE strips the tag before
+	// the guest, so the firmware's PXE stack still sees plain
+	// Ethernet. Zero means untagged.
+	VLAN int `hcl:"vlan,optional"`
 }

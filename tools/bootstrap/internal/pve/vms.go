@@ -144,6 +144,18 @@ func (p *Provisioner) waitTask(ctx context.Context, ref tasks.Ref, what string) 
 	return nil
 }
 
+// net0 renders the NIC. The tag goes on the PVE side of the bridge
+// when the config sets a VLAN (a trunk port with no native VLAN drops
+// untagged frames — IMPL-0002 OQ-5), and PVE strips it before the
+// guest, so the firmware's PXE stack sees plain Ethernet either way.
+func net0(node *config.TalosNode) string {
+	s := fmt.Sprintf("virtio,bridge=%s,macaddr=%s,firewall=0", node.Bridge, node.MAC)
+	if node.VLAN > 0 {
+		s += fmt.Sprintf(",tag=%d", node.VLAN)
+	}
+	return s
+}
+
 // VMSpec builds the create request for one Talos node. It is exported
 // so the spec assertions live in a test rather than in a comment: every
 // field here is load-bearing, and a regression in any of them produces
@@ -161,7 +173,7 @@ func VMSpec(node *config.TalosNode) *qemu.CreateSpec {
 		CPU:    cpuType,
 		OSType: osType,
 		SCSI0:  fmt.Sprintf("%s:%d", node.Storage, node.DiskGB),
-		Net0:   fmt.Sprintf("virtio,bridge=%s,macaddr=%s,firewall=0", node.Bridge, node.MAC),
+		Net0:   net0(node),
 		Boot:   bootOrder,
 		Extra: map[string]string{
 			"bios":    biosType,
