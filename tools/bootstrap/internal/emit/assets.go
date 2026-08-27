@@ -14,7 +14,6 @@ import (
 	"strings"
 
 	"github.com/donaldgifford/hoomlab/tools/bootstrap/internal/config"
-	"github.com/donaldgifford/hoomlab/tools/bootstrap/internal/talos"
 )
 
 // defaultFactoryURL is the Talos Image Factory, which serves prebuilt
@@ -34,23 +33,27 @@ type bootAsset struct {
 	URL string
 }
 
-// bootAssets lists the assets for a cluster's Talos version. The names
-// on disk are the ones the catalog's profiles reference; the names at
-// the factory are architecture-suffixed, so the two differ on purpose.
-func bootAssets(factoryURL string, cfg *config.Talos) []bootAsset {
+// bootAssets lists the assets for a cluster's Talos version: one
+// kernel/initramfs pair per unique schematic, staged under a
+// schematic-scoped directory — the path the catalog's per-class
+// profiles reference. The names on disk are the ones booty serves;
+// the names at the factory are architecture-suffixed, so the two
+// differ on purpose.
+func bootAssets(factoryURL string, cfg *config.Talos, schematics []string) []bootAsset {
 	if factoryURL == "" {
 		factoryURL = defaultFactoryURL
 	}
-	base := fmt.Sprintf("%s/image/%s/%s",
-		strings.TrimSuffix(factoryURL, "/"),
-		talos.ResolveSchematicID(cfg.SchematicID),
-		cfg.Version)
-	dir := path.Join("boot", "talos", cfg.Version)
-
-	return []bootAsset{
-		{Path: path.Join(dir, "vmlinuz"), URL: base + "/kernel-amd64"},
-		{Path: path.Join(dir, "initramfs.xz"), URL: base + "/initramfs-amd64.xz"},
+	assets := make([]bootAsset, 0, 2*len(schematics))
+	for _, schematic := range schematics {
+		base := fmt.Sprintf("%s/image/%s/%s",
+			strings.TrimSuffix(factoryURL, "/"), schematic, cfg.Version)
+		dir := path.Join("boot", "talos", cfg.Version, schematic)
+		assets = append(assets,
+			bootAsset{Path: path.Join(dir, "vmlinuz"), URL: base + "/kernel-amd64"},
+			bootAsset{Path: path.Join(dir, "initramfs.xz"), URL: base + "/initramfs-amd64.xz"},
+		)
 	}
+	return assets
 }
 
 // assetsReady reports whether every boot asset is present and still

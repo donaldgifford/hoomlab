@@ -10,11 +10,6 @@ variable "talos_version" {
   default     = "v1.13.8"
 }
 
-variable "install_image" {
-  description = "Talos Image Factory installer image the machineconfigs install"
-  default     = "factory.talos.dev/installer/376567988ad370138ad8b2698212367b8edcb69b5fd68c80be1f2ec7d603b4ba:v1.13.8"
-}
-
 variable "booty_url" {
   description = "Base URL this booty server is reachable at"
   default     = "http://10.0.10.5:8080"

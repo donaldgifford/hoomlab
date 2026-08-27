@@ -81,7 +81,7 @@ func testEmitter(t *testing.T) *emit.Emitter {
 // and cannot be golden — TestEmittedCatalogLoadsInBooty validates those
 // through booty and machinery instead.
 func TestTreeGolden(t *testing.T) {
-	tree, err := testEmitter(t).Tree()
+	tree, err := testEmitter(t).Tree(context.Background())
 	if err != nil {
 		t.Fatalf("Tree: %v", err)
 	}
@@ -122,11 +122,11 @@ func TestTreeGolden(t *testing.T) {
 // report drift and tell the operator to restart booty forever.
 func TestTreeDeterministic(t *testing.T) {
 	e := testEmitter(t)
-	first, err := e.Tree()
+	first, err := e.Tree(context.Background())
 	if err != nil {
 		t.Fatalf("first Tree: %v", err)
 	}
-	second, err := e.Tree()
+	second, err := e.Tree(context.Background())
 	if err != nil {
 		t.Fatalf("second Tree: %v", err)
 	}
@@ -142,7 +142,7 @@ func TestTreeDeterministic(t *testing.T) {
 
 func TestTreeWriteAndDiff(t *testing.T) {
 	e := testEmitter(t)
-	tree, err := e.Tree()
+	tree, err := e.Tree(context.Background())
 	if err != nil {
 		t.Fatalf("Tree: %v", err)
 	}
@@ -213,7 +213,7 @@ func TestTreeWriteAndDiff(t *testing.T) {
 // whole chain runs in-process here.
 func TestEmittedCatalogLoadsInBooty(t *testing.T) {
 	e := testEmitter(t)
-	tree, err := e.Tree()
+	tree, err := e.Tree(context.Background())
 	if err != nil {
 		t.Fatalf("Tree: %v", err)
 	}
@@ -304,7 +304,7 @@ func TestEmittedCatalogLoadsInBooty(t *testing.T) {
 // be handed a Talos machineconfig by accident.
 func TestUnknownMACDoesNotMatch(t *testing.T) {
 	e := testEmitter(t)
-	tree, err := e.Tree()
+	tree, err := e.Tree(context.Background())
 	if err != nil {
 		t.Fatalf("Tree: %v", err)
 	}
@@ -352,7 +352,7 @@ func TestIdentityBindingSurvivesMACSpelling(t *testing.T) {
 	cluster.Talos.Nodes = cluster.Talos.Nodes[:1]
 
 	e := &emit.Emitter{Cluster: cluster, Bundle: testBundle(t), Root: t.TempDir()}
-	tree, err := e.Tree()
+	tree, err := e.Tree(context.Background())
 	if err != nil {
 		t.Fatalf("Tree: %v", err)
 	}
@@ -412,7 +412,7 @@ func TestLauncherImageTagHasNoVPrefix(t *testing.T) {
 			cluster.Talos.Booty.Version = version
 
 			e := &emit.Emitter{Cluster: cluster, Bundle: testBundle(t), Root: t.TempDir()}
-			tree, err := e.Tree()
+			tree, err := e.Tree(context.Background())
 			if err != nil {
 				t.Fatalf("Tree: %v", err)
 			}

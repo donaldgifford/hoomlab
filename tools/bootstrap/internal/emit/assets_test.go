@@ -89,7 +89,7 @@ func digestOf(b []byte) string {
 
 func runSteps(t *testing.T, e *emit.Emitter) steps.Result {
 	t.Helper()
-	stage, err := e.Steps()
+	stage, err := e.Steps(context.Background())
 	if err != nil {
 		t.Fatalf("Steps: %v", err)
 	}
@@ -109,8 +109,8 @@ func TestEmitStepsConverge(t *testing.T) {
 		t.Errorf("first run applied %d steps, want 2", res.Applied)
 	}
 
-	kernel := filepath.Join(e.Root, "boot", "talos", talosVersion, "vmlinuz")
-	initrd := filepath.Join(e.Root, "boot", "talos", talosVersion, "initramfs.xz")
+	kernel := filepath.Join(e.Root, "boot", "talos", talosVersion, vanillaSchematic, "vmlinuz")
+	initrd := filepath.Join(e.Root, "boot", "talos", talosVersion, vanillaSchematic, "initramfs.xz")
 	for path, want := range map[string][]byte{kernel: f.kernel, initrd: f.initrd} {
 		got, err := os.ReadFile(path)
 		if err != nil {
@@ -150,7 +150,7 @@ func TestEmitStepsResumeAfterInterruption(t *testing.T) {
 	f := newFactory()
 	e := assetEmitter(t, f)
 
-	tree, err := e.Tree()
+	tree, err := e.Tree(context.Background())
 	if err != nil {
 		t.Fatalf("Tree: %v", err)
 	}
@@ -171,7 +171,7 @@ func TestBootAssetTruncatedDownload(t *testing.T) {
 	f.truncat = true
 	e := assetEmitter(t, f)
 
-	stage, err := e.Steps()
+	stage, err := e.Steps(context.Background())
 	if err != nil {
 		t.Fatalf("Steps: %v", err)
 	}
@@ -180,7 +180,7 @@ func TestBootAssetTruncatedDownload(t *testing.T) {
 		t.Fatal("truncated download succeeded, want an error")
 	}
 
-	kernel := filepath.Join(e.Root, "boot", "talos", talosVersion, "vmlinuz")
+	kernel := filepath.Join(e.Root, "boot", "talos", talosVersion, vanillaSchematic, "vmlinuz")
 	if _, err := os.Stat(kernel); !os.IsNotExist(err) {
 		t.Errorf("truncated asset was left in place at %s", kernel)
 	}
@@ -200,7 +200,7 @@ func TestBootAssetServerError(t *testing.T) {
 	f.status = http.StatusInternalServerError
 	e := assetEmitter(t, f)
 
-	stage, err := e.Steps()
+	stage, err := e.Steps(context.Background())
 	if err != nil {
 		t.Fatalf("Steps: %v", err)
 	}
@@ -223,12 +223,12 @@ func TestBootAssetDigestMismatch(t *testing.T) {
 	e := assetEmitter(t, f)
 	runSteps(t, e)
 
-	kernel := filepath.Join(e.Root, "boot", "talos", talosVersion, "vmlinuz")
+	kernel := filepath.Join(e.Root, "boot", "talos", talosVersion, vanillaSchematic, "vmlinuz")
 	if err := os.WriteFile(kernel, []byte("swapped payload"), 0o600); err != nil {
 		t.Fatalf("swap asset: %v", err)
 	}
 
-	stage, err := e.Steps()
+	stage, err := e.Steps(context.Background())
 	if err != nil {
 		t.Fatalf("Steps: %v", err)
 	}
@@ -251,7 +251,7 @@ func TestBootAssetURLs(t *testing.T) {
 	runSteps(t, e)
 
 	for _, name := range []string{"vmlinuz", "initramfs.xz"} {
-		path := filepath.Join(e.Root, "boot", "talos", talosVersion, name)
+		path := filepath.Join(e.Root, "boot", "talos", talosVersion, vanillaSchematic, name)
 		if _, err := os.Stat(path); err != nil {
 			t.Errorf("expected asset at %s: %v", path, err)
 		}

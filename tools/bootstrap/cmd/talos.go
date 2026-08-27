@@ -267,7 +267,7 @@ here means restarting the booty container.`,
 
 			root := filepath.Join(opts.output, "booty")
 			emitter := &emit.Emitter{Cluster: cluster, Bundle: bundle, Root: root}
-			stage, err := emitter.Steps()
+			stage, err := emitter.Steps(cmd.Context())
 			if err != nil {
 				return err
 			}
