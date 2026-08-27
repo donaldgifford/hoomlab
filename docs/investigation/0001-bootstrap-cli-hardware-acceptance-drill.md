@@ -134,7 +134,7 @@ against production once the flow is proven.
 
 | Component | Version / Value |
 | --- | --- |
-| bootstrap CLI | built from `39e3642` (`feat/impl-hardware-drill`, clean tree, **local go.work against proxmox-go-sdk PR #30** — commits from `056ff89` on are unpushed until the SDK release lands) via `just bootstrap-build` → `build/bin/bootstrap` (prior builds retired by fold-backs: `4b443ea`, `b7968c4`, `99b9416`, `f4ba8d5`, `797127e`, `6120bd1`, `528976d`, `7bf52e9`, `1215d93`) |
+| bootstrap CLI | built from `a97c287` (`feat/impl-hardware-drill`, clean tree, **proxmox-go-sdk v0.12.0 released** — the workspace-override interlude from `056ff89`–`296f483` is over and the branch pushes again) via `just bootstrap-build` → `build/bin/bootstrap` (prior builds retired by fold-backs: `4b443ea`, `b7968c4`, `99b9416`, `f4ba8d5`, `797127e`, `6120bd1`, `528976d`, `7bf52e9`, `1215d93`, `39e3642`) |
 | Talos | `v1.13.8` (machinery `v1.13.9`) |
 | Kubernetes | `v1.36.3` (machinery default) |
 | booty | `v0.2.1` — image `ghcr.io/donaldgifford/booty:0.2.1` |
@@ -232,7 +232,7 @@ Record each step as `pass`, or what actually happened. Steps 1–2 and
 | 1 | `bootstrap validate` | exit 0 | pass (2026-08-25, under the real `op run` injection) |
 | 2 | `bootstrap pve form` | cluster formed and quorate | pass (2026-08-25): cluster of one formed and quorate first, then grown to three by re-running against the expanded config — r640a and srv01 joined serially, first try, zero fold-backs; `pvecm status` 3/3 votes, quorate, membership `10.10.15.20/.21/.40` (all corosync link0 on sync0). Join-wipe verified: `/etc/pve` replaced wholesale, zero loss as predicted (joiners were installer-default) |
 | 3 | `bootstrap pve certs` | certificates on all nodes | pass (2026-08-25/26): staging convergence on the primary, the staging→production flip as a real transition (deviations 3–7 en route), then the extension to both joiners first-try — all three nodes serve production certificates (`C=US, O=Let's Encrypt, CN=YR1`; subjects `r740a`/`r640a`/`srv01.shart.sh`, openssl-verified) |
-| 4 | `bootstrap talos secrets` | `secrets.yaml`, 0600 | pass (2026-08-27): bundle generated and driving every rendered machineconfig; 1Password backup + never-overwrite re-run proof pending operator confirmation |
+| 4 | `bootstrap talos secrets` | `secrets.yaml`, 0600 | pass (2026-08-27): bundle generated 0600, driving every rendered machineconfig; backed up to 1Password (item `u4xvg44gysubpcn2coszsij36i`); re-run answers "already exists — leaving it alone" |
 | 5 | `bootstrap talos emit` | full tree under `bootstrap-out/booty/` | pass (2026-08-27): catalog trio + both role templates + `embed.ipxe` + launcher; v1.13.8 assets downloaded with TOFU sidecars |
 | 6 | `bootstrap talos ipxe` | `boot/ipxe.efi` built | pass (2026-08-27): built with embed stamp for the `10.10.11.190:8080` chain script |
 | 7 | copy tree to booty host, `./booty-run.sh` | `/boot.ipxe` and `/machine-config?mac=…` answer | pass (2026-08-27), with a deliberate delivery substitution: the tree is served by the lab's ansible-managed compose (roles/booty) instead of `booty-run.sh` — flag-for-flag equivalent (host net, `0:0`, `:ro` mounts, same `serve` args), plus `restart: unless-stopped`. Full curl battery green: chain → per-MAC scripts (both roles) → complete machineconfigs, 404 for strangers, assets byte-exact (20455424 / 86170982) |

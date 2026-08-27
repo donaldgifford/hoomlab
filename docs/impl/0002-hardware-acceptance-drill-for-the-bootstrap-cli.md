@@ -385,8 +385,13 @@ the future test environment's design.
       (`056ff89`…), and re-run the stage against the released
       version as the parity check. `tank/vm` stays undeclared until
       something references it
-- [ ] `bootstrap talos secrets`; back up `secrets.yaml` immediately
-      (destination decided in Phase 1's config task)
+- [x] `bootstrap talos secrets`; back up `secrets.yaml` immediately
+      (destination decided in Phase 1's config task) — **done
+      2026-08-27**: bundle generated 0600 (`ls -la` verified), backed
+      up to 1Password (homelab vault, item
+      `u4xvg44gysubpcn2coszsij36i`), and the never-overwrite proof
+      shown: a re-run answers `✓ secrets bundle already exists at
+      secrets.yaml — leaving it alone`
 - [x] `bootstrap talos emit` and `bootstrap talos ipxe` against the
       real config, with `talos.booty.url` pointing at the existing
       booty service — **done 2026-08-27**: full tree rendered
