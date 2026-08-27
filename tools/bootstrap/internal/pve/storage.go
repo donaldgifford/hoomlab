@@ -2,7 +2,6 @@ package pve
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -10,7 +9,6 @@ import (
 
 	"github.com/donaldgifford/hoomlab/tools/bootstrap/internal/config"
 	"github.com/donaldgifford/hoomlab/tools/bootstrap/internal/steps"
-	"github.com/donaldgifford/proxmox-go-sdk/proxmox/pverr"
 	"github.com/donaldgifford/proxmox-go-sdk/proxmox/storage"
 	"github.com/donaldgifford/proxmox-go-sdk/proxmox/types"
 )
@@ -55,18 +53,38 @@ func (d *Declarer) Steps() []steps.Step {
 	return list
 }
 
+// findDatastore resolves an entry through the index. Existence is
+// never decided by the by-ID GET: real PVE answers it with HTTP 500
+// "storage 'x' does not exist" for a missing entry, not a 404 — the
+// same wart as the missing ACME plugin (INV-0001 deviations 4 and 8;
+// mockpve answers a clean 404, which is how the wrong branch passed
+// every test). The index carries every field the comparison needs,
+// digest included.
+func (d *Declarer) findDatastore(ctx context.Context, name string) (*storage.Datastore, bool, error) {
+	list, err := d.Storage.ListDatastores(ctx)
+	if err != nil {
+		return nil, false, fmt.Errorf("list storage: %w", err)
+	}
+	for i := range list {
+		if list[i].Storage == name {
+			return &list[i], true, nil
+		}
+	}
+	return nil, false, nil
+}
+
 // storageCheck reports done when the entry exists and no declared
 // field drifted. A type or path mismatch is an error, not pending:
 // both are fixed at creation, so converging them would mean deleting
 // an entry that may back live VM disks — that decision is the
 // operator's, never a side effect.
 func (d *Declarer) storageCheck(ctx context.Context, decl *config.PVEStorage) (bool, error) {
-	got, err := d.Storage.GetDatastore(ctx, decl.Name)
-	if errors.Is(err, pverr.ErrNotFound) {
-		return false, nil
-	}
+	got, ok, err := d.findDatastore(ctx, decl.Name)
 	if err != nil {
-		return false, fmt.Errorf("read storage %q: %w", decl.Name, err)
+		return false, err
+	}
+	if !ok {
+		return false, nil
 	}
 	if err := identityMismatch(decl, got); err != nil {
 		return false, err
@@ -75,17 +93,17 @@ func (d *Declarer) storageCheck(ctx context.Context, decl *config.PVEStorage) (b
 }
 
 func (d *Declarer) applyStorage(ctx context.Context, decl *config.PVEStorage) error {
-	got, err := d.Storage.GetDatastore(ctx, decl.Name)
-	switch {
-	case errors.Is(err, pverr.ErrNotFound):
+	got, ok, err := d.findDatastore(ctx, decl.Name)
+	if err != nil {
+		return err
+	}
+	if !ok {
 		d.logger().Info("creating storage", "storage", decl.Name,
 			"type", decl.Type, "pool", decl.Pool, "nodes", decl.Nodes)
 		if _, err := d.Storage.CreateDatastore(ctx, storageSpecFor(decl)); err != nil {
 			return fmt.Errorf("create storage %q: %w", decl.Name, err)
 		}
 		return nil
-	case err != nil:
-		return fmt.Errorf("read storage %q: %w", decl.Name, err)
 	}
 
 	if err := identityMismatch(decl, got); err != nil {
