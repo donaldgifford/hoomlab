@@ -270,7 +270,32 @@ At T2, bootstrap guarantees the gitops layer:
 
 ## API / Interface Changes
 
-Sketch, to be settled at implementation (schema names illustrative):
+Settled at implementation (2026-08-27, on the drill branch). The
+shipped surface matches the sketch below with two deliberate
+deferrals:
+
+- **Per-node `labels` is deferred.** Emit renders one machineconfig
+  template per role, and a label map that varies per node cannot ride
+  a per-role template the way the zone label rides the hostname
+  variable. The need arrives with GPU passthrough (hardware-tied
+  labels like `nvidia.com/gpu.present`), which is deferred with its
+  profile — implement per-class templates then, not speculatively.
+- **The raw patch escape hatch is deferred.** Nothing in the drill
+  needs it; the completion knobs cover the load-bearing set.
+
+Settled details beyond the sketch: `cilium` grows an optional
+`cli_version` (default: the cilium-cli release this CLI was tested
+against, v0.18.9); the cert-approver manifest is pinned in the binary
+(v0.11.1) and ships whenever the cluster block is present, because
+the emitted configs then set `rotate-server-certificates` and the two
+must travel together; `schematic_id` and `profile` blocks are
+mutually exclusive; the values file path resolves relative to the
+config file and is validated at load (KubePrism pair, kube-proxy
+replacement, and null top-level keys — the maglev check); boot assets
+stage under `boot/talos/<version>/<schematic>/`, one pair per unique
+profile set, and booty profile names stay `talos-control` /
+`talos-worker` until profiles split a role into classes (then a
+schematic short-ID suffix disambiguates).
 
 ```hcl
 talos {
@@ -295,7 +320,7 @@ talos {
   node "cp-01" {
     role     = "controlplane"
     profiles = ["base"]
-    labels   = { "example.com/rack" = "r740a" }
+    # labels = { ... }  — deferred with GPU passthrough, see above
     # existing: pve_node, vmid, mac, cores, memory, disk_gb,
     # storage, bridge
   }
@@ -353,21 +378,24 @@ source of truth.
   drill's boot network (Servers VLAN) has that egress —
   `https://quay.io/v2/` answers 401 from the booty host. The
   registry-mirrors surface stays future work, not a blocker.
-- **OQ-B — embedded default values.** Ship a known-good values file
-  inside bootstrap (operator file optional override), or require the
-  operator file always? Leaning embedded-default once the drill
-  proves a baseline.
+- **OQ-B — embedded default values.** *Narrowed 2026-08-27*: the
+  operator file is required, and the known-good baseline ships as
+  `tools/bootstrap/examples/cilium-values.yaml` (the archive's proven
+  values, maglev indentation restored, l2announcements dropped as
+  vestigial). Whether it becomes an embedded default stays open until
+  the drill proves it.
 - **OQ-C — version pin cadence.** Talos, Cilium, cilium-cli, and
   Gateway API CRDs are four independent pins with compatibility
   coupling. Where does the compatibility statement live?
-- **OQ-D — metrics-server and cert-approver ownership.** Bootstrap
-  (archive precedent, keeps `rotate-server-certificates` honest from
-  minute one) or gitops (purer boundary)? Default: bootstrap ships
-  cert-approver (it is machine-config-coupled), gitops ships
-  metrics-server.
-- **OQ-E — schematic granularity.** Per-profile-set images (fewer
-  factory builds, classes share images) vs per-node. Default:
-  per-unique-profile-set.
+- **OQ-D — metrics-server and cert-approver ownership.** *Resolved
+  2026-08-27 as the default said*: bootstrap ships cert-approver
+  (machine-config-coupled, pinned at v0.11.1 in the binary), gitops
+  ships metrics-server. The archive pulled both from unpinned `main`
+  / `latest` URLs; the pin is deliberate.
+- **OQ-E — schematic granularity.** *Resolved 2026-08-27*:
+  per-unique-profile-set, implemented — each distinct flattened
+  extension set resolves to one content-addressed factory schematic
+  and one staged image pair; classes share them.
 - **OQ-F — health semantics under `cni = "none"`.** Which
   `talos health` checks remain meaningful without a CNI, and does
   T2 still claim "Ready"? Only matters for the escape-hatch path.

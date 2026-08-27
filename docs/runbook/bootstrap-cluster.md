@@ -347,22 +347,36 @@ The tree:
 ```text
 bootstrap-out/booty/
 ├── catalog/
-│   ├── 00-variables.hcl        # talos version, install image, booty url
-│   ├── 10-profiles.hcl         # one boot recipe per role
+│   ├── 00-variables.hcl        # talos version, booty url
+│   ├── 10-profiles.hcl         # one boot recipe per node class
 │   └── 20-groups.hcl           # one group per VM, pinned by MAC
 ├── templates/talos/
 │   ├── controlplane.yaml.tmpl  # complete, secret-bearing machineconfigs
 │   └── worker.yaml.tmpl
-├── boot/talos/<version>/
+├── boot/talos/<version>/<schematic>/
 │   ├── vmlinuz + .sha256       # Talos Image Factory kernel
 │   └── initramfs.xz + .sha256
 ├── embed.ipxe                  # the chain script ipxe.efi embeds
 └── booty-run.sh                # ready-to-run launcher
 ```
 
-Emission is pure rendering, so re-running is always safe — the check is
-a byte-diff against what is on disk, and staged boot assets are left
-alone. A no-op run says:
+With `profile` blocks in the config, emit first resolves each node's
+flattened extension set to an Image Factory schematic (a POST to the
+factory; IDs are content-addressed, so re-runs get the same answer)
+and stages one kernel/initramfs pair per unique set under its
+schematic directory — the extensions are baked into those images and
+the matching installer image, which is the only place they can be.
+With a `talos cluster` block, the machineconfig templates additionally
+carry the completion surface: topology labels, kubelet
+serving-certificate rotation plus its approver manifest, and — for
+`cni = "cilium"` — CNI none, kube-proxy disabled, the pinned Gateway
+API CRDs, and the cilium-install Job with your validated values file
+sealed in as a ConfigMap. Cilium then installs itself during `talos
+bootstrap` with no operator action.
+
+Emission is deterministic rendering, so re-running is always safe —
+the check is a byte-diff against what is on disk, and staged boot
+assets are left alone. A no-op run says:
 
 ```text
 ✓ booty tree at bootstrap-out/booty is up to date (nothing to do)

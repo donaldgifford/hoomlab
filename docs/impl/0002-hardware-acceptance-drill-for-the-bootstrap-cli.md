@@ -432,6 +432,20 @@ the future test environment's design.
       `https://quay.io/v2/` answers 401 from the booty host —
       DESIGN-0002 OQ-A resolved, the segment has the egress the
       Cilium install Job needs
+- [x] DESIGN-0002 emit implementation (the 2026-08-26 Talos-scope
+      decision: Cilium is in-drill) — **done 2026-08-27** (commits
+      `e732015`, `9e3b9c0`, `1417731`): the `talos cluster` /
+      `cilium` / `profile` config surface with load-time values
+      validation (KubePrism pair, kube-proxy replacement, and the
+      null-top-level-key check seeded from the archive's maglev bug);
+      the completion machine-config surface (topology labels, kubelet
+      serving-cert rotation + pinned approver v0.11.1, and for cilium
+      CNI none + kube-proxy off + pinned Gateway API CRDs + the Gen 2
+      inline install Job); profile→schematic derivation with
+      per-class, schematic-scoped boot assets. Example config and the
+      known-good values baseline ship in `tools/bootstrap/examples/`;
+      per-node labels and the raw patch escape hatch recorded in
+      DESIGN-0002 as deferred
 
 #### Success Criteria
 
@@ -452,6 +466,14 @@ re-run, with INV-0001 as the log.
 
 #### Tasks
 
+- [ ] Add the completion surface to the drill config — `cluster` block
+      (cni cilium, v1.18.5 / Gateway API v1.4.1, values file adapted
+      from `examples/cilium-values.yaml`) and the `base` profile
+      (qemu-guest-agent + iscsi-tools) referenced by all six nodes —
+      then `validate`, re-run `talos emit` + `talos ipxe`, rsync the
+      tree to ns1, restart booty, and re-verify the step-7 curls: the
+      boot assets move to schematic-scoped paths and now carry the
+      extensions baked in
 - [ ] `bootstrap talos vms`: every configured VM created on its node
       and started
 - [ ] Watch the full first-boot cycle per VM (booty logs +

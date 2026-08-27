@@ -1,0 +1,65 @@
+# Cilium Helm values consumed by the emitted cilium-install Job
+# (DESIGN-0002 Cilium delivery). This is the known-good baseline for
+# Cilium on Talos; extend it, don't start from scratch. bootstrap
+# validates this file at config load: kubeProxyReplacement must be
+# true (the emitted machineconfigs disable kube-proxy), the KubePrism
+# pair below must be exactly localhost:7445, and a top-level key with
+# no value is rejected — a lost indent silently turns a nested
+# setting into a bogus key the chart ignores.
+#
+# Chart reference:
+# https://github.com/cilium/cilium/blob/main/install/kubernetes/cilium/values.yaml
+---
+kubeProxyReplacement: true
+
+# Talos KubePrism: the local API server balancer every node runs on
+# 7445 — the only API server address that exists before the CNI does.
+k8sServiceHost: localhost
+k8sServicePort: 7445
+
+# Talos ships no cgroup v1 mount point and needs these capability
+# lists (Cilium-on-Talos docs).
+securityContext:
+  capabilities:
+    ciliumAgent:
+      - CHOWN
+      - KILL
+      - NET_ADMIN
+      - NET_RAW
+      - IPC_LOCK
+      - SYS_ADMIN
+      - SYS_RESOURCE
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    cleanCiliumState:
+      - NET_ADMIN
+      - SYS_ADMIN
+      - SYS_RESOURCE
+cgroup:
+  autoMount:
+    enabled: false
+  hostRoot: /sys/fs/cgroup
+
+# Legacy host routing keeps Talos's host DNS (a link-local address on
+# the node) reachable from pods; see the Talos host-dns guide and
+# Cilium's eBPF host-routing tuning note.
+bpf:
+  hostLegacyRouting: true
+  masquerade: true
+
+ipam:
+  mode: kubernetes
+
+# Enabled but deliberately unconfigured (DESIGN-0002 T2→T3 contract):
+# the first BGP peering and the first Gateway are the gitops layer's
+# first acts, in the same change set as the router side.
+bgpControlPlane:
+  enabled: true
+gatewayAPI:
+  enabled: true
+  enableAlpn: true
+
+loadBalancer:
+  algorithm: maglev
