@@ -534,25 +534,42 @@ converges on no-op. Then the findings become durable.
 
 #### Tasks
 
-- [ ] Re-run every stage in order against the live cluster
+- [x] Re-run every stage in order against the live cluster
       (`pve form`, `pve storage`, `pve certs`, `talos secrets`,
       `talos emit`, `talos ipxe`, `talos vms`, `talos bootstrap`,
       `talos health` — this list originally omitted `pve storage`,
       which postdates it; the CLI's own `next:` chain is the
       authority); fill INV-0001's convergence table with the applied
-      count per stage
-- [ ] For any stage that applied something: diagnose the re-fired
+      count per stage — **done 2026-08-28**: zeros across all nine
+      stages
+- [x] For any stage that applied something: diagnose the re-fired
       step, fix its Check with a regression test reproducing the
-      false-pending, re-run to no-op
-- [ ] Re-image spot-check: wipe one worker's disk and reboot; confirm
-      it PXE-boots, reinstalls, and rejoins — the runbook's re-imaging
-      claim, verified
-- [ ] Close out the deviations table: every row has a resolution
+      false-pending, re-run to no-op — **done 2026-08-28**: the one
+      non-zero (`talos emit`, 1 applied) was real input drift — the
+      launcher template's broadcast-route amendment postdated the
+      deployed tree — not a false-pending; immediate re-run 0
+- [x] Re-image spot-check: wipe one worker's disk and reboot; confirm
+      it PXE-boots, reinstalls, and rejoins — **done 2026-08-28**:
+      `talosctl reset --wipe-mode all --reboot` on work01, then a
+      fully unattended replay of the boot chain (proxyDHCP 12:49:25 →
+      machine-config served 12:49:47, the embedded script's own
+      `dhcp` visible in booty's log as the second proxyDHCP round)
+      and a rejoin to `Ready` with zero human input — the runbook's
+      re-imaging claim, verified. Note for operators: the Node
+      object's `AGE` does not reset; the machine is re-imaged beneath
+      a persistent API object
+- [x] Close out the deviations table: every row has a resolution
       (code fix with test, runbook fix, or documented
-      accepted-behavior note)
-- [ ] All gates green on the fold-back branch: `just bootstrap-lint` /
+      accepted-behavior note) — **swept 2026-08-28**: all 14 rows
+      close with a commit-referenced code fix, a runbook amendment,
+      or a deliberate-acceptance note (deviation 1's dry-run UX
+      finding stands recorded as a candidate improvement)
+- [x] All gates green on the fold-back branch: `just bootstrap-lint` /
       `bootstrap-test` / `bootstrap-build`, `govulncheck`,
-      `markdownlint`, `yamllint`
+      `markdownlint`, `yamllint` — **done 2026-08-28**: lint 0
+      issues, race-detector suite green, build clean, govulncheck 0
+      affecting (2 known in required-but-uncalled modules),
+      markdownlint 16 files clean, yamllint clean
 
 #### Success Criteria
 
