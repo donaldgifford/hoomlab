@@ -2,13 +2,11 @@ package pve
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 
 	"github.com/donaldgifford/hoomlab/tools/bootstrap/internal/config"
 	"github.com/donaldgifford/hoomlab/tools/bootstrap/internal/steps"
-	"github.com/donaldgifford/proxmox-go-sdk/proxmox/pverr"
 	"github.com/donaldgifford/proxmox-go-sdk/proxmox/qemu"
 	"github.com/donaldgifford/proxmox-go-sdk/proxmox/tasks"
 	"github.com/donaldgifford/proxmox-go-sdk/proxmox/types"
@@ -87,30 +85,42 @@ func (p *Provisioner) Steps() []steps.Step {
 	return list
 }
 
+// findVM resolves a VM through its node's index. Existence is never
+// decided by the by-ID status GET: real PVE answers it with HTTP 500
+// "Configuration file '…/<vmid>.conf' does not exist" for a missing
+// VM, not a 404 — the third instance of the INV-0001 deviation 4/8
+// class (mockpve answers a clean 404, which is how the Get-based
+// check passed every test and then died on the first live run). The
+// index entry carries the power state too, so both checks read from
+// it.
+func (p *Provisioner) findVM(ctx context.Context, node *config.TalosNode) (*qemu.VM, bool, error) {
+	list, err := p.QEMU(node.PVENode).List(ctx)
+	if err != nil {
+		return nil, false, fmt.Errorf("list vms on %s: %w", node.PVENode, err)
+	}
+	for i := range list {
+		if int(list[i].VMID) == node.VMID {
+			return &list[i], true, nil
+		}
+	}
+	return nil, false, nil
+}
+
 // vmExists reports whether the VM is already defined on its node.
 func (p *Provisioner) vmExists(ctx context.Context, node *config.TalosNode) (bool, error) {
-	_, err := p.QEMU(node.PVENode).Get(ctx, node.VMID)
-	if errors.Is(err, pverr.ErrNotFound) {
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("read vm %d on %s: %w", node.VMID, node.PVENode, err)
-	}
-	return true, nil
+	_, ok, err := p.findVM(ctx, node)
+	return ok, err
 }
 
 // vmRunning reports whether the VM is up. A VM that does not exist yet
 // is not an error here: the create step runs first in the same stage,
 // and reporting "not running" keeps the survey readable in dry-run.
 func (p *Provisioner) vmRunning(ctx context.Context, node *config.TalosNode) (bool, error) {
-	status, err := p.QEMU(node.PVENode).Get(ctx, node.VMID)
-	if errors.Is(err, pverr.ErrNotFound) {
-		return false, nil
+	vm, ok, err := p.findVM(ctx, node)
+	if err != nil || !ok {
+		return false, err
 	}
-	if err != nil {
-		return false, fmt.Errorf("read vm %d on %s: %w", node.VMID, node.PVENode, err)
-	}
-	return status.Status == types.PowerStateRunning, nil
+	return vm.Status == types.PowerStateRunning, nil
 }
 
 func (p *Provisioner) applyCreate(ctx context.Context, node *config.TalosNode) error {

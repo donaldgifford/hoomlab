@@ -2,7 +2,11 @@ package pve_test
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -296,5 +300,92 @@ func TestVMsNoNodesIsEmptyStage(t *testing.T) {
 	p := &pve.Provisioner{Cluster: cfg}
 	if stage := p.Steps(); len(stage) != 0 {
 		t.Errorf("got %d steps for a cluster with no talos nodes, want 0", len(stage))
+	}
+}
+
+// wartClient wires a client through a wrapper that restores real
+// PVE's by-ID answer for a missing VM: HTTP 500 "Configuration file
+// '…' does not exist", never mockpve's clean 404 (INV-0001 deviation
+// 10, the third instance of the deviation 4/8 class — by-ID GETs are
+// not existence probes). Existence for the wart itself is read from
+// the mock's own index, the same source of truth the fixed code uses.
+func wartClient(t *testing.T, mock *mockpve.Server) api.Client {
+	t.Helper()
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/status/current") {
+			// /api2/json/nodes/<node>/qemu/<vmid>/status/current
+			parts := strings.Split(r.URL.Path, "/")
+			node, vmid := parts[4], parts[6]
+			if !mockHasVM(r.Context(), t, mock, node, vmid) {
+				http.Error(w, fmt.Sprintf(
+					"Configuration file 'nodes/%s/qemu-server/%s.conf' does not exist",
+					node, vmid), http.StatusInternalServerError)
+				return
+			}
+		}
+		mock.ServeHTTP(w, r)
+	})
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	client, err := api.New(srv.URL, api.TokenCredentials("root@pam!mock", "mock-secret"))
+	if err != nil {
+		t.Fatalf("wire client: %v", err)
+	}
+	return client
+}
+
+// mockHasVM asks the mock's list endpoint whether a VM exists.
+func mockHasVM(ctx context.Context, t *testing.T, mock *mockpve.Server, node, vmid string) bool {
+	t.Helper()
+	req := httptest.NewRequestWithContext(
+		ctx, http.MethodGet, "/api2/json/nodes/"+node+"/qemu", http.NoBody)
+	req.Header.Set("Authorization", "PVEAPIToken=root@pam!mock=mock-secret")
+	rec := httptest.NewRecorder()
+	mock.ServeHTTP(rec, req)
+
+	var envelope struct {
+		Data []struct {
+			VMID json.Number `json:"vmid"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("parse mock vm list: %v (body: %s)", err, rec.Body.String())
+	}
+	for _, vm := range envelope.Data {
+		if vm.VMID.String() == vmid {
+			return true
+		}
+	}
+	return false
+}
+
+// TestVMsSurviveByIDGetWart reproduces the drill's first Phase 4
+// failure: against a server with the real 500-on-missing wart, the
+// full stage must still converge — fresh run creates and starts
+// everything, re-run applies nothing. The Get-based checks this
+// replaced die in the first Check here, exactly as they did live.
+func TestVMsSurviveByIDGetWart(t *testing.T) {
+	cfg := vmsCluster()
+	mock := mockpve.New()
+	mock.SeedVersion("9.2.1", "9.2", "test")
+	for _, n := range cfg.PVE.Nodes {
+		mock.AddNode(n.Name)
+	}
+	client := wartClient(t, mock)
+
+	var logBuf strings.Builder
+	p := &pve.Provisioner{
+		Cluster: cfg,
+		QEMU:    qemuFor(client),
+		Tasks:   tasks.NewService(client),
+		Log:     slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})),
+	}
+
+	if res := runVMs(t, p); res.Applied != 8 {
+		t.Errorf("fresh run applied %d steps, want 8", res.Applied)
+	}
+	if res := runVMs(t, p); res.Applied != 0 {
+		t.Errorf("second run applied %d steps, want 0", res.Applied)
 	}
 }
