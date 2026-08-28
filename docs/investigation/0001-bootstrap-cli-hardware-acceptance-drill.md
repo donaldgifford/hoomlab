@@ -248,15 +248,15 @@ Every stage re-run; each should apply nothing.
 
 | Stage | Steps applied on second pass | Notes |
 | --- | --- | --- |
-| `pve form` | 0 of 4 (2026-08-26) | create + both joins + quorate all skip against the live three-node cluster |
-| `pve storage` | 0 of 2 (2026-08-27) | first live re-run after the applying run — zero rotation on real PVE's read-back (server-materialized `mountpoint`, set-ordered lists, sparse via Extra) on the stage's first day; local-workspace build against SDK PR #30 |
-| `pve certs` | 0 of 8 (2026-08-26) | account, plugin, and per-node config/cert ×3 all skip with production certificates installed; run back to back with `pve form`. One root@pam login per run remains (the account-directory read fallback) — expected, by design |
-| `talos secrets` | | |
-| `talos emit` | | |
-| `talos ipxe` | | |
-| `talos vms` | | |
-| `talos bootstrap` | | |
-| `talos health` | | |
+| `pve form` | 0 of 4 (2026-08-26; re-confirmed 2026-08-28 in the full-order Phase 5 pass) | create + both joins + quorate all skip against the live three-node cluster |
+| `pve storage` | 0 of 2 (2026-08-27; re-confirmed 2026-08-28) | first live re-run after the applying run — zero rotation on real PVE's read-back (server-materialized `mountpoint`, set-ordered lists, sparse via Extra) on the stage's first day; originally a local-workspace build against SDK PR #30, the 2026-08-28 confirmation is the mainline binary |
+| `pve certs` | 0 of 8 (2026-08-26; re-confirmed 2026-08-28) | account, plugin, and per-node config/cert ×3 all skip with production certificates installed; run back to back with `pve form`. One root@pam login per run remains (the account-directory read fallback) — expected, by design |
+| `talos secrets` | 0 (2026-08-28) | "already exists at secrets.yaml — leaving it alone" — the never-overwrite rule holding |
+| `talos emit` | 1, then 0 (2026-08-28) | the one legitimate non-zero of the pass: the launcher template gained the broadcast-route comment block (`956fc9d`) *after* the deployed tree was emitted, so `emit-artifacts` re-fired on real input drift — not a false-pending. Immediate re-run: 0, tree converged at the amended template. `boot-assets` skipped both times (byte-identical, TOFU sidecars intact). ns1's copy diverges only in `booty-run.sh` comments, a file booty never serves — no restart needed |
+| `talos ipxe` | 0 (2026-08-28) | embed script byte-identical → stamp matches; no rebuild |
+| `talos vms` | 0 of 12 (2026-08-28) | all six exist and run via the index-based checks (deviation 10's fix). Documented exception stands: the live six carry hand-patched `scsihw`/`agent` (deviations 12/14) invisible to the existence-based Check — any future create emits them from spec |
+| `talos bootstrap` | 0 of 3 (2026-08-28) | the membership probe answered in ~40 ms with three members — no 15 s wait, no bootstrap re-issued; credentials untouched |
+| `talos health` | pass (2026-08-28) | full battery green in ~120 ms, `kube-proxy: SKIP` by design |
 
 Any stage that applies something on the second pass is a convergence
 bug: record which step re-fired and why.

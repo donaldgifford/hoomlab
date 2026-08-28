@@ -535,10 +535,12 @@ converges on no-op. Then the findings become durable.
 #### Tasks
 
 - [ ] Re-run every stage in order against the live cluster
-      (`pve form`, `pve certs`, `talos secrets`, `talos emit`,
-      `talos ipxe`, `talos vms`, `talos bootstrap`, `talos health`);
-      fill INV-0001's convergence table with the applied count per
-      stage
+      (`pve form`, `pve storage`, `pve certs`, `talos secrets`,
+      `talos emit`, `talos ipxe`, `talos vms`, `talos bootstrap`,
+      `talos health` — this list originally omitted `pve storage`,
+      which postdates it; the CLI's own `next:` chain is the
+      authority); fill INV-0001's convergence table with the applied
+      count per stage
 - [ ] For any stage that applied something: diagnose the re-fired
       step, fix its Check with a regression test reproducing the
       false-pending, re-run to no-op
