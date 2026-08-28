@@ -505,9 +505,10 @@ re-run, with INV-0001 as the log.
       2026-08-28**: `✓ cluster "shart" is healthy` after
       deviation 14's rolling guest-agent remediation; `kube-proxy:
       SKIP` in the battery is Cilium's replacement doing its job
-- [ ] `kubectl --kubeconfig <output>/out/kubeconfig get nodes`: every
-      configured node `Ready` — fill INV-0001's 12-step drill table as
-      each step lands (rows 8–11 recorded; row 12 awaits this check)
+- [x] `kubectl --kubeconfig <output>/out/kubeconfig get nodes`: every
+      configured node `Ready` — **done 2026-08-28**: 6/6 `Ready`
+      (kubelet v1.36.3, Talos v1.13.8, IPs exactly as reserved); all
+      12 INV-0001 drill rows filled
 - [x] For every failure along the way: deviations table first, then
       the fix — CLI defects get a regression test and a rebuilt
       binary; environment/config mistakes get a runbook amendment if
