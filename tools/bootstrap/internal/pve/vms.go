@@ -30,6 +30,14 @@ const (
 	machineType = "q35"
 	// biosType selects UEFI, which is what iPXE's .efi binary needs.
 	biosType = "ovmf"
+	// scsiHW pins the disk controller to VirtIO SCSI. Left unset, the
+	// API default is the emulated LSI 53C895A, and the Talos kernel
+	// ships no driver for it (CONFIG_SCSI_SYM53C8XX_2 is not set) —
+	// /dev/sda does not exist inside the guest, the install sequence
+	// dies on lstat, and the node reboots back to PXE forever while
+	// the VM looks healthy from the host. The UI wizard defaults to
+	// VirtIO SCSI, which is why booty's walkthrough never met the LSI.
+	scsiHW = "virtio-scsi-single"
 	// rngDevice adds a VirtIO RNG. Post-PixieFail EDK2 silently drops
 	// the PXE boot option without an entropy source — the VM simply
 	// never offers to network boot, with no error anywhere.
@@ -188,6 +196,7 @@ func VMSpec(node *config.TalosNode) *qemu.CreateSpec {
 		Extra: map[string]string{
 			"bios":    biosType,
 			"machine": machineType,
+			"scsihw":  scsiHW,
 			// The EFI vars disk must NOT carry pre-enrolled Secure Boot
 			// keys: they reject the unsigned iPXE binary and the Talos
 			// kernel, so the node refuses to boot what we serve it.

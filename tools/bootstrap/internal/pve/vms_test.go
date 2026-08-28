@@ -293,6 +293,22 @@ func TestVMSpecMACMatchesConfig(t *testing.T) {
 	}
 }
 
+// TestVMSpecPinsVirtIOSCSI pins the fix for INV-0001 deviation 12.
+// With scsihw unset, PVE's API default is the emulated LSI 53C895A —
+// a controller the Talos kernel has no driver for (the UI wizard
+// defaults to VirtIO SCSI, which is why booty's walkthrough never hit
+// it). The guest consequence is total: /dev/sda does not exist, the
+// install sequence dies on lstat, and the node reboots back to PXE
+// forever while every host-side check reports a healthy VM.
+func TestVMSpecPinsVirtIOSCSI(t *testing.T) {
+	cfg := vmsCluster()
+	spec := pve.VMSpec(&cfg.Talos.Nodes[0])
+	if got := spec.Extra["scsihw"]; got != "virtio-scsi-single" {
+		t.Fatalf("scsihw = %q, want %q (PVE's API default is LSI 53C895A, invisible to Talos)",
+			got, "virtio-scsi-single")
+	}
+}
+
 // TestVMsNoNodesIsEmptyStage guards the degenerate config rather than
 // letting it panic somewhere downstream.
 func TestVMsNoNodesIsEmptyStage(t *testing.T) {
