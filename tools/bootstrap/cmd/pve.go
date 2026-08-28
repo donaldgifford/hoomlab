@@ -1,21 +1,67 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/spf13/cobra"
 
 	"github.com/donaldgifford/hoomlab/tools/bootstrap/internal/pve"
 	"github.com/donaldgifford/hoomlab/tools/bootstrap/internal/steps"
+	"github.com/donaldgifford/proxmox-go-sdk/proxmox/nodes"
 )
 
 func newPVECmd(opts *rootOptions) *cobra.Command {
 	root := &cobra.Command{
 		Use:   "pve",
-		Short: "Proxmox cluster stages: formation and certificates",
+		Short: "Proxmox cluster stages: formation, storage, and certificates",
 	}
-	root.AddCommand(newPVEFormCmd(opts), newPVECertsCmd(opts))
+	root.AddCommand(newPVEFormCmd(opts), newPVEStorageCmd(opts), newPVECertsCmd(opts))
 	return root
+}
+
+func newPVEStorageCmd(opts *rootOptions) *cobra.Command {
+	return &cobra.Command{
+		Use:   "storage",
+		Short: "Declare the cluster storage the Talos VMs depend on",
+		Long: `storage converges the config's storage blocks into PVE cluster
+storage entries: a missing entry is created, and drifted declared
+fields (pool, content, nodes, sparse, disable) are updated in place.
+Fields a block does not declare are never touched, so restricting
+the stock local-zfs to one node leaves its content types alone.
+
+Identity is fixed: an existing entry whose type or path disagrees
+with the config is an error, never a delete-and-recreate — deletion
+could orphan VM disks, so that call stays with the operator.
+
+With no storage blocks declared the stage does nothing.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			cluster, err := loadCluster(cmd, opts)
+			if err != nil {
+				return err
+			}
+			client, err := pve.NewClient(cmd.Context(), cluster)
+			if err != nil {
+				return err
+			}
+			declarer := &pve.Declarer{Cluster: cluster, Storage: client.Storage()}
+			runner := steps.Runner{DryRun: opts.dryRun, Out: cmd.OutOrStdout()}
+			res, err := runner.Run(cmd.Context(), declarer.Steps())
+			if err != nil {
+				return fmt.Errorf("pve storage: %w", err)
+			}
+			if opts.dryRun {
+				return nil
+			}
+			if _, err := fmt.Fprintf(cmd.OutOrStdout(),
+				"✓ %d storage declarations converged (%d steps applied)\nnext: bootstrap pve certs\n",
+				len(cluster.PVE.Storage), res.Applied); err != nil {
+				return fmt.Errorf("write summary: %w", err)
+			}
+			return nil
+		},
+	}
 }
 
 func newPVECertsCmd(opts *rootOptions) *cobra.Command {
@@ -44,6 +90,13 @@ provider token is detected and pushed the same way.`,
 				Cluster: cluster,
 				Nodes:   client.Nodes(),
 				Tasks:   client.Tasks(),
+				DialRoot: func(ctx context.Context) (*nodes.Service, error) {
+					root, err := pve.NewRootClient(ctx, cluster)
+					if err != nil {
+						return nil, err
+					}
+					return root.Nodes(), nil
+				},
 			}
 			runner := steps.Runner{DryRun: opts.dryRun, Out: cmd.OutOrStdout()}
 			res, err := runner.Run(cmd.Context(), certifier.Steps())
@@ -94,7 +147,7 @@ configuration — nodes other than the primary must be fresh installs.`,
 				return nil
 			}
 			if _, err := fmt.Fprintf(cmd.OutOrStdout(),
-				"✓ cluster %q formed and quorate (%d of %d steps applied)\nnext: bootstrap pve certs\n",
+				"✓ cluster %q formed and quorate (%d of %d steps applied)\nnext: bootstrap pve storage\n",
 				cluster.Name, res.Applied, len(stage)); err != nil {
 				return fmt.Errorf("write summary: %w", err)
 			}

@@ -3,6 +3,8 @@ package config
 import (
 	"fmt"
 	"net/url"
+	"strconv"
+	"strings"
 
 	"github.com/hashicorp/hcl/v2"
 )
@@ -15,6 +17,14 @@ const dnsCloudflare = "cloudflare"
 // below 100 are reserved for internal use.
 const pveVMIDMin = 100
 
+// The valid 802.1Q VLAN ID range: 0 is priority-tagged-only and 4095
+// is reserved, so a talos node's vlan must land inside this window
+// (or be omitted entirely for untagged).
+const (
+	vlanMin = 1
+	vlanMax = 4094
+)
+
 // ValidateAndNormalize runs the semantic checks gohcl decoding cannot
 // express and returns every violation as a diagnostic naming the
 // offending block and field. The "normalize" in the name is real: it
@@ -24,8 +34,226 @@ const pveVMIDMin = 100
 // details only.
 func (c *Cluster) ValidateAndNormalize() hcl.Diagnostics {
 	diags := c.validatePVE()
+	diags = append(diags, c.validateStorage()...)
 	diags = append(diags, c.validateACME()...)
 	diags = append(diags, c.validateTalos()...)
+	diags = append(diags, c.validateTalosCluster()...)
+	diags = append(diags, c.validateProfiles()...)
+	return diags
+}
+
+// validateTalosCluster checks the completion surface: the cni value
+// is one of the known three (empty meaning flannel), cilium requires
+// its pin block, and a cilium block without cni = "cilium" is an
+// error rather than silently inert config.
+func (c *Cluster) validateTalosCluster() hcl.Diagnostics {
+	tc := c.Talos.Cluster
+	if tc == nil {
+		return nil
+	}
+	var diags hcl.Diagnostics
+
+	switch tc.CNI {
+	case "", CNIFlannel, CNINone:
+	case CNICilium:
+		if tc.Cilium == nil {
+			diags = append(diags, errf("Missing cilium block",
+				"talos cluster: cni %q requires a cilium block pinning version, values, and gateway_api_version.",
+				CNICilium))
+		}
+	default:
+		diags = append(diags, errf("Invalid talos cluster cni",
+			"talos cluster: cni %q must be %q, %q, or %q (empty means %q).",
+			tc.CNI, CNICilium, CNIFlannel, CNINone, CNIFlannel))
+	}
+
+	if tc.Cilium != nil && tc.CNI != CNICilium {
+		diags = append(diags, errf("Cilium block without cni cilium",
+			"talos cluster: a cilium block is declared but cni is %q; set cni = %q or drop the block.",
+			tc.CNI, CNICilium))
+	}
+	if tc.Cilium != nil {
+		for _, pin := range []struct{ name, value string }{
+			{"version", tc.Cilium.Version},
+			{"gateway_api_version", tc.Cilium.GatewayAPIVersion},
+		} {
+			if pin.value != "" && !strings.HasPrefix(pin.value, "v") {
+				diags = append(diags, errf("Unprefixed version pin",
+					"talos cluster cilium: %s %q needs the \"v\" prefix — it lands verbatim in image references and manifest URLs.",
+					pin.name, pin.value))
+			}
+		}
+		diags = append(diags, validateGatewayAPIFloor(tc.Cilium.GatewayAPIVersion)...)
+	}
+	return diags
+}
+
+// The oldest Gateway API release whose CRD channel layout matches the
+// manifest URLs emit renders: TLSRoute and BackendTLSPolicy graduated
+// to the standard channel in v1.5, and the emitted list points there.
+// An older pin would emit URLs that 404 — at node boot, when Talos
+// fetches extraManifests, which is the worst possible place to learn
+// it.
+const (
+	gatewayAPIFloorMajor = 1
+	gatewayAPIFloorMinor = 5
+)
+
+// validateGatewayAPIFloor enforces the CRD-layout floor on a
+// v-prefixed pin; malformed pins get their own diagnostic. A pin that
+// failed the prefix check above is skipped — one error per mistake.
+func validateGatewayAPIFloor(pin string) hcl.Diagnostics {
+	if !strings.HasPrefix(pin, "v") {
+		return nil
+	}
+	parts := strings.SplitN(strings.TrimPrefix(pin, "v"), ".", 3)
+	if len(parts) < 2 {
+		return hcl.Diagnostics{errf("Invalid gateway_api_version",
+			"talos cluster cilium: gateway_api_version %q is not a vMAJOR.MINOR[.PATCH] release.", pin)}
+	}
+	major, errMajor := strconv.Atoi(parts[0])
+	minor, errMinor := strconv.Atoi(parts[1])
+	if errMajor != nil || errMinor != nil {
+		return hcl.Diagnostics{errf("Invalid gateway_api_version",
+			"talos cluster cilium: gateway_api_version %q is not a vMAJOR.MINOR[.PATCH] release.", pin)}
+	}
+	if major < gatewayAPIFloorMajor ||
+		(major == gatewayAPIFloorMajor && minor < gatewayAPIFloorMinor) {
+		return hcl.Diagnostics{
+			errf(
+				"Gateway API pin below the CRD-layout floor",
+				"talos cluster cilium: gateway_api_version %q predates v%d.%d, where TLSRoute and BackendTLSPolicy joined the standard channel — the emitted CRD URLs would 404 at node boot.",
+				pin,
+				gatewayAPIFloorMajor,
+				gatewayAPIFloorMinor,
+			),
+		}
+	}
+	return nil
+}
+
+// validateProfiles checks the extension profiles: unique names,
+// non-empty org/name extension entries, node references that resolve,
+// and mutual exclusion with schematic_id — one pins a single image
+// for every node, the other derives images, and declaring both makes
+// the config's intent ambiguous.
+func (c *Cluster) validateProfiles() hcl.Diagnostics {
+	var diags hcl.Diagnostics
+
+	if len(c.Talos.Profiles) > 0 && c.Talos.SchematicID != "" {
+		diags = append(diags, errf("Both schematic_id and profiles declared",
+			"talos: schematic_id pins one image for every node while profile blocks derive images from extensions; declare one or the other."))
+	}
+
+	declared := make(map[string]struct{}, len(c.Talos.Profiles))
+	for i := range c.Talos.Profiles {
+		p := &c.Talos.Profiles[i]
+		if _, dup := declared[p.Name]; dup {
+			diags = append(diags, errf("Duplicate profile name",
+				"talos profile %q is declared more than once.", p.Name))
+			continue
+		}
+		declared[p.Name] = struct{}{}
+
+		if len(p.Extensions) == 0 {
+			diags = append(diags, errf("Empty profile",
+				"talos profile %q declares no extensions; a profile exists to bake extensions into the image.", p.Name))
+		}
+		for _, ext := range p.Extensions {
+			if !strings.Contains(ext, "/") || strings.ContainsAny(ext, " \t") {
+				diags = append(diags, errf("Invalid extension name",
+					"talos profile %q: extension %q must be the factory's org/name form, e.g. \"siderolabs/qemu-guest-agent\".",
+					p.Name, ext))
+			}
+		}
+	}
+
+	referenced := make(map[string]struct{}, len(declared))
+	for i := range c.Talos.Nodes {
+		n := &c.Talos.Nodes[i]
+		for _, ref := range n.Profiles {
+			if _, ok := declared[ref]; !ok {
+				diags = append(diags, errf("Unknown profile reference",
+					"talos node %q: profiles entry %q names no declared profile block.", n.Name, ref))
+				continue
+			}
+			referenced[ref] = struct{}{}
+		}
+	}
+	// A declared profile no node references bakes nothing into any
+	// image — near-certainly a config that added the block and forgot
+	// the node attributes, which fails silently as vanilla boot images
+	// missing their extensions.
+	for i := range c.Talos.Profiles {
+		name := c.Talos.Profiles[i].Name
+		if _, ok := referenced[name]; !ok {
+			diags = append(diags, errf("Unreferenced profile",
+				"talos profile %q is referenced by no node; add profiles = [%q] to the nodes it should shape, or drop the block.",
+				name, name))
+		}
+	}
+	return diags
+}
+
+// validateStorage checks the declared storage blocks: unique names,
+// the per-type required backing field, and node restrictions that
+// name declared pve nodes. When any block is declared, every talos
+// node's storage must reference one — declaring storage opts the
+// config into CLI-managed storage, and a dangling reference is then
+// a typo, not a pre-existing entry. With zero blocks the cross-check
+// is off: the config may rely on storage that already exists.
+func (c *Cluster) validateStorage() hcl.Diagnostics {
+	var diags hcl.Diagnostics
+
+	pveNodes := make(map[string]struct{}, len(c.PVE.Nodes))
+	for _, n := range c.PVE.Nodes {
+		pveNodes[n.Name] = struct{}{}
+	}
+
+	declared := make(map[string]struct{}, len(c.PVE.Storage))
+	for i := range c.PVE.Storage {
+		s := &c.PVE.Storage[i]
+		if _, dup := declared[s.Name]; dup {
+			diags = append(diags, errf("Duplicate storage name",
+				"pve storage %q is declared more than once.", s.Name))
+			continue
+		}
+		declared[s.Name] = struct{}{}
+
+		switch s.Type {
+		case "":
+			diags = append(diags, errf("Missing storage type",
+				"pve storage %q: type is required.", s.Name))
+		case "zfspool":
+			if s.Pool == "" {
+				diags = append(diags, errf("Missing storage pool",
+					"pve storage %q: type zfspool requires pool (the dataset, e.g. \"fast/vm\").", s.Name))
+			}
+		case "dir":
+			if s.Path == "" {
+				diags = append(diags, errf("Missing storage path",
+					"pve storage %q: type dir requires path.", s.Name))
+			}
+		}
+
+		for _, n := range s.Nodes {
+			if _, ok := pveNodes[n]; !ok {
+				diags = append(diags, errf("Unknown storage node restriction",
+					"pve storage %q: nodes entry %q names no declared pve node.", s.Name, n))
+			}
+		}
+	}
+
+	if len(c.PVE.Storage) > 0 {
+		for i := range c.Talos.Nodes {
+			n := &c.Talos.Nodes[i]
+			if _, ok := declared[n.Storage]; !ok {
+				diags = append(diags, errf("Undeclared talos node storage",
+					"talos node %q: storage %q matches no declared pve storage block (declaring any storage opts into CLI-managed storage).",
+					n.Name, n.Storage))
+			}
+		}
+	}
 	return diags
 }
 
@@ -109,6 +337,12 @@ func (c *Cluster) validateTalos() hcl.Diagnostics {
 			diags = append(diags, errf("Invalid talos node vmid",
 				"talos node %q: vmid %d is below %d, the lowest ID Proxmox allows for guests.",
 				n.Name, n.VMID, pveVMIDMin))
+		}
+
+		if n.VLAN != 0 && (n.VLAN < vlanMin || n.VLAN > vlanMax) {
+			diags = append(diags, errf("Invalid talos node vlan",
+				"talos node %q: vlan %d is outside the 802.1Q range %d-%d (omit the attribute for untagged).",
+				n.Name, n.VLAN, vlanMin, vlanMax))
 		}
 
 		mac, err := NormalizeMAC(n.MAC)

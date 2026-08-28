@@ -1,7 +1,7 @@
 ---
 id: INV-0001
 title: "Bootstrap CLI hardware acceptance drill"
-status: In Progress
+status: Concluded
 author: Donald Gifford
 created: 2026-08-21
 ---
@@ -20,6 +20,7 @@ created: 2026-08-21
 - [Findings](#findings)
   - [Pre-drill: defects found by running the emitted artifacts](#pre-drill-defects-found-by-running-the-emitted-artifacts)
   - [Pre-drill: what has been verified without hardware](#pre-drill-what-has-been-verified-without-hardware)
+  - [Phase 1 gate: go (2026-08-25)](#phase-1-gate-go-2026-08-25)
   - [Drill results](#drill-results)
   - [Convergence pass](#convergence-pass)
   - [Deviations from the runbook](#deviations-from-the-runbook)
@@ -90,11 +91,15 @@ DESIGN-0001 / ADR-0001 for RFC-0001 Phase 1.
    be exercised without Proxmox, and fix what breaks — the drill costs
    hours of hardware time, so defects found at a workstation are the
    cheapest ones.
-2. **Nested rehearsal.** Run `validate` → `pve form` → `pve certs`
-   against a nested pvelab-style 3-node lab. This is the first contact
-   with a real PVE API and the cheapest place to discover that
-   `mockpve` and Proxmox disagree.
-3. **The drill.** Run the full flow on homelab hardware **from
+2. **First contact on the real hosts** (IMPL-0002's pragmatic
+   revision, 2026-08-22: the originally planned nested pvelab
+   rehearsal is deferred with the rest of the isolated test
+   environment — the three hosts already have PVE installed, so every
+   remaining step is API calls and VMs, and the bare-metal round-trip
+   cost the nested lab existed to avoid isn't there). The hosts start
+   *unclustered but configured*, not fresh — what joining preserves
+   and destroys is itself under test.
+3. **The drill.** Run the full flow on the real hardware **from
    [the runbook](../runbook/bootstrap-cluster.md), not from memory**.
    A step in the runbook that is wrong or missing is a finding, not
    something to work around silently.
@@ -118,24 +123,30 @@ against production once the flow is proven.
       script embedded and pointing at the configured booty URL; the
       stamp matches `embed.ipxe`, and a re-run converges without
       rebuilding
-- [ ] Verify the built `ipxe.efi` actually chainloads — needs a machine
-      to PXE boot, so it lands in the drill
-- [ ] Nested-lab rehearsal of `pve form` and `pve certs` (step 2 above)
+- [x] Verify the built `ipxe.efi` actually chainloads — landed in the
+      drill exactly as predicted (2026-08-28): the first chainload
+      found the embedded script missing its `dhcp` (deviation 11); the
+      fixed embed then carried six first boots and an unattended
+      re-image
+- [ ] ~~Nested-lab rehearsal of `pve form` and `pve certs`~~ —
+      superseded by IMPL-0002 (2026-08-22): first contact happens on
+      the real hosts; the nested environment is deferred to a future
+      design doc with this run as its requirements gathering
 
 ## Environment
 
 | Component | Version / Value |
 | --- | --- |
-| bootstrap CLI | this branch (pre-`v0.1.0`) |
+| bootstrap CLI | final drill binary from `418795d` (`feat/impl-hardware-drill`, clean tree) via `just bootstrap-build` → `build/bin/bootstrap` (prior builds retired by fold-backs: `4b443ea`, `b7968c4`, `99b9416`, `f4ba8d5`, `797127e`, `6120bd1`, `528976d`, `7bf52e9`, `1215d93`, `39e3642`, `a97c287`, `fe901ae`, `94725cb`, `12c23a4`, `c161b2e`, `007023f`) |
 | Talos | `v1.13.8` (machinery `v1.13.9`) |
 | Kubernetes | `v1.36.3` (machinery default) |
 | booty | `v0.2.1` — image `ghcr.io/donaldgifford/booty:0.2.1` |
 | iPXE | `v1.21.1`, built in `debian:bookworm-slim`, `linux/amd64` |
-| Talos Image Factory schematic | `376567…b4ba` (vanilla, no extensions) |
-| proxmox-go-sdk | `v0.11.0` |
-| Proxmox VE | *(record at drill time)* |
-| Workstation | *(record at drill time)* |
-| Lab topology | *(record at drill time: nodes, bridges, storage, DHCP)* |
+| Talos Image Factory schematic | `dc7b152c…8586` (base profile: qemu-guest-agent + iscsi-tools; content-addressed ID confirmed against the live factory). Earlier pre-cilium verification ran vanilla `376567…b4ba` |
+| proxmox-go-sdk | `v0.12.0` |
+| Proxmox VE | `9.2.10` on r740a (live 2026-08-22); r640a/srv01 confirm at drill time |
+| Workstation | macOS 26.5.2, arm64 (Apple Silicon), Go 1.26.6; secrets injected via `op run --env-file` |
+| Lab topology | Nodes: `r740a` 10.10.11.20 (primary, R740xd, `fast`/`tank` pools), `r640a` 10.10.11.21, `srv01` 10.10.11.40 (NVMe-mirror `local-zfs`). Networks: mgmt/API 10.10.11.0/24 (`vmbr0`), storage 10.10.13.0/24 (`stor0`), corosync 10.10.15.0/24 (`sync0`); guests on VLAN-aware `vmbr1` (10 GbE). Cluster `shart`, cert domain `shart.sh`, Talos domain `fartlab.dev`. Datasets `fast/vm`/`tank/vm` pre-created on both dells; pool roots (live Garage data) off-limits to PVE. Snapshot: [bootstrap-handoff](../runbook/bootstrap-handoff.md), verified 2026-08-22/23. DHCP: UniFi on the Servers VLAN (11) with per-MAC reservations `.51–.53`/`.61–.63`; booty proxyDHCP alongside it (hands out no addresses) |
 
 ## Findings
 
@@ -191,6 +202,29 @@ That discharges IMPL-0001 Phase 4's manual-smoke success criterion.
 What it does **not** cover is the actual PXE handshake — proxyDHCP,
 TFTP, and a machine chainloading `ipxe.efi` — which needs a machine.
 
+### Phase 1 gate: go (2026-08-25)
+
+**Decision: GO** — bootstrap as it stands is acceptable to run against
+the production nodes. Made on the evidence below, with the operator
+running every command:
+
+- OQ-1 through OQ-4 decided; OQ-5 (VLAN tag on `net0`) deferred with
+  the boot-network task to IMPL-0002 Phase 3 — it gates nothing
+  before `talos vms`.
+- `/etc/pve` tarballs and `/etc/network/interfaces` copies pulled
+  off-node for all three nodes.
+- All three nodes verified guest-free with byte-identical
+  installer-default `/etc/pve`; the predicted join loss on the
+  joiners is *nothing* (same-content overwrite).
+- Fleet-wide `root@pam` password confirmed; dedicated
+  `root@pam!bootstrap` token (privsep=0) minted on r740a and proven
+  against the live API.
+- `<node>.shart.sh` A records resolving via 1.1.1.1; the zone-scoped
+  Cloudflare token verified against the zones API.
+- The primary-only config validates under the real `op run`
+  injection; `pve form --dry-run` against r740a reported 2 of 2 steps
+  pending, nothing applied.
+
 ### Drill results
 
 Record each step as `pass`, or what actually happened. Steps 1–2 and
@@ -198,18 +232,18 @@ Record each step as `pass`, or what actually happened. Steps 1–2 and
 
 | # | Step | Expected | Result |
 | --- | --- | --- | --- |
-| 1 | `bootstrap validate` | exit 0 | |
-| 2 | `bootstrap pve form` | cluster formed and quorate | |
-| 3 | `bootstrap pve certs` | certificates on all nodes | |
-| 4 | `bootstrap talos secrets` | `secrets.yaml`, 0600 | |
-| 5 | `bootstrap talos emit` | full tree under `bootstrap-out/booty/` | |
-| 6 | `bootstrap talos ipxe` | `boot/ipxe.efi` built | |
-| 7 | copy tree to booty host, `./booty-run.sh` | `/boot.ipxe` and `/machine-config?mac=…` answer | |
-| 8 | `bootstrap talos vms` | every VM created and running | |
-| 9 | (watch) | VMs PXE boot, install, reboot into Talos | |
-| 10 | `bootstrap talos bootstrap` | etcd bootstrapped, credentials written | |
-| 11 | `bootstrap talos health` | cluster reports healthy | |
-| 12 | `kubectl --kubeconfig bootstrap-out/out/kubeconfig get nodes` | every node `Ready` | |
+| 1 | `bootstrap validate` | exit 0 | pass (2026-08-25, under the real `op run` injection) |
+| 2 | `bootstrap pve form` | cluster formed and quorate | pass (2026-08-25): cluster of one formed and quorate first, then grown to three by re-running against the expanded config — r640a and srv01 joined serially, first try, zero fold-backs; `pvecm status` 3/3 votes, quorate, membership `10.10.15.20/.21/.40` (all corosync link0 on sync0). Join-wipe verified: `/etc/pve` replaced wholesale, zero loss as predicted (joiners were installer-default) |
+| 3 | `bootstrap pve certs` | certificates on all nodes | pass (2026-08-25/26): staging convergence on the primary, the staging→production flip as a real transition (deviations 3–7 en route), then the extension to both joiners first-try — all three nodes serve production certificates (`C=US, O=Let's Encrypt, CN=YR1`; subjects `r740a`/`r640a`/`srv01.shart.sh`, openssl-verified) |
+| 4 | `bootstrap talos secrets` | `secrets.yaml`, 0600 | pass (2026-08-27): bundle generated 0600, driving every rendered machineconfig; backed up to 1Password (item `u4xvg44gysubpcn2coszsij36i`); re-run answers "already exists — leaving it alone" |
+| 5 | `bootstrap talos emit` | full tree under `bootstrap-out/booty/` | pass (2026-08-27): catalog trio + both role templates + `embed.ipxe` + launcher; v1.13.8 assets downloaded with TOFU sidecars |
+| 6 | `bootstrap talos ipxe` | `boot/ipxe.efi` built | pass (2026-08-27): built with embed stamp for the `10.10.11.190:8080` chain script |
+| 7 | copy tree to booty host, `./booty-run.sh` | `/boot.ipxe` and `/machine-config?mac=…` answer | pass (2026-08-27), with a deliberate delivery substitution: the tree is served by the lab's ansible-managed compose (roles/booty) instead of `booty-run.sh` — flag-for-flag equivalent (host net, `0:0`, `:ro` mounts, same `serve` args), plus `restart: unless-stopped`. Full curl battery green: chain → per-MAC scripts (both roles) → complete machineconfigs, 404 for strangers, assets byte-exact (20455424 / 86170982) |
+| 8 | `bootstrap talos vms` | every VM created and running | pass (2026-08-28): first contact died on the by-ID status GET (deviation 10); after the index-based fix, 12/12 steps applied in 40 s — six VMs created and started across the three nodes, interleaved create-then-start per node. Repeated in full after deviation 12's destroy-and-recreate, this time with `scsihw`/`agent` in the spec |
+| 9 | (watch) | VMs PXE boot, install, reboot into Talos | pass (2026-08-28), the hard way: first cycle dropped all six to an iPXE shell (deviation 11, embed script without `dhcp`), second cycle installed nowhere (deviation 12, LSI controller invisible to Talos). Third cycle, fully unattended: proxyDHCP → TFTP (the rebuilt 983936-byte `ipxe.efi`) → `dhcp` → `/boot.ipxe` → per-MAC script → schematic-scoped kernel/initramfs → machine-config → install to `/dev/sda` → reboot from disk, booty quiet per MAC afterward — all six, ~90 s per node |
+| 10 | `bootstrap talos bootstrap` | etcd bootstrapped, credentials written | pass (2026-08-28): after deviation 13's two rounds (false-done Check, then hanging probe), the fixed stage probed for 15 s, applied `etcd-bootstrap` in 12 ms, and the console confirmed `bootstrap request received` → etcd `Running` → `Health check successful`. `talosconfig`/`kubeconfig` 0600 under `bootstrap-out/out/`, never overwritten across the night's many re-runs |
+| 11 | `bootstrap talos health` | cluster reports healthy | pass (2026-08-28): first run blocked at the boot-sequence phase with all six at `Booting` (deviation 14, guest-agent channel); after the rolling `qm set --agent` + restart, the full battery passed — etcd ×3 consistent, apid, kubelet, boot sequence, static pods, control-plane components, schedulable. `kube-proxy: SKIP` is itself delivery evidence: there is none to check, Cilium's replacement owns it. `✓ cluster "shart" is healthy` |
+| 12 | `kubectl --kubeconfig bootstrap-out/out/kubeconfig get nodes` | every node `Ready` | pass (2026-08-28): 6/6 `Ready` — `ctrl01`–`ctrl03` `control-plane`, `work01`–`work03` — kubelet `v1.36.3`, Talos v1.13.8, kernel `6.18.42-talos`, containerd 2.2.6, internal IPs `.51–.53`/`.61–.63` exactly as reserved. Ready with no kube-proxy on the cluster is the Cilium delivery proven end to end. **RFC-0001's Phase 1 criterion, demonstrated** |
 
 ### Convergence pass
 
@@ -217,14 +251,15 @@ Every stage re-run; each should apply nothing.
 
 | Stage | Steps applied on second pass | Notes |
 | --- | --- | --- |
-| `pve form` | | |
-| `pve certs` | | |
-| `talos secrets` | | |
-| `talos emit` | | |
-| `talos ipxe` | | |
-| `talos vms` | | |
-| `talos bootstrap` | | |
-| `talos health` | | |
+| `pve form` | 0 of 4 (2026-08-26; re-confirmed 2026-08-28 in the full-order Phase 5 pass) | create + both joins + quorate all skip against the live three-node cluster |
+| `pve storage` | 0 of 2 (2026-08-27; re-confirmed 2026-08-28) | first live re-run after the applying run — zero rotation on real PVE's read-back (server-materialized `mountpoint`, set-ordered lists, sparse via Extra) on the stage's first day; originally a local-workspace build against SDK PR #30, the 2026-08-28 confirmation is the mainline binary |
+| `pve certs` | 0 of 8 (2026-08-26; re-confirmed 2026-08-28) | account, plugin, and per-node config/cert ×3 all skip with production certificates installed; run back to back with `pve form`. One root@pam login per run remains (the account-directory read fallback) — expected, by design |
+| `talos secrets` | 0 (2026-08-28) | "already exists at secrets.yaml — leaving it alone" — the never-overwrite rule holding |
+| `talos emit` | 1, then 0 (2026-08-28) | the one legitimate non-zero of the pass: the launcher template gained the broadcast-route comment block (`956fc9d`) *after* the deployed tree was emitted, so `emit-artifacts` re-fired on real input drift — not a false-pending. Immediate re-run: 0, tree converged at the amended template. `boot-assets` skipped both times (byte-identical, TOFU sidecars intact). ns1's copy diverges only in `booty-run.sh` comments, a file booty never serves — no restart needed |
+| `talos ipxe` | 0 (2026-08-28) | embed script byte-identical → stamp matches; no rebuild |
+| `talos vms` | 0 of 12 (2026-08-28) | all six exist and run via the index-based checks (deviation 10's fix). Documented exception stands: the live six carry hand-patched `scsihw`/`agent` (deviations 12/14) invisible to the existence-based Check — any future create emits them from spec |
+| `talos bootstrap` | 0 of 3 (2026-08-28) | the membership probe answered in ~40 ms with three members — no 15 s wait, no bootstrap re-issued; credentials untouched |
+| `talos health` | pass (2026-08-28) | full battery green in ~120 ms, `kube-proxy: SKIP` by design |
 
 Any stage that applies something on the second pass is a convergence
 bug: record which step re-fired and why.
@@ -233,23 +268,87 @@ bug: record which step re-fired and why.
 
 | Date | Step | What happened | Resolution |
 | --- | --- | --- | --- |
-| | | *(no drill run yet)* | |
+| 2026-08-25 | `pve form --dry-run` | Reported `2 of 2 steps pending` while the token credential was invalid (a typo in the 1P env reference → HTTP 401 on every read). Checks deliberately swallow read errors as "pending" (the design routes real errors to apply), so dry-run cannot distinguish "step pending" from "cannot authenticate at all" — first contact started on false confidence. | Operator error fixed (the typo). The UX gap stands as a finding: a fail-fast credential check at stage start (or surfacing repeated check errors at info level) would have caught it. Candidate improvement, not yet scheduled. |
+| 2026-08-25 | `pve form`, `create-cluster` | r740a rejected the create with `HTTP 403: Permission check failed (user != root@pam)`. PVE reserves `POST /cluster/config` for the literal root@pam user; the API token authenticates as `root@pam!bootstrap` and can never pass, privsep or not. DESIGN-0001's credential split (token for the create) was wrong — mockpve happily accepted token-authed creates, hiding it. | Code fix `b7968c4`: `applyCreate` dials with root@pam password credentials; the shared test dialer now enforces the root-only rule on formation writes (named regression fails pre-fix with the lab's exact error); DESIGN-0001 secrets table + example config amended. mockpve enforcement upstream in proxmox-go-sdk noted as an SDK follow-up. |
+| 2026-08-25 | `pve certs`, `acme-account` | Same 403, second organ: `POST /cluster/acme/account` carries no permissions block, and PVE defaults such endpoints to root@pam only. Verified in pve-manager source that it is the *only* reserved call in the stage — plugins, node config, and certificate orders are `Sys.Modify`-gated, so the token covers everything else, renewals included. A root-equivalent user/token cannot work around it: the check is identity, not privilege. | Code fix `99b9416`: lazy `DialRoot` session used by exactly the account write (a converged re-run or renewal never authenticates as root); two-mock regression pins the registration to the root session; DESIGN-0001 table + example config amended again. |
+| 2026-08-25 | `pve certs`, `acme-plugin-cloudflare` | Real PVE answers a by-ID GET on a missing ACME plugin with `HTTP 500: ACME plugin 'cloudflare' not defined`, not a 404 — `pluginCheck`'s `ErrNotFound` branch never matched, so "not created yet" read as a fatal server error. mockpve returns a clean 404 for the same case: the predicted real-vs-mock discrepancy class, first sighting. | Code fix `f4ba8d5`: plugin existence resolved through `ListACMEPlugins` (the index carries every needed field, digest included) at both call sites — the by-ID wart is sidestepped structurally. Mirroring PVE's 500-on-missing in mockpve noted upstream as an SDK follow-up. |
+| 2026-08-25 | `pve certs`, staging→production flip | **Predicted before the run, confirmed by it:** flipping `acme.directory` converged on nothing — `accountCheck` was name-only and `certCheck` expiry-only, so neither noticed the CA changed; the staging account and staging certificate satisfied every check and the cluster kept serving staging. | Code fix `797127e`: `accountCheck` compares the registered account's CA directory against the config (token-first read, root-fallback on 403); a mismatch deactivates and re-registers through the root session. `certCheck` rejects staging-issued certs when the desired CA is LE production. Flip regression drives the full path against mockpve; both fail pre-fix. |
+| 2026-08-25 | `pve certs`, `acme-plugin-cloudflare` re-run | Bonus find inside the flip attempt: the plugin step **rotated identical credentials** on a run where nothing changed — real PVE round-trips the stored payload in its own rendering, not the SDK's byte-exact encoding, so the byte-for-byte comparison never matched and the step would re-apply on every run (a permanent false-pending the convergence gate would have flunked). | Took three rounds to kill. `797127e` made the comparison structural (decode, parse `KEY=value` lines, compare maps) — still rotated. `528976d` theorized unpadded base64 from the stored `len=62` and added a raw-base64 fallback plus Warn/Info drift logging — still rotated, but the new Warn surfaced the truth: `illegal base64 data at input byte 2` — byte 2 of `CF_Token` is `_`. **Real PVE returns the `data` field as DECODED plaintext `KEY=value` lines**; it was never base64 in either rendering, and mockpve echoing the submitted base64 verbatim is exactly why every encoding-shaped comparison passed the mock and failed the lab. Final fix `7bf52e9`: `decodePluginData` tries padded then raw base64 and otherwise takes the payload as the plaintext it is (unambiguous — credential lines carry mid-string `=` and `_`, both illegal in base64); the error path is gone, so no decode failure can ever be swallowed as "drifted" again. Regression seeds the plugin exactly as real PVE renders it and fails pre-fix (rotation observed). mockpve read-shape parity (return decoded plaintext, as real PVE does) noted upstream as an SDK follow-up. |
+| 2026-08-25 | `pve certs`, `acme-cert-r740a` (flip reorder) | The production reorder over the installed staging certificate failed: `HTTP 400 … Custom certificate exists but 'force' is not set` — PVE's order endpoint refuses while a frontend certificate file exists, and the SDK exposes `force` on neither order nor renew. mockpve does not model the refusal. Bonus fact from the same run: the per-account GET is root-reserved (the token-first read logged its root@pam fallback), so the directory verification costs one root login per certs run. | Code fix `6120bd1`: `applyOrder` picks its path from the existing `pveproxy-ssl.pem` — absent → order; present and otherwise right → **renew** (no force needed inside the renewal window); present and wrong (CA flip, SAN change) → **delete the frontend cert, then order** (brief self-signed window, only entered when the served cert is already wrong). Force turns out unnecessary. SDK follow-ups noted: `force` params + mockpve modeling the refusal. |
+| 2026-08-27 | `pve storage --dry-run` (first contact, local-SDK build) | Real PVE answers `GET /storage/{id}` for a missing entry with `HTTP 500: storage 'fast' does not exist` — not a 404. The identical wart as the missing ACME plugin GET (deviation 4), hidden the identical way: mockpve's clean 404 satisfied the `ErrNotFound` branch in every test. The dry-run UX held up this time — the check error surfaced as a WARN + `unknown`, not a fake `pending`. | Code fix `39e3642` (local, unpushed — rides the PR #30 workspace): existence resolves through `ListDatastores` at both call sites, the same structural sidestep as `f4ba8d5`; the index carries every compared field, digest included. mockpve 500-on-missing parity reported on proxmox-go-sdk PR #30 so the release ships with the mock telling the truth. |
+| 2026-08-27 | Phase 3 boot-network setup | **Prerequisite deviation, not a failure**: the runbook demands "a trusted, isolated boot network", but no such segment exists — `10.10.14.x` was never real. The boot network is the Servers VLAN (11, `10.10.11.0/24`), shared with the PVE hosts, booty on `ns1` (`10.10.11.190`), and the Talos VMs' reservations (`.51–.53`, `.61–.63`). Accepted deliberately with both consequences understood: `/machine-config` serves cluster PKI and join tokens over plaintext HTTP on that VLAN, and booty's proxyDHCP answers **every** PXE attempt on the segment (unconfigured MACs chainload `ipxe.efi`, get a 404, and drop to an iPXE shell — no other machine on Servers can netboot for its own purposes while booty runs). | Runbook prerequisite amended from "isolated" to the real requirement — a segment trusted end-to-end, with the two consequences spelled out. The Phase 3 delivery comparison also landed: the lab serves the emitted tree via an ansible-managed compose that is flag-for-flag equivalent to `booty-run.sh`; the runbook now states the launcher's flag table is the contract and any delivery preserving it is equivalent. |
+| 2026-08-28 | `bootstrap talos vms` (first contact) | Real PVE answers `GET /nodes/<node>/qemu/<vmid>/status/current` for a missing VM with `HTTP 500: Configuration file 'nodes/r740a/qemu-server/201.conf' does not exist` — not a 404. **Third instance of the deviation 4/8 class** (by-ID GET on a missing resource → 500), hidden the identical way: mockpve's clean 404 satisfied the `ErrNotFound` branch in every test, so the first live Check died before creating anything. | Code fix: VM existence and power state both resolve through the node's `qemu` index (`List`) via a shared `findVM` — the same structural sidestep as the ACME-plugin and storage fixes; the index entry carries the power state, so the wart-prone by-ID GET is gone from the stage entirely. Regression test wraps mockpve in a wart shim that reproduces PVE's 500-on-missing for `status/current` and fails pre-fix with character-for-character the live error. mockpve 500-on-missing parity for `status/current` queued for the Phase 6 SDK filing alongside deviations 4 and 8. |
+| 2026-08-28 | First VM boot after `talos vms` | All six VMs PXE'd cleanly (proxyDHCP offer → boot-ack → TFTP `ipxe.efi`, every VMSpec setting doing its job) and then dropped to an iPXE shell: `Network unreachable` (`ENETUNREACH`, iPXE `280a6090`) fetching from booty, no `Configuring (net0 …)` line ever printed. The emit stage had embedded the **wrong script**: booty's *served* identity-forwarding chain script (`/ipxe?mac=…`, via `render.ChainScript`), chosen so the embedded and served scripts could never disagree. That script is correct only in its own delivery mode — fetched after DHCP has run. An embedded script runs **in place of** iPXE's autoboot, the thing that would have configured the NIC, so net0 had no address and the first fetch died. booty's walkthrough documents the real embed — `dhcp`, then `chain …/boot.ipxe` — and calls the dhcp line load-bearing; its failure catalog even scripts the recovery ("you are *in* the debugger — `dhcp`, then `chain` the URL by hand"). Never caught earlier because nothing before this moment executed the embedded script: unit tests compare bytes, and the step-7 curls exercised booty's endpoints, not iPXE's boot path. | Code fix: `renderEmbedIPXE` now renders booty's documented two-hop embed — `dhcp \|\| goto failed`, `chain <booty>/boot.ipxe \|\| goto failed` — instead of embedding the served script. The agreement rationale inverted rather than weakened: chaining to `/boot.ipxe` makes it structural, since the identity script that actually runs is always the one booty serves. Regression `TestEmbedScriptConfiguresNICBeforeFetch` pins dhcp-before-first-fetch and fails pre-fix; golden embed.ipxe updated. Recovery on the live VMs: manual `dhcp` + `chain http://10.10.11.190:8080/boot.ipxe` at the shell (the catalog's own procedure), then re-emit → `talos ipxe` rebuild → re-sync → reset the rest. |
+| 2026-08-28 | First VM boot, install phase | The manually-chained ctrl01 fetched everything, applied its config — and 48 seconds after `machine-config served` was back at proxyDHCP. Console: `error running phase 2 in install sequence: task 1/1: failed, lstat /dev/sda: no such file or directory` → `rebooting in 10 seconds`. The disk does not exist inside the guest: `VMSpec` never set `scsihw`, and PVE's **API** default is the emulated LSI 53C895A, for which the Talos kernel ships no driver (`# CONFIG_SCSI_SYM53C8XX_2 is not set` in siderolabs/pkgs, vs `CONFIG_SCSI_VIRTIO=m`). A **new deviation class**, distinct from 4/8/10: the API's defaults diverge from the UI wizard's — booty's walkthrough VM was built in the UI, which silently defaults to VirtIO SCSI, so the reference procedure could never expose it, and no host-side check can either (the VM reads as healthy from PVE; only a live guest falsifies the spec). Triple-confirmed: kernel config, PVE hardware panel showing the LSI, and the console lstat. | Code fix: `VMSpec` pins `scsihw=virtio-scsi-single` (the wizard's default, the configuration the walkthrough was actually validated on). Regression `TestVMSpecPinsVirtIOSCSI` fails pre-fix. Live remediation: the six VMs' disks are still empty, so destroy and let the fixed create path rebuild them — better acceptance evidence than `qm set` patching, since the re-run exercises the shipped spec end-to-end. Lesson for the spec's comment block: every VMSpec field exists because its PVE default breaks the boot invisibly; `scsihw` joins the list. |
+| 2026-08-28 | `bootstrap talos bootstrap` | The stage reported "✓ cluster bootstrapped (0 steps applied)" against a cluster that was **never bootstrapped**: the `etcd-bootstrap` Check probed by fetching a kubeconfig on the assumption it "only succeeds once etcd is up and the API server answers." Talos actually **generates** the kubeconfig locally from the cluster PKI in the machine config — apid signs an admin certificate; no etcd, no API server — so on any healthy waiting node the Check read "done" and the stage skipped the one step it exists to run. The full-night consequence: the first run silently skipped, `talos health` hung at 01:07 on etcd `Preparing` ×3, the control planes spent ~6 h reboot-cycling in an un-bootstrapped boot sequence, and a retry that happened to land in a reboot slice (06:58, `connection refused`) was the only run that even *tried* to apply. Every unit test had seeded the probe with a failing Kubeconfig — the same blindness shape as the mockpve deviations, this time home-grown: no test modeled the true Talos behavior. | Code fix: `Client` grows `EtcdMemberList` (the machinery call verbatim); the Check now probes etcd membership, which only a bootstrapped etcd can answer — and a false *pending* stays harmless because Apply already treats `FailedPrecondition: etcd data directory is not empty` as success. The interface's Kubeconfig comment now states the local-generation fact so the next probe author doesn't repeat it. Regression `TestBootstrapProbesEtcdNotKubeconfig` models the real cluster (kubeconfig always available, etcd never bootstrapped) and fails pre-fix with the live symptom: bootstrap never issued. Confirmed live before the fix with raw `talosctl health`: etcd `Preparing` on all three CPs while the CLI claimed completion. **Second round:** the fixed probe's first live run hung silently after `write-talosconfig` — on an un-bootstrapped node machined's internal etcd client retries its local dial until the *caller's* deadline, and the Check passed none (the old kubeconfig probe could never hang: generation is local and instant, which is how the gap stayed invisible). Fix: the probe runs under a bounded context (`ProbeTimeout`, default 15 s); expiry reads as "pending", and Apply's `FailedPrecondition`-is-success rule keeps a false pending harmless. Regression `TestBootstrapProbeCannotHang` models the blocking server and fails pre-fix via a 5 s watchdog. Along the way the console's repeating `KubeletStaticPodController … tls: internal error` was identified as the *expected* pre-bootstrap consequence of `rotate-server-certificates` (the kubelet's serving cert needs CSR approval; the approver is a Kubernetes deployment; Kubernetes does not exist yet) — noise that clears once the approver deploys, not a finding. |
+| 2026-08-28 | `bootstrap talos health` after etcd | Predicted at first boot, confirmed by the health gate: the base extension profile ships **qemu-guest-agent**, whose service talks to a virtio-serial channel that only exists when the VM config enables the agent — and `VMSpec` never set `agent`. The service can never start, `startAllServices` never completes, every node's machine stage sticks at `Booting`, and health fails its boot-sequence phase against an otherwise **fully healthy** cluster (etcd ×3, API server/controller-manager/scheduler Healthy, nodes `READY True` — Cilium demonstrably delivering, since a CNI-less node cannot go Ready; kubelet TLS noise ended the moment the cert-approver deployed). Second member of the deviation-12 class: a guest-visible VM-config gap no host-side check or mock can see — the walkthrough never hit it because its VM had no guest-agent extension at all; this drill's base profile added the extension without the channel it needs. | Code fix: `VMSpec` pins `agent=enabled=1` (property form deliberately: a bare `1` round-trips out of the config read as a JSON number and the SDK types the field as string — caught by the existing wire round-trip test against mockpve). Regression `TestVMSpecEnablesGuestAgent` fails pre-fix. Live remediation differs from deviation 12's destroy-recreate because the nodes now hold etcd and cluster state: `qm set <vmid> --agent enabled=1` plus a cold stop/start per VM (the channel is cold-plug), control planes rolled one at a time to hold etcd quorum, workers freely. Convergence note recorded: the CLI's `vm-create` Check is existence-based and will not retrofit the setting onto pre-fix VMs — this cluster's six are hand-patched; any future create carries it. |
 
 ## Conclusion
 
-**Answer:** *pending the drill.*
+**Answer: yes, on both counts — after fourteen deviations, every one
+fixed or deliberately accepted, none fatal.**
+
+1. `kubectl get nodes` via the emitted kubeconfig shows all six
+   configured nodes `Ready` (2026-08-28): three control planes, three
+   workers, kubelet v1.36.3 on Talos v1.13.8, no kube-proxy on the
+   cluster — the Cilium delivery proven end to end. Every drill row
+   (1–12) passed.
+2. The full-order second pass applied zero steps across all nine
+   stages. The single non-zero along the way was `talos emit`
+   re-firing once on genuine input drift (a template amendment that
+   postdated the deployed tree) and converging to zero on the
+   immediate re-run. The re-image spot-check closed the loop: one
+   `talosctl reset --wipe-mode all --reboot` took a worker through
+   the entire unattended PXE → install → rejoin cycle in minutes,
+   with the fresh `Ready` arriving with no human input.
+
+**The hypothesis held precisely.** Every one of the fourteen
+deviations lived in the hardware-facing surface; the convergence
+engine itself never mis-stepped. The failures sorted into classes the
+drill existed to find, each invisible to every workstation-side
+check:
+
+- **Mock-parity gaps** (deviations 2–4, 6–8, 10): mockpve encoded
+  beliefs about the PVE API — clean 404s on missing resources,
+  token-writable root-reserved endpoints, base64 round-trips — that
+  real PVE does not share. Filed upstream as proxmox-go-sdk #32.
+- **Guest-visible VM-config gaps** (12, 14): the API's defaults
+  diverge from the UI wizard's (`scsihw`), and an extension can need
+  a device the spec never provisioned (`agent`). No host-side check
+  can see either; only a booting guest falsifies the spec.
+- **Delivery-mode assumptions** (11): a script correct in one
+  delivery mode (fetched post-DHCP) embedded into another (in place
+  of autoboot) — nothing before first boot ever executed it.
+- **Probe assumptions** (13, both rounds): a Check probing via an
+  operation that succeeds for the wrong reason (locally generated
+  kubeconfig), then a probe with no deadline against a server that
+  retries until the caller's deadline. The home-grown variant of the
+  mock-parity class: our own tests seeded the belief.
+
+Every deviation produced a regression test proven failing before its
+fix, and the final binary re-ran the entire drill to zeros.
 
 ## Recommendation
 
-*Pending.* On a passing drill and a clean convergence pass:
+The drill passed and the convergence pass is clean — the conditions
+are met:
 
-1. Check off IMPL-0001's six remaining tasks and move it to
-   **Completed**.
-2. Move DESIGN-0001 from **Approved** to **Implemented**.
-3. Cut `tools/bootstrap/v0.1.0` via `tools-release.yml` (OQ-5).
+1. Check off IMPL-0001's remaining tasks — five of six done with
+   this fold-back; the sixth (the v0.1.0 cut) is annotated
+   conditions-met and moves IMPL-0001 to **Completed** when the tag
+   lands post-merge.
+2. Move DESIGN-0001 to **Implemented** — done with this fold-back.
+3. Cut `tools/bootstrap/v0.1.0` via `tools-release.yml` (OQ-5) once
+   the fold-back branch merges (`dont-release` on the PR — the main
+   release train stays inert).
 4. Fold every deviation into the code and
-   [the runbook](../runbook/bootstrap-cluster.md), and close this
-   investigation as **Concluded**.
+   [the runbook](../runbook/bootstrap-cluster.md) — done: every
+   deviations-table row references its fix commit or amendment, and
+   the upstream gaps are filed
+   ([proxmox-go-sdk#32](https://github.com/donaldgifford/proxmox-go-sdk/issues/32)
+   mock parity,
+   [#33](https://github.com/donaldgifford/proxmox-go-sdk/issues/33)
+   corosync linkN). This investigation closes as **Concluded**.
 
 ## References
 

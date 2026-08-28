@@ -44,7 +44,7 @@ func (f *fakeDocker) run(_ context.Context, name string, args ...string) error {
 func newBuilder(t *testing.T) (*emit.IPXEBuilder, *fakeDocker) {
 	t.Helper()
 	e := testEmitter(t)
-	tree, err := e.Tree()
+	tree, err := e.Tree(context.Background())
 	if err != nil {
 		t.Fatalf("Tree: %v", err)
 	}
@@ -105,7 +105,7 @@ func TestIPXERebuildsOnChangedURL(t *testing.T) {
 	b.BootyURL = "http://10.0.10.9:8080"
 	e := &emit.Emitter{Cluster: testCluster(), Bundle: testBundle(t), Root: b.Root}
 	e.Cluster.Talos.Booty.URL = b.BootyURL
-	tree, err := e.Tree()
+	tree, err := e.Tree(context.Background())
 	if err != nil {
 		t.Fatalf("Tree: %v", err)
 	}
@@ -250,7 +250,7 @@ func TestIPXEDockerMountsAreAbsolute(t *testing.T) {
 
 	root := filepath.Join("bootstrap-out", "booty")
 	e := &emit.Emitter{Cluster: testCluster(), Bundle: testBundle(t), Root: root}
-	tree, err := e.Tree()
+	tree, err := e.Tree(context.Background())
 	if err != nil {
 		t.Fatalf("Tree: %v", err)
 	}

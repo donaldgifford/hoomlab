@@ -68,3 +68,7 @@ Thumbs.db
 # bundle must never land in git; bootstrap-out/ is regenerable output.
 secrets.yaml
 bootstrap-out/
+
+# Prior-cluster reference configs (machine configs may carry cluster
+# PKI/join secrets) — local reference only, never history.
+docs/examples/

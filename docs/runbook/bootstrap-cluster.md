@@ -5,12 +5,13 @@ Step-by-step operator procedure for the `bootstrap` CLI
 in IMPL-0001, remaining pre-drill work in INV-0001.
 
 **Scope of verification.** Every command, flag, and output string below
-was taken from the code and, where the stage does not need Proxmox
-hardware, executed on a workstation. Stages that need the lab are
-marked **`[unverified]`** — they are written from the code and are
-exactly what the acceptance drill is meant to confirm. When a step
-turns out to be wrong, fix the code and this document together; that is
-the whole point of running the drill from here rather than from memory.
+was taken from the code, and **every stage has now been executed for
+real**: the workstation stages first, and the hardware stages during
+the acceptance drill (INV-0001, concluded 2026-08-28 — six-node
+cluster up, full-order convergence pass at zero applied). Stages
+carry the date their live verification landed. When a step turns out
+to be wrong, fix the code and this document together; that is the
+whole point of running the drill from here rather than from memory.
 
 ## Table of contents
 
@@ -19,15 +20,16 @@ the whole point of running the drill from here rather than from memory.
 - [1. Write the config](#1-write-the-config)
 - [2. `validate`](#2-validate)
 - [3. `pve form`](#3-pve-form)
-- [4. `pve certs`](#4-pve-certs)
-- [5. `talos secrets`](#5-talos-secrets)
-- [6. `talos emit`](#6-talos-emit)
-- [7. `talos ipxe`](#7-talos-ipxe)
-- [8. Start booty](#8-start-booty-operator-step)
-- [9. `talos vms`](#9-talos-vms)
-- [10. `talos bootstrap`](#10-talos-bootstrap)
-- [11. `talos health`](#11-talos-health)
-- [12. Convergence pass](#12-convergence-pass)
+- [4. `pve storage`](#4-pve-storage)
+- [5. `pve certs`](#5-pve-certs)
+- [6. `talos secrets`](#6-talos-secrets)
+- [7. `talos emit`](#7-talos-emit)
+- [8. `talos ipxe`](#8-talos-ipxe)
+- [9. Start booty](#9-start-booty-operator-step)
+- [10. `talos vms`](#10-talos-vms)
+- [11. `talos bootstrap`](#11-talos-bootstrap)
+- [12. `talos health`](#12-talos-health)
+- [13. Convergence pass](#13-convergence-pass)
 - [Troubleshooting](#troubleshooting)
 
 ## Before you start
@@ -44,21 +46,40 @@ the whole point of running the drill from here rather than from memory.
 **In the lab:**
 
 - **Proxmox VE installed on every node**, API reachable at the
-  endpoints you will put in the config. Every node other than the
-  primary must be a *fresh install* — joining wipes a node's local
-  configuration.
-- **A PVE API token and the root password.** The token drives every
-  API call except cluster joins; joins are issued on the joining node
-  and need an existing member's `root@pam` password.
+  endpoints you will put in the config. Nodes other than the primary
+  need not be fresh installs, but joining replaces a joiner's
+  `/etc/pve` **wholesale** with the cluster's — storage definitions,
+  users, tokens, firewall rules, jobs, all of it — and PVE refuses to
+  join a node that has guests. Node-local state outside `/etc/pve`
+  (ZFS pools, network config, SSH keys) survives. So the real
+  prerequisite is: joiners must be **guest-free** and hold no
+  cluster-level config you are not prepared to lose; anything worth
+  keeping must be re-declared cluster-wide after the join. Watch the
+  reverse hazard too — after growth, every unrestricted storage entry
+  in the cluster config is live on *every* node (the stock
+  `local-zfs` will bind each node's `rpool/data`); pin entries with
+  `nodes` restrictions where a pool must not take VM disks.
+- **A PVE API token and the root password.** PVE reserves cluster
+  creation, node joins, and ACME account registration for the literal
+  `root@pam` user — no token or root-equivalent user passes the
+  identity check — so those calls authenticate with the root
+  password; the token drives everything else, renewals included.
+  Converged re-runs touch the password only for the account-directory
+  read fallback.
 - **A Cloudflare API token** with DNS-edit permission on the
   certificate domain's zone. Cloudflare is the only DNS-01 provider
   the certs stage supports (ADR-0001), and config validation enforces
   that.
-- **A trusted, isolated boot network.** booty's `/machine-config`
+- **A boot network you trust end-to-end.** booty's `/machine-config`
   endpoint is unauthenticated plaintext HTTP and the configs it serves
-  carry the cluster PKI and join tokens. This is the standard
-  `talos.config` metal trade-off, and it means the boot segment must
-  be yours alone.
+  carry the cluster PKI and join tokens — the standard `talos.config`
+  metal trade-off. A dedicated segment is ideal but not required; a
+  shared VLAN works if you accept both consequences with eyes open:
+  every host on the segment can read the machine configs (PKI
+  included), and booty's proxyDHCP answers **every** PXE attempt
+  there — unconfigured machines chainload `ipxe.efi`, get a 404, and
+  drop to an iPXE shell, so nothing else on the segment can netboot
+  for its own purposes while booty runs.
 - **A booty host with docker** on that network, reachable at the
   `talos.booty.url` you configure. Real PXE needs `--net=host`, so
   that host's own IP is what the emitted launcher advertises.
@@ -161,7 +182,7 @@ failed: environment variable HOOMLAB_CLOUDFLARE_API_TOKEN is not set.
 
 ## 3. `pve form`
 
-**`[unverified — needs the lab]`**
+**`[verified in the drill — 2026-08-25: cluster of one formed, grown to three, quorate]`**
 
 ```sh
 bootstrap pve form
@@ -176,7 +197,7 @@ Expected:
 
 ```text
 ✓ cluster "homelab" formed and quorate (3 of 3 steps applied)
-next: bootstrap pve certs
+next: bootstrap pve storage
 ```
 
 Interruption-safe: re-run and it picks up at the first unjoined node.
@@ -186,9 +207,77 @@ Interruption-safe: re-run and it picks up at the first unjoined node.
 > again during joins — installing real ones is what the *next* stage
 > is for.
 
-## 4. `pve certs`
+### Post-formation (manual, optional): redundant corosync links
 
-**`[unverified — needs the lab]`**
+The CLI declares a single corosync link per node — each node's
+`address` becomes `link0` on create/join, and that is the only link
+the formed cluster has. If the link0 network goes down, the cluster
+loses quorum and pmxcfs goes read-only until it returns.
+
+Adding a redundant `link1` afterwards is supported by PVE but is a
+**manual `corosync.conf` edit**, not an API call: follow the pvecm
+docs' procedure (copy `/etc/pve/corosync.conf`, add a `ring1_addr`
+per node in the nodelist and a second `interface` entry under
+`totem`, bump `config_version`, move the copy into place — corosync
+reloads live). Do it any time after formation; no re-form needed.
+Note the redundancy is only as real as the physical paths: a node
+whose two link networks share one cable (e.g. a tagged VLAN riding
+the same copper) keeps a single physical failure domain.
+
+The PVE cluster API itself accepts `link0`–`link7` on both create and
+join, so first-class multi-link support is an SDK/CLI enhancement,
+not a protocol gap — tracked in IMPL-0002 Phase 6.
+
+## 4. `pve storage`
+
+```sh
+bootstrap pve storage
+```
+
+Converges the config's `storage` blocks into cluster storage entries.
+Steps: one `storage-<name>` per declared block, in config order.
+Expected (here: one entry created over a pre-existing dataset, the
+stock `local-zfs` restricted to one node):
+
+```text
+✓ 2 storage declarations converged (2 steps applied)
+next: bootstrap pve certs
+```
+
+What the stage will and will not do:
+
+- A missing entry is **created**; an existing one is **updated in
+  place**, touching only the fields the block declares. Settings the
+  config expresses no opinion about (an empty list, an unset bool)
+  are never sent — restricting the stock `local-zfs` to one node
+  leaves its content types exactly as the installer wrote them.
+- Identity is fixed: an existing entry whose `type` (or `path`)
+  disagrees with the config is an **error**, never a
+  delete-and-recreate. Deletion could orphan VM disks; that call
+  stays with you.
+- With no `storage` blocks the stage does nothing, and Talos nodes
+  may reference pre-existing storage. Declaring *any* block turns on
+  validation: every Talos node's `storage` must then reference a
+  declared block.
+- The stage declares entries; it does not create datasets. A
+  zfspool block's `pool` (e.g. `fast/vm`) must already exist on the
+  restricted nodes — that is node provisioning, not cluster config.
+
+Two read-back behaviors that are normal, not drift: a
+node-restricted entry shows as `disabled` in `pvesm status` on the
+nodes outside its list (the restriction working, not a fault), and
+PVE materializes server-generated properties into the entry —
+creating a zfspool adds a `mountpoint` line you never declared. The
+stage compares structurally (list options are unordered sets, only
+declared fields count) for exactly these reasons.
+
+The API token covers this whole stage: storage writes are gated by
+`Datastore.Allocate`, a regular privilege check, not one of the
+root@pam-reserved endpoints.
+
+## 5. `pve certs`
+
+**`[verified in the drill — 2026-08-25/26: staging convergence, staging→production flip, production certs on all three nodes]`**
 
 ```sh
 bootstrap pve certs
@@ -213,7 +302,7 @@ command re-run: a certificate with under 30 days of validity goes
 pending again. A rotated Cloudflare token is detected and pushed the
 same way.
 
-## 5. `talos secrets`
+## 6. `talos secrets`
 
 ```sh
 bootstrap talos secrets
@@ -237,7 +326,7 @@ one. Re-running says so and does nothing:
 
 The file is written `0600`. Back it up now; treat it like a private key.
 
-## 6. `talos emit`
+## 7. `talos emit`
 
 ```sh
 bootstrap talos emit
@@ -259,22 +348,36 @@ The tree:
 ```text
 bootstrap-out/booty/
 ├── catalog/
-│   ├── 00-variables.hcl        # talos version, install image, booty url
-│   ├── 10-profiles.hcl         # one boot recipe per role
+│   ├── 00-variables.hcl        # talos version, booty url
+│   ├── 10-profiles.hcl         # one boot recipe per node class
 │   └── 20-groups.hcl           # one group per VM, pinned by MAC
 ├── templates/talos/
 │   ├── controlplane.yaml.tmpl  # complete, secret-bearing machineconfigs
 │   └── worker.yaml.tmpl
-├── boot/talos/<version>/
+├── boot/talos/<version>/<schematic>/
 │   ├── vmlinuz + .sha256       # Talos Image Factory kernel
 │   └── initramfs.xz + .sha256
 ├── embed.ipxe                  # the chain script ipxe.efi embeds
 └── booty-run.sh                # ready-to-run launcher
 ```
 
-Emission is pure rendering, so re-running is always safe — the check is
-a byte-diff against what is on disk, and staged boot assets are left
-alone. A no-op run says:
+With `profile` blocks in the config, emit first resolves each node's
+flattened extension set to an Image Factory schematic (a POST to the
+factory; IDs are content-addressed, so re-runs get the same answer)
+and stages one kernel/initramfs pair per unique set under its
+schematic directory — the extensions are baked into those images and
+the matching installer image, which is the only place they can be.
+With a `talos cluster` block, the machineconfig templates additionally
+carry the completion surface: topology labels, kubelet
+serving-certificate rotation plus its approver manifest, and — for
+`cni = "cilium"` — CNI none, kube-proxy disabled, the pinned Gateway
+API CRDs, and the cilium-install Job with your validated values file
+sealed in as a ConfigMap. Cilium then installs itself during `talos
+bootstrap` with no operator action.
+
+Emission is deterministic rendering, so re-running is always safe —
+the check is a byte-diff against what is on disk, and staged boot
+assets are left alone. A no-op run says:
 
 ```text
 ✓ booty tree at bootstrap-out/booty is up to date (nothing to do)
@@ -290,7 +393,7 @@ The `.sha256` sidecars are trust-on-first-use: the Image Factory
 publishes no authoritative checksum, so the first download records what
 arrived and later runs verify against that record.
 
-## 7. `talos ipxe`
+## 8. `talos ipxe`
 
 ```sh
 bootstrap talos ipxe
@@ -326,9 +429,9 @@ a rebuild and nothing else does:
 ✓ ipxe.efi is already built for this booty url (nothing to do)
 ```
 
-## 8. Start booty (operator step)
+## 9. Start booty (operator step)
 
-**`[unverified on real PXE — HTTP endpoints verified]`**
+**`[verified in the drill — 2026-08-28: six VMs netbooted end to end over real proxyDHCP/TFTP/HTTP]`**
 
 The CLI never copies anything to the booty host; moving the tree is
 yours:
@@ -350,6 +453,31 @@ The launcher encodes the operational sharp edges, each load-bearing:
 | `--proxydhcp --server-ip` | answers PXE alongside your existing DHCP server, advertising `ipxe.efi` over TFTP |
 
 Override the image with `BOOTY_IMAGE=…` if you need a different build.
+
+The script is a reference implementation, and the flag table above is
+the actual contract: any delivery mechanism that preserves those
+flags is equivalent. A config-managed compose service (host network
+mode, `user: "0:0"`, the same `:ro` mounts and `serve` arguments,
+plus a restart policy) is a proven substitution — just keep the
+"restart after every re-emit" rule, which no delivery mechanism can
+repeal.
+
+**Multi-homed booty host: pin the broadcast route.** proxyDHCP
+replies go to `255.255.255.255`, and the kernel sends those out the
+default-route interface — which on a multi-homed host is usually NOT
+the boot VLAN. The offers leave the wrong NIC, the firmware never
+sees them, and the symptom is `PXE-E16: No valid offer received`
+while booty's log shows `proxyDHCP offer` ×4 (backoff 0/4/8/16 s).
+The fix is a host route on the booty host:
+
+```sh
+ip route add 255.255.255.255/32 dev <boot-vlan-iface>
+```
+
+`ip route add` does not survive a reboot — persist it in whatever
+owns the host's network config (systemd-networkd `[Route]`, netplan
+`routes:`, or the config management that builds the host), or the
+next reboot of the booty host silently breaks all PXE.
 
 Verify it serves before creating any VMs — substitute a MAC from your
 config:
@@ -377,9 +505,9 @@ What to check in the responses:
 booty logs `catalog loaded … profiles=2 groups=<N>` at startup; if `N`
 does not equal your node count, it is serving a stale or partial tree.
 
-## 9. `talos vms`
+## 10. `talos vms`
 
-**`[unverified — needs the lab]`**
+**`[verified in the drill — 2026-08-28: 12/12 applied, six VMs created and started (deviations 10/12/14 folded back en route)]`**
 
 ```sh
 bootstrap talos vms
@@ -410,9 +538,9 @@ Proxmox node. Re-imaging a node later is: wipe its disk and reboot.
 Re-running converges: an existing VM is left alone, a stopped one is
 started.
 
-## 10. `talos bootstrap`
+## 11. `talos bootstrap`
 
-**`[unverified — needs the lab]`**
+**`[verified in the drill — 2026-08-28: etcd bootstrapped, credentials written 0600 and never overwritten (deviation 13 folded back en route)]`**
 
 Run once the VMs have PXE-booted, installed, and rebooted into Talos.
 
@@ -440,9 +568,9 @@ operator credentials, not render output — and every generated
 talosconfig carries a freshly minted client certificate, so rewriting
 would hand you new credentials on every run.
 
-## 11. `talos health`
+## 12. `talos health`
 
-**`[unverified — needs the lab]`**
+**`[verified in the drill — 2026-08-28: full battery green on the six-node cluster]`**
 
 ```sh
 bootstrap talos health            # --wait defaults to 10m
@@ -466,16 +594,17 @@ Every configured node must show `Ready`.
 This is also the standalone verification command — run it after any
 maintenance, any time you want the cluster to prove itself.
 
-## 12. Convergence pass
+## 13. Convergence pass
 
-**`[unverified — needs the lab]`**
+**`[verified in the drill — 2026-08-28: zero steps applied across all nine stages; re-image spot-check rejoined unattended]`**
 
 Re-run **every** stage. This no-op property is what the Hoomlab service
 later relies on when it takes ownership of the cluster.
 
 ```sh
-for stage in "pve form" "pve certs" "talos secrets" "talos emit" \
-             "talos ipxe" "talos vms" "talos bootstrap" "talos health"; do
+for stage in "pve form" "pve storage" "pve certs" "talos secrets" \
+             "talos emit" "talos ipxe" "talos vms" "talos bootstrap" \
+             "talos health"; do
   echo "== $stage"; bootstrap $stage || break
 done
 ```

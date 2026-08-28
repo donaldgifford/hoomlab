@@ -32,5 +32,6 @@ docz create design "Your Design Title"
 
 | ID | Title | Status | Date | Author | Link |
 |----|-------|--------|------|--------|------|
-| DESIGN-0001 | Bootstrap CLI | In Review | 2026-08-17 | Donald Gifford | [0001-bootstrap-cli.md](0001-bootstrap-cli.md) |
+| DESIGN-0001 | Bootstrap CLI | Implemented | 2026-08-17 | Donald Gifford | [0001-bootstrap-cli.md](0001-bootstrap-cli.md) |
+| DESIGN-0002 | Talos cluster completion scope for bootstrap | Draft | 2026-08-26 | Donald Gifford | [0002-talos-cluster-completion-scope-for-bootstrap.md](0002-talos-cluster-completion-scope-for-bootstrap.md) |
 <!-- END DOCZ AUTO-GENERATED -->

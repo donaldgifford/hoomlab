@@ -1,7 +1,7 @@
 ---
 id: DESIGN-0001
 title: "Bootstrap CLI"
-status: In Review
+status: Implemented
 author: Donald Gifford
 created: 2026-08-17
 ---
@@ -394,8 +394,8 @@ chart's `secrets.stringData`/`envFrom` — the config never changes.
 
 | Secret | Used by | Config reference |
 | --- | --- | --- |
-| PVE API token | all PVE stages | `env("HOOMLAB_PVE_TOKEN_ID")` / `env("HOOMLAB_PVE_TOKEN_SECRET")` |
-| root@pam password | `pve form` joins only | `env("HOOMLAB_PVE_ROOT_PASSWORD")` |
+| PVE API token | all PVE reads and non-formation writes | `env("HOOMLAB_PVE_TOKEN_ID")` / `env("HOOMLAB_PVE_TOKEN_SECRET")` |
+| root@pam password | the root@pam-reserved endpoints (amended by INV-0001, 2026-08-25): `pve form`'s create and joins, and `pve certs`' one-time ACME account registration — PVE reserves these for the literal root@pam user; no API token passes the `user != root@pam` check | `env("HOOMLAB_PVE_ROOT_PASSWORD")` |
 | Cloudflare API token | `pve certs` plugin registration | `env("HOOMLAB_CLOUDFLARE_API_TOKEN")` |
 | Talos secrets bundle | `talos emit`, `talos bootstrap` | not in config — the file at `--secrets`, generated once by `talos secrets`, operator-owned (OQ-2) |
 
@@ -440,7 +440,7 @@ cluster "homelab" {
   pve {
     token_id      = env("HOOMLAB_PVE_TOKEN_ID")
     token_secret  = env("HOOMLAB_PVE_TOKEN_SECRET")
-    root_password = env("HOOMLAB_PVE_ROOT_PASSWORD")   # joins only
+    root_password = env("HOOMLAB_PVE_ROOT_PASSWORD")   # formation writes (create + joins)
 
     node "pve-01" {
       endpoint = "https://10.0.10.11:8006"

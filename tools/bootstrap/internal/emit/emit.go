@@ -31,6 +31,9 @@ type Emitter struct {
 	// FactoryURL overrides the Talos Image Factory base URL. Empty
 	// means the real factory; tests point it at a local server.
 	FactoryURL string
+	// Factory resolves extension sets to schematic IDs. Nil means the
+	// real factory at FactoryURL.
+	Factory SchematicResolver
 	// HTTP fetches boot assets. Nil means a client with assetTimeout.
 	HTTP *http.Client
 	// Log receives progress. Nil means slog.Default().
@@ -52,10 +55,22 @@ func (e *Emitter) httpClient() *http.Client {
 }
 
 // Tree renders every artifact booty consumes except the boot assets,
-// which are downloaded rather than rendered. Rendering is pure: the
-// same config and secrets bundle always produce the same bytes, which
-// is what lets the emit step's Check be a diff.
-func (e *Emitter) Tree() (Tree, error) {
+// which are downloaded rather than rendered. Rendering is
+// deterministic — the same config, secrets bundle, and operator
+// inputs always produce the same bytes, which is what lets the emit
+// step's Check be a diff. The context covers schematic resolution:
+// with profiles declared, each unique extension set is resolved to
+// its content-addressed factory ID first.
+func (e *Emitter) Tree(ctx context.Context) (Tree, error) {
+	perNode, _, err := e.nodeSchematics(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return e.tree(perNode)
+}
+
+// tree renders the artifact tree for already-resolved schematics.
+func (e *Emitter) tree(perNode []string) (Tree, error) {
 	templates, err := talos.RoleTemplates(e.Bundle, e.Cluster)
 	if err != nil {
 		return nil, err
@@ -64,7 +79,7 @@ func (e *Emitter) Tree() (Tree, error) {
 		e.logger().Warn("machineconfig validation warning", "warning", w)
 	}
 
-	catalog, err := renderCatalog(e.Cluster)
+	catalog, err := renderCatalog(e.Cluster, perNode)
 	if err != nil {
 		return nil, err
 	}
@@ -90,14 +105,19 @@ func (e *Emitter) Tree() (Tree, error) {
 }
 
 // Steps converges the emitted tree: render and write the artifacts,
-// then stage the boot assets. Both steps are safe to re-run — the
-// first diffs, the second skips assets already staged.
-func (e *Emitter) Steps() ([]steps.Step, error) {
-	tree, err := e.Tree()
+// then stage the boot assets — one image pair per unique schematic.
+// Both steps are safe to re-run — the first diffs, the second skips
+// assets already staged.
+func (e *Emitter) Steps(ctx context.Context) ([]steps.Step, error) {
+	perNode, unique, err := e.nodeSchematics(ctx)
 	if err != nil {
 		return nil, err
 	}
-	assets := bootAssets(e.FactoryURL, &e.Cluster.Talos)
+	tree, err := e.tree(perNode)
+	if err != nil {
+		return nil, err
+	}
+	assets := bootAssets(e.FactoryURL, &e.Cluster.Talos, unique)
 
 	return []steps.Step{
 		{

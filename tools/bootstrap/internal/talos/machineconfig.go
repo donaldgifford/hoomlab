@@ -109,11 +109,11 @@ func RoleTemplates(bundle *secrets.Bundle, cluster *config.Cluster) (Templates, 
 		return Templates{}, fmt.Errorf("machinery generate input: %w", err)
 	}
 
-	controlPlane, cpWarnings, err := roleTemplate(in, machine.TypeControlPlane, image)
+	controlPlane, cpWarnings, err := roleTemplate(in, machine.TypeControlPlane, image, cluster)
 	if err != nil {
 		return Templates{}, fmt.Errorf("controlplane template: %w", err)
 	}
-	worker, workerWarnings, err := roleTemplate(in, machine.TypeWorker, image)
+	worker, workerWarnings, err := roleTemplate(in, machine.TypeWorker, image, cluster)
 	if err != nil {
 		return Templates{}, fmt.Errorf("worker template: %w", err)
 	}
@@ -124,15 +124,20 @@ func RoleTemplates(bundle *secrets.Bundle, cluster *config.Cluster) (Templates, 
 	}, nil
 }
 
-// roleTemplate generates, validates, and templatizes the config for
-// one machine type.
-func roleTemplate(in *generate.Input, machineType machine.Type, image string) (data []byte, warnings []string, err error) {
+// roleTemplate generates, customizes, validates, and templatizes the
+// config for one machine type. The completion surface (DESIGN-0002)
+// is applied before validation, so machinery checks the real emitted
+// shape — inline manifests and CNI knobs included.
+func roleTemplate(in *generate.Input, machineType machine.Type, image string, cluster *config.Cluster) (data []byte, warnings []string, err error) {
 	generated, err := in.Config(machineType)
 	if err != nil {
 		return nil, nil, fmt.Errorf("generate config: %w", err)
 	}
 	provider, err := setHostname(generated)
 	if err != nil {
+		return nil, nil, err
+	}
+	if err := applyCompletion(provider.RawV1Alpha1(), cluster); err != nil {
 		return nil, nil, err
 	}
 	warnings, err = provider.Validate(metalMode{})

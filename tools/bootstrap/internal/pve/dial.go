@@ -57,3 +57,23 @@ func NewClient(ctx context.Context, cfg *config.Cluster) (*proxmox.Client, error
 	}
 	return c, nil
 }
+
+// NewRootClient dials the cluster's primary node as root@pam with the
+// config's root password — for the rare post-formation call PVE
+// reserves for the literal root@pam user (today: ACME account
+// registration, whose endpoint carries no permissions block and so
+// falls to PVE's root-only default; INV-0001, 2026-08-25). Same TLS
+// posture as NewClient.
+func NewRootClient(ctx context.Context, cfg *config.Cluster) (*proxmox.Client, error) {
+	primary, ok := cfg.PrimaryNode()
+	if !ok {
+		return nil, fmt.Errorf("cluster %s: no primary pve node", cfg.Name)
+	}
+	c, err := proxmox.NewClient(ctx, primary.Endpoint,
+		api.UserCredentials("root@pam", cfg.PVE.RootPassword, ""),
+		proxmox.WithInsecureSkipVerify(true))
+	if err != nil {
+		return nil, fmt.Errorf("dial %s (%s) as root@pam: %w", primary.Name, primary.Endpoint, err)
+	}
+	return c, nil
+}

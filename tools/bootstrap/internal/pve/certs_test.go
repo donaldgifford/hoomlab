@@ -47,13 +47,23 @@ func newCertifier(t *testing.T, cfg *config.Cluster) (*pve.Certifier, *strings.B
 	t.Cleanup(cleanup)
 
 	var logBuf strings.Builder
+	svc := nodes.NewService(client, version.Capabilities{})
 	return &pve.Certifier{
-		Cluster: cfg,
-		Nodes:   nodes.NewService(client, version.Capabilities{}),
-		Tasks:   tasks.NewService(client),
-		Now:     func() time.Time { return time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC) },
-		Log:     slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		Cluster:  cfg,
+		Nodes:    svc,
+		Tasks:    tasks.NewService(client),
+		DialRoot: sameServiceRoot(svc),
+		Now:      func() time.Time { return time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC) },
+		Log:      slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})),
 	}, &logBuf
+}
+
+// sameServiceRoot is the single-mock tests' DialRoot: the mock does
+// not distinguish principals, so the root session is the same service.
+// TestCertsAccountRegistersAsRoot is where the two sessions are told
+// apart.
+func sameServiceRoot(svc *nodes.Service) func(context.Context) (*nodes.Service, error) {
+	return func(context.Context) (*nodes.Service, error) { return svc, nil }
 }
 
 func runCerts(t *testing.T, c *pve.Certifier) steps.Result {
@@ -142,6 +152,75 @@ func TestCertsFreshRun(t *testing.T) {
 	}
 }
 
+// TestCertsAccountRegistersAsRoot is the INV-0001 regression
+// (2026-08-25, deviation 3): POST /cluster/acme/account carries no
+// permissions block, and PVE defaults such endpoints to root@pam only
+// — r740a rejected the token-dialed registration with HTTP 403
+// "user != root@pam". The account write must go through DialRoot while
+// everything else stays on the token session. Two separate mocks play
+// the two sessions; the account must land on the root side only —
+// against the pre-fix code (registration via the token session) the
+// account lands on the token mock and this fails.
+func TestCertsAccountRegistersAsRoot(t *testing.T) {
+	cfg := certsCluster()
+
+	tokenMock := mockpve.New()
+	tokenMock.SeedVersion("9.2.1", "9.2", "test")
+	for _, n := range cfg.PVE.Nodes {
+		tokenMock.AddNode(n.Name)
+	}
+	tokenClient, cleanup := tokenMock.NewClient()
+	t.Cleanup(cleanup)
+	tokenNodes := nodes.NewService(tokenClient, version.Capabilities{})
+
+	rootMock := mockpve.New()
+	rootMock.SeedVersion("9.2.1", "9.2", "test")
+	rootClient, rootCleanup := rootMock.NewClient()
+	t.Cleanup(rootCleanup)
+	rootNodes := nodes.NewService(rootClient, version.Capabilities{})
+
+	rootDials := 0
+	certifier := &pve.Certifier{
+		Cluster: cfg,
+		Nodes:   tokenNodes,
+		// The registration task runs on the root side, so the waiter
+		// polls there too.
+		Tasks: tasks.NewService(rootClient),
+		DialRoot: func(context.Context) (*nodes.Service, error) {
+			rootDials++
+			return rootNodes, nil
+		},
+		Now: func() time.Time { return time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC) },
+	}
+
+	var r steps.Runner
+	res, err := r.Run(context.Background(), certifier.Steps()[:1])
+	if err != nil {
+		t.Fatalf("account step Run() error: %v", err)
+	}
+	if res.Applied != 1 {
+		t.Fatalf("applied = %d, want the account registration", res.Applied)
+	}
+	if rootDials != 1 {
+		t.Errorf("DialRoot called %d times, want exactly 1", rootDials)
+	}
+
+	onRoot, err := rootNodes.ListACMEAccounts(context.Background())
+	if err != nil {
+		t.Fatalf("ListACMEAccounts(root side): %v", err)
+	}
+	if !slices.Contains(onRoot, "default") {
+		t.Errorf("root-side accounts = %v, want the registration to land here", onRoot)
+	}
+	onToken, err := tokenNodes.ListACMEAccounts(context.Background())
+	if err != nil {
+		t.Fatalf("ListACMEAccounts(token side): %v", err)
+	}
+	if slices.Contains(onToken, "default") {
+		t.Errorf("token-side accounts = %v — the registration went through the token session, which real PVE rejects with 403", onToken)
+	}
+}
+
 func TestCertsReRunIsNoOp(t *testing.T) {
 	certifier, _ := newCertifier(t, certsCluster())
 	runCerts(t, certifier)
@@ -149,6 +228,114 @@ func TestCertsReRunIsNoOp(t *testing.T) {
 	res := runCerts(t, certifier)
 	if res.Applied != 0 {
 		t.Errorf("second Run() applied = %d, want 0", res.Applied)
+	}
+}
+
+// TestCertsStagingToProductionFlip is the INV-0001 deviation 5
+// regression (2026-08-25): with a name-only account check and an
+// expiry-only cert check, flipping acme.directory after a staging run
+// converged on nothing and the cluster kept serving staging
+// certificates. The flip must reopen the account and re-register it
+// against the new CA (deactivate + register).
+func TestCertsStagingToProductionFlip(t *testing.T) {
+	cfg := certsCluster()
+	cfg.ACME.Directory = "https://acme-staging-v02.api.letsencrypt.org/directory"
+	certifier, _ := newCertifier(t, cfg)
+	runCerts(t, certifier)
+
+	before, err := certifier.Nodes.GetACMEAccount(context.Background(), "default")
+	if err != nil {
+		t.Fatalf("GetACMEAccount: %v", err)
+	}
+	if before.Directory != cfg.ACME.Directory {
+		t.Fatalf("staging account directory = %q, want %q", before.Directory, cfg.ACME.Directory)
+	}
+
+	certifier.Cluster.ACME.Directory = "" // Let's Encrypt production
+	res := runCerts(t, certifier)
+	if res.Applied != 1 {
+		t.Errorf("flip Run() applied = %d, want exactly the account re-registration", res.Applied)
+	}
+	after, err := certifier.Nodes.GetACMEAccount(context.Background(), "default")
+	if err != nil {
+		t.Fatalf("GetACMEAccount after flip: %v", err)
+	}
+	if after.Directory == before.Directory {
+		t.Error("account still registered against the staging directory after the flip")
+	}
+
+	if again := runCerts(t, certifier); again.Applied != 0 {
+		t.Errorf("post-flip re-run applied = %d, want 0", again.Applied)
+	}
+}
+
+// TestCertsToleratesServerNormalizedPluginData is the INV-0001
+// deviation 6 regression (2026-08-25): real PVE returns the stored
+// credential payload as DECODED plaintext KEY=value lines, not the
+// base64 the SDK submitted (observed live: "illegal base64 data at
+// input byte 2" — the '_' of CF_Token), and every encoding-shaped
+// comparison rotated identical credentials on each run. Seed the
+// plugin exactly the way real PVE renders it and the check must read
+// done.
+func TestCertsToleratesServerNormalizedPluginData(t *testing.T) {
+	cfg := certsCluster()
+	certifier := seededCertifier(t, cfg, "CF_Token="+cfSecret+"\n")
+
+	res := runCerts(t, certifier)
+	if res.Applied != 7 {
+		t.Errorf("applied = %d, want 7 (the plaintext-but-identical plugin must be skipped)", res.Applied)
+	}
+}
+
+// TestCertsReplacesForeignFrontendCertificate drives deviation 7's
+// replace path: a frontend certificate already exists (wrong SAN — a
+// hand-installed or stale certificate), so the pending order must
+// delete it first rather than issue the plain order real PVE refuses
+// while the file exists. mockpve does not model the refusal (noted
+// upstream); the decision logic itself is pinned by TestCertActionFor.
+func TestCertsReplacesForeignFrontendCertificate(t *testing.T) {
+	cfg := certsCluster()
+	node := cfg.PVE.Nodes[0].Name
+	fqdn := node + "." + cfg.ACME.Domain
+
+	mock := mockpve.New()
+	mock.SeedVersion("9.2.1", "9.2", "test")
+	for _, n := range cfg.PVE.Nodes {
+		mock.AddNode(n.Name)
+	}
+	mock.AddNodeCertificate(node, "pveproxy-ssl.pem") // SAN = node name, not the FQDN
+
+	client, cleanup := mock.NewClient()
+	t.Cleanup(cleanup)
+	svc := nodes.NewService(client, version.Capabilities{})
+	certifier := &pve.Certifier{
+		Cluster:  cfg,
+		Nodes:    svc,
+		Tasks:    tasks.NewService(client),
+		DialRoot: sameServiceRoot(svc),
+		Now:      func() time.Time { return time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC) },
+	}
+	runCerts(t, certifier)
+
+	certs, err := certifier.Nodes.GetNodeCertificates(context.Background(), node)
+	if err != nil {
+		t.Fatalf("GetNodeCertificates: %v", err)
+	}
+	var frontends int
+	for _, c := range certs {
+		if c.Filename == "pveproxy-ssl.pem" {
+			frontends++
+			if !slices.Contains(c.SAN, fqdn) {
+				t.Errorf("frontend cert SAN = %v, want it replaced with one covering %s", c.SAN, fqdn)
+			}
+		}
+	}
+	if frontends != 1 {
+		t.Errorf("found %d frontend certificates, want exactly 1", frontends)
+	}
+
+	if again := runCerts(t, certifier); again.Applied != 0 {
+		t.Errorf("re-run applied = %d, want 0", again.Applied)
 	}
 }
 
@@ -236,12 +423,14 @@ func seededCertifier(t *testing.T, cfg *config.Cluster, pluginData string) *pve.
 	t.Cleanup(cleanup)
 
 	var logBuf strings.Builder
+	svc := nodes.NewService(client, version.Capabilities{})
 	return &pve.Certifier{
-		Cluster: cfg,
-		Nodes:   nodes.NewService(client, version.Capabilities{}),
-		Tasks:   tasks.NewService(client),
-		Now:     func() time.Time { return time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC) },
-		Log:     slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		Cluster:  cfg,
+		Nodes:    svc,
+		Tasks:    tasks.NewService(client),
+		DialRoot: sameServiceRoot(svc),
+		Now:      func() time.Time { return time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC) },
+		Log:      slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})),
 	}
 }
 
@@ -327,12 +516,14 @@ func TestCertsReusesExistingDomainSlot(t *testing.T) {
 	t.Cleanup(cleanup)
 
 	var logBuf strings.Builder
+	svc := nodes.NewService(client, version.Capabilities{})
 	certifier := &pve.Certifier{
-		Cluster: cfg,
-		Nodes:   nodes.NewService(client, version.Capabilities{}),
-		Tasks:   tasks.NewService(client),
-		Now:     func() time.Time { return time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC) },
-		Log:     slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		Cluster:  cfg,
+		Nodes:    svc,
+		Tasks:    tasks.NewService(client),
+		DialRoot: sameServiceRoot(svc),
+		Now:      func() time.Time { return time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC) },
+		Log:      slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})),
 	}
 	runCerts(t, certifier)
 
@@ -381,12 +572,14 @@ func TestCertsFillsDomainSlotGap(t *testing.T) {
 	t.Cleanup(cleanup)
 
 	var logBuf strings.Builder
+	svc := nodes.NewService(client, version.Capabilities{})
 	certifier := &pve.Certifier{
-		Cluster: cfg,
-		Nodes:   nodes.NewService(client, version.Capabilities{}),
-		Tasks:   tasks.NewService(client),
-		Now:     func() time.Time { return time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC) },
-		Log:     slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		Cluster:  cfg,
+		Nodes:    svc,
+		Tasks:    tasks.NewService(client),
+		DialRoot: sameServiceRoot(svc),
+		Now:      func() time.Time { return time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC) },
+		Log:      slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})),
 	}
 	runCerts(t, certifier)
 

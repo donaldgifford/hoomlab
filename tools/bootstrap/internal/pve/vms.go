@@ -2,13 +2,11 @@ package pve
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 
 	"github.com/donaldgifford/hoomlab/tools/bootstrap/internal/config"
 	"github.com/donaldgifford/hoomlab/tools/bootstrap/internal/steps"
-	"github.com/donaldgifford/proxmox-go-sdk/proxmox/pverr"
 	"github.com/donaldgifford/proxmox-go-sdk/proxmox/qemu"
 	"github.com/donaldgifford/proxmox-go-sdk/proxmox/tasks"
 	"github.com/donaldgifford/proxmox-go-sdk/proxmox/types"
@@ -32,6 +30,14 @@ const (
 	machineType = "q35"
 	// biosType selects UEFI, which is what iPXE's .efi binary needs.
 	biosType = "ovmf"
+	// scsiHW pins the disk controller to VirtIO SCSI. Left unset, the
+	// API default is the emulated LSI 53C895A, and the Talos kernel
+	// ships no driver for it (CONFIG_SCSI_SYM53C8XX_2 is not set) —
+	// /dev/sda does not exist inside the guest, the install sequence
+	// dies on lstat, and the node reboots back to PXE forever while
+	// the VM looks healthy from the host. The UI wizard defaults to
+	// VirtIO SCSI, which is why booty's walkthrough never met the LSI.
+	scsiHW = "virtio-scsi-single"
 	// rngDevice adds a VirtIO RNG. Post-PixieFail EDK2 silently drops
 	// the PXE boot option without an entropy source — the VM simply
 	// never offers to network boot, with no error anywhere.
@@ -39,6 +45,16 @@ const (
 	// serialDevice gives "qm terminal" somewhere to attach, which is
 	// the only console into a Talos node that will not boot.
 	serialDevice = "socket"
+	// agentEnabled provisions the QEMU guest agent's virtio-serial
+	// channel. The base extension profile ships qemu-guest-agent, and
+	// without the channel that service can never start: the boot
+	// sequence's startAllServices never completes, every node's stage
+	// sticks at "Booting", and `talos health` fails its boot-sequence
+	// phase against an otherwise fully healthy cluster (INV-0001
+	// deviation 14). The property form rather than bare "1": PVE
+	// accepts both, but a bare numeric round-trips as a JSON number
+	// out of the config read and the SDK types the field as string.
+	agentEnabled = "enabled=1"
 )
 
 // Provisioner builds the Stage 4 step list: create each configured VM
@@ -87,30 +103,42 @@ func (p *Provisioner) Steps() []steps.Step {
 	return list
 }
 
+// findVM resolves a VM through its node's index. Existence is never
+// decided by the by-ID status GET: real PVE answers it with HTTP 500
+// "Configuration file '…/<vmid>.conf' does not exist" for a missing
+// VM, not a 404 — the third instance of the INV-0001 deviation 4/8
+// class (mockpve answers a clean 404, which is how the Get-based
+// check passed every test and then died on the first live run). The
+// index entry carries the power state too, so both checks read from
+// it.
+func (p *Provisioner) findVM(ctx context.Context, node *config.TalosNode) (*qemu.VM, bool, error) {
+	list, err := p.QEMU(node.PVENode).List(ctx)
+	if err != nil {
+		return nil, false, fmt.Errorf("list vms on %s: %w", node.PVENode, err)
+	}
+	for i := range list {
+		if int(list[i].VMID) == node.VMID {
+			return &list[i], true, nil
+		}
+	}
+	return nil, false, nil
+}
+
 // vmExists reports whether the VM is already defined on its node.
 func (p *Provisioner) vmExists(ctx context.Context, node *config.TalosNode) (bool, error) {
-	_, err := p.QEMU(node.PVENode).Get(ctx, node.VMID)
-	if errors.Is(err, pverr.ErrNotFound) {
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("read vm %d on %s: %w", node.VMID, node.PVENode, err)
-	}
-	return true, nil
+	_, ok, err := p.findVM(ctx, node)
+	return ok, err
 }
 
 // vmRunning reports whether the VM is up. A VM that does not exist yet
 // is not an error here: the create step runs first in the same stage,
 // and reporting "not running" keeps the survey readable in dry-run.
 func (p *Provisioner) vmRunning(ctx context.Context, node *config.TalosNode) (bool, error) {
-	status, err := p.QEMU(node.PVENode).Get(ctx, node.VMID)
-	if errors.Is(err, pverr.ErrNotFound) {
-		return false, nil
+	vm, ok, err := p.findVM(ctx, node)
+	if err != nil || !ok {
+		return false, err
 	}
-	if err != nil {
-		return false, fmt.Errorf("read vm %d on %s: %w", node.VMID, node.PVENode, err)
-	}
-	return status.Status == types.PowerStateRunning, nil
+	return vm.Status == types.PowerStateRunning, nil
 }
 
 func (p *Provisioner) applyCreate(ctx context.Context, node *config.TalosNode) error {
@@ -144,6 +172,18 @@ func (p *Provisioner) waitTask(ctx context.Context, ref tasks.Ref, what string) 
 	return nil
 }
 
+// net0 renders the NIC. The tag goes on the PVE side of the bridge
+// when the config sets a VLAN (a trunk port with no native VLAN drops
+// untagged frames — IMPL-0002 OQ-5), and PVE strips it before the
+// guest, so the firmware's PXE stack sees plain Ethernet either way.
+func net0(node *config.TalosNode) string {
+	s := fmt.Sprintf("virtio,bridge=%s,macaddr=%s,firewall=0", node.Bridge, node.MAC)
+	if node.VLAN > 0 {
+		s += fmt.Sprintf(",tag=%d", node.VLAN)
+	}
+	return s
+}
+
 // VMSpec builds the create request for one Talos node. It is exported
 // so the spec assertions live in a test rather than in a comment: every
 // field here is load-bearing, and a regression in any of them produces
@@ -161,11 +201,13 @@ func VMSpec(node *config.TalosNode) *qemu.CreateSpec {
 		CPU:    cpuType,
 		OSType: osType,
 		SCSI0:  fmt.Sprintf("%s:%d", node.Storage, node.DiskGB),
-		Net0:   fmt.Sprintf("virtio,bridge=%s,macaddr=%s,firewall=0", node.Bridge, node.MAC),
+		Net0:   net0(node),
 		Boot:   bootOrder,
 		Extra: map[string]string{
+			"agent":   agentEnabled,
 			"bios":    biosType,
 			"machine": machineType,
+			"scsihw":  scsiHW,
 			// The EFI vars disk must NOT carry pre-enrolled Secure Boot
 			// keys: they reject the unsigned iPXE binary and the Talos
 			// kernel, so the node refuses to boot what we serve it.

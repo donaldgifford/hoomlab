@@ -27,10 +27,18 @@ type Client interface {
 	// server's error verbatim — the caller decides that "already
 	// bootstrapped" is success, so that decision is testable.
 	Bootstrap(ctx context.Context) error
-	// Kubeconfig fetches the cluster's admin kubeconfig. It only
-	// succeeds once etcd is bootstrapped and the API server is up,
-	// which is what makes it double as the bootstrap step's Check.
+	// Kubeconfig fetches the cluster's admin kubeconfig. Talos
+	// GENERATES it from the cluster PKI in the machine config — apid
+	// signs an admin certificate locally, no etcd or API server
+	// involved — so it succeeds on any configured node, bootstrapped
+	// or not (INV-0001 deviation 13: assuming otherwise made the
+	// bootstrap step skip itself).
 	Kubeconfig(ctx context.Context) ([]byte, error)
+	// EtcdMemberList enumerates the etcd cluster's members. It fails
+	// on a node whose etcd was never bootstrapped — there is no
+	// cluster to enumerate — which is what makes it the bootstrap
+	// step's Check probe. Errors return verbatim; the caller decides.
+	EtcdMemberList(ctx context.Context) ([]string, error)
 	// Health blocks until the cluster reports healthy or the server-side
 	// wait times out, streaming progress to log.
 	Health(ctx context.Context, timeout time.Duration, log *slog.Logger) error
@@ -96,6 +104,20 @@ func (m *machineryClient) Bootstrap(ctx context.Context) error {
 
 func (m *machineryClient) Kubeconfig(ctx context.Context) ([]byte, error) {
 	return m.c.Kubeconfig(ctx)
+}
+
+func (m *machineryClient) EtcdMemberList(ctx context.Context) ([]string, error) {
+	resp, err := m.c.EtcdMemberList(ctx, &machineapi.EtcdMemberListRequest{})
+	if err != nil {
+		return nil, err
+	}
+	var members []string
+	for _, msg := range resp.GetMessages() {
+		for _, member := range msg.GetMembers() {
+			members = append(members, member.GetHostname())
+		}
+	}
+	return members, nil
 }
 
 func (m *machineryClient) Health(ctx context.Context, timeout time.Duration, log *slog.Logger) error {

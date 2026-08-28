@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/zclconf/go-cty/cty/function"
@@ -54,6 +55,13 @@ func Load(path string) (*Cluster, hclkit.Diagnostics) {
 	if semDiags := cluster.ValidateAndNormalize(); semDiags.HasErrors() {
 		// Keep any decode warnings in front of the semantic errors.
 		diags.Diagnostics = append(diags.Diagnostics, semDiags...)
+		return nil, diags
+	}
+	// The cilium values file is operator input the same way the config
+	// is, so it is validated at load, not first discovered broken at
+	// emit. Relative paths resolve against the config file's directory.
+	if vDiags := cluster.resolveCiliumValues(filepath.Dir(path)); vDiags.HasErrors() {
+		diags.Diagnostics = append(diags.Diagnostics, vDiags...)
 		return nil, diags
 	}
 	return cluster, diags

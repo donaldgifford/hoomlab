@@ -45,11 +45,15 @@ type Former struct {
 
 // Steps returns the formation steps in apply order.
 //
-// Credential split (DESIGN-0001 secrets table): every primary-node
-// read and the cluster create use the API token; the join request is
-// dialed against the JOINING node with root@pam password credentials,
-// because joining wipes that node's local pmxcfs config — API tokens
-// do not survive it, root@pam does.
+// Credential split (DESIGN-0001 secrets table, amended by INV-0001):
+// every read uses the API token; both formation WRITES use root@pam
+// password credentials. The create because PVE reserves
+// POST /cluster/config for the literal root@pam user — any API token,
+// even root's with privsep=0, authenticates as user!tokenid and fails
+// the server's "user != root@pam" check (found on first hardware
+// contact). The join both for that same reserved-endpoint rule and
+// because joining wipes the joining node's local pmxcfs config — API
+// tokens do not survive it, root@pam does.
 func (f *Former) Steps() ([]steps.Step, error) {
 	primary, ok := f.Cluster.PrimaryNode()
 	if !ok {
@@ -101,11 +105,17 @@ func (f *Former) memberCheck(primary config.PVENode, member string) func(context
 // primary to appear in its own corosync nodelist. The write is
 // fire-and-poll per the SDK contract — formation restarts pmxcfs
 // underneath the call, so convergence is the poll, not the response.
+//
+// The create dials with root@pam password credentials, never the
+// token: POST /cluster/config is reserved for the literal root@pam
+// user (INV-0001 deviation, 2026-08-25). The membership wait that
+// follows reads through the token as usual.
 func (f *Former) applyCreate(primary config.PVENode) func(context.Context) error {
 	return func(ctx context.Context) error {
-		svc, err := f.dialPrimary(ctx, primary)
+		svc, err := f.Dial(ctx, primary.Endpoint,
+			api.UserCredentials("root@pam", f.Cluster.PVE.RootPassword, ""))
 		if err != nil {
-			return err
+			return fmt.Errorf("dial %s (%s) as root@pam: %w", primary.Name, primary.Endpoint, err)
 		}
 		spec := &cluster.ClusterCreateSpec{Name: f.Cluster.Name}
 		if primary.Address != "" {

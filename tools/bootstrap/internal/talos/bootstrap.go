@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/siderolabs/talos/pkg/machinery/config/generate/secrets"
 	"google.golang.org/grpc/codes"
@@ -23,6 +24,14 @@ const (
 	credentialMode  = 0o600
 )
 
+// defaultProbeTimeout bounds the etcd membership probe. On an
+// un-bootstrapped node machined's internal etcd client retries its
+// local dial until the caller's deadline — pass none and the probe
+// hangs forever (INV-0001 deviation 13, second round: the fixed
+// Check's first live run sat silently instead of bootstrapping).
+// Fifteen seconds is generous for a live etcd answering its own node.
+const defaultProbeTimeout = 15 * time.Second
+
 // Bootstrapper builds the Stage 5 step list: write the talosconfig,
 // bootstrap etcd once, and write the kubeconfig fetched from the live
 // cluster — the credentials the operator (and later the Hoomlab
@@ -35,6 +44,9 @@ type Bootstrapper struct {
 	Client Client
 	// OutDir is where the credentials land, e.g. <output>/out.
 	OutDir string
+	// ProbeTimeout bounds the etcd membership probe; zero means
+	// defaultProbeTimeout. Tests shrink it.
+	ProbeTimeout time.Duration
 	// Log receives progress. Nil means slog.Default().
 	Log *slog.Logger
 }
@@ -86,17 +98,32 @@ func (b *Bootstrapper) fileExists(name string) func(context.Context) (bool, erro
 	}
 }
 
-// bootstrapped probes the cluster by fetching a kubeconfig: it only
-// succeeds once etcd is up and the API server answers, which is
-// exactly the post-bootstrap state. Any error reads as "not yet" —
-// an unreachable node and an unbootstrapped one both mean the step
-// should run, and Apply's error is the one with the real diagnosis.
+// bootstrapped probes etcd membership on the endpoint node: only a
+// bootstrapped etcd has a member list to enumerate. Any error reads
+// as "not yet" — an unreachable node and an unbootstrapped one both
+// mean the step should run, Apply's error carries the real diagnosis,
+// and Apply already treats "data directory is not empty" as success,
+// so a false pending is harmless.
+//
+// The previous probe fetched a kubeconfig, assuming that needs a live
+// API server. It does not: Talos generates the kubeconfig locally
+// from the cluster PKI, so the probe read "done" on every healthy
+// un-bootstrapped node and the stage skipped the one step it exists
+// to run — while the cluster waited for bootstrap all night and
+// `talos health` hung on etcd in Preparing (INV-0001 deviation 13).
 func (b *Bootstrapper) bootstrapped(ctx context.Context) (bool, error) {
-	if _, err := b.Client.Kubeconfig(ctx); err != nil {
-		b.logger().Debug("cluster not answering yet, bootstrap pending", "err", err)
+	timeout := b.ProbeTimeout
+	if timeout == 0 {
+		timeout = defaultProbeTimeout
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	members, err := b.Client.EtcdMemberList(ctx)
+	if err != nil {
+		b.logger().Debug("etcd has no member list yet, bootstrap pending", "err", err)
 		return false, nil
 	}
-	return true, nil
+	return len(members) > 0, nil
 }
 
 func (b *Bootstrapper) applyTalosconfig(context.Context) error {

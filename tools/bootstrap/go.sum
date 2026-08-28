@@ -41,8 +41,8 @@ github.com/donaldgifford/booty v0.2.1 h1:pE0CuxKtZ9OlPtrwT9UMy2xPKVBrk5DxTz5AIkq
 github.com/donaldgifford/booty v0.2.1/go.mod h1:xQIZi5EhS2yiWdR4WloFBVKHqXAaXEgCTsvkoiK8D8M=
 github.com/donaldgifford/hclkit v0.2.0 h1:eT94LIrPPjBAQOA4VnFEaRNzRNM3Dj8WxrwxeBoXhRQ=
 github.com/donaldgifford/hclkit v0.2.0/go.mod h1:IR308cM6srCIdB6zA/hkboZKmIw+kmbO/vPvXe5pEf0=
-github.com/donaldgifford/proxmox-go-sdk v0.11.0 h1:a6qXrfFeh3W00T6sFIlu8DVfEfy9MvLqk6AxdmdwcCo=
-github.com/donaldgifford/proxmox-go-sdk v0.11.0/go.mod h1:YSSKveknD83V402Shv32mZvyy0meqe3BKO5DGIANJm4=
+github.com/donaldgifford/proxmox-go-sdk v0.12.0 h1:hPPa+JQeZpfvgLa39Xxn4FJFJm1G99eTbsUKJHGkA4Q=
+github.com/donaldgifford/proxmox-go-sdk v0.12.0/go.mod h1:YSSKveknD83V402Shv32mZvyy0meqe3BKO5DGIANJm4=
 github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=
 github.com/dustin/go-humanize v1.0.1/go.mod h1:Mu1zIs6XwVuF/gI1OepvI0qD18qycQx+mFykh5fBlto=
 github.com/evanphx/json-patch v5.9.11+incompatible h1:ixHHqfcGvxhWkniF1tWxBHA0yb4Z+d1UQi45df52xW8=

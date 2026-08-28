@@ -2,7 +2,11 @@ package pve_test
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -253,6 +257,24 @@ func TestVMSpecWireFields(t *testing.T) {
 	}
 }
 
+// TestVMSpecVLANTag pins the net0 tag behavior (IMPL-0002 OQ-5): a
+// configured VLAN lands as a PVE-side tag on the NIC — the lab's
+// vm-trunk bridge has no native VLAN, so an untagged VM is on no
+// network at all — and an unset VLAN adds no tag parameter.
+func TestVMSpecVLANTag(t *testing.T) {
+	cfg := vmsCluster()
+	node := &cfg.Talos.Nodes[0]
+
+	if got := pve.VMSpec(node).Net0; strings.Contains(got, "tag=") {
+		t.Errorf("net0 = %q carries a tag with no vlan configured", got)
+	}
+
+	node.VLAN = 11
+	if got, want := pve.VMSpec(node).Net0, ",tag=11"; !strings.HasSuffix(got, want) {
+		t.Errorf("net0 = %q, want suffix %q", got, want)
+	}
+}
+
 // TestVMSpecMACMatchesConfig pins the identity binding: the MAC on the
 // NIC is the one from the config, which is the same one the emitted
 // booty group selects on. If these ever diverge the node PXE boots and
@@ -271,6 +293,38 @@ func TestVMSpecMACMatchesConfig(t *testing.T) {
 	}
 }
 
+// TestVMSpecPinsVirtIOSCSI pins the fix for INV-0001 deviation 12.
+// With scsihw unset, PVE's API default is the emulated LSI 53C895A —
+// a controller the Talos kernel has no driver for (the UI wizard
+// defaults to VirtIO SCSI, which is why booty's walkthrough never hit
+// it). The guest consequence is total: /dev/sda does not exist, the
+// install sequence dies on lstat, and the node reboots back to PXE
+// forever while every host-side check reports a healthy VM.
+func TestVMSpecPinsVirtIOSCSI(t *testing.T) {
+	cfg := vmsCluster()
+	spec := pve.VMSpec(&cfg.Talos.Nodes[0])
+	if got := spec.Extra["scsihw"]; got != "virtio-scsi-single" {
+		t.Fatalf("scsihw = %q, want %q (PVE's API default is LSI 53C895A, invisible to Talos)",
+			got, "virtio-scsi-single")
+	}
+}
+
+// TestVMSpecEnablesGuestAgent pins the fix for INV-0001 deviation 14.
+// The base extension profile ships qemu-guest-agent, and its service
+// talks to a virtio-serial channel that exists only when the VM
+// config enables the agent. Without it the service can never start,
+// startAllServices never completes, the machine stage sticks at
+// "Booting" on every node, and `talos health` fails its
+// boot-sequence phase against an otherwise healthy cluster.
+func TestVMSpecEnablesGuestAgent(t *testing.T) {
+	cfg := vmsCluster()
+	spec := pve.VMSpec(&cfg.Talos.Nodes[0])
+	if got := spec.Extra["agent"]; got != "enabled=1" {
+		t.Fatalf("agent = %q, want %q (the guest-agent extension needs its virtio channel)",
+			got, "enabled=1")
+	}
+}
+
 // TestVMsNoNodesIsEmptyStage guards the degenerate config rather than
 // letting it panic somewhere downstream.
 func TestVMsNoNodesIsEmptyStage(t *testing.T) {
@@ -278,5 +332,92 @@ func TestVMsNoNodesIsEmptyStage(t *testing.T) {
 	p := &pve.Provisioner{Cluster: cfg}
 	if stage := p.Steps(); len(stage) != 0 {
 		t.Errorf("got %d steps for a cluster with no talos nodes, want 0", len(stage))
+	}
+}
+
+// wartClient wires a client through a wrapper that restores real
+// PVE's by-ID answer for a missing VM: HTTP 500 "Configuration file
+// '…' does not exist", never mockpve's clean 404 (INV-0001 deviation
+// 10, the third instance of the deviation 4/8 class — by-ID GETs are
+// not existence probes). Existence for the wart itself is read from
+// the mock's own index, the same source of truth the fixed code uses.
+func wartClient(t *testing.T, mock *mockpve.Server) api.Client {
+	t.Helper()
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/status/current") {
+			// /api2/json/nodes/<node>/qemu/<vmid>/status/current
+			parts := strings.Split(r.URL.Path, "/")
+			node, vmid := parts[4], parts[6]
+			if !mockHasVM(r.Context(), t, mock, node, vmid) {
+				http.Error(w, fmt.Sprintf(
+					"Configuration file 'nodes/%s/qemu-server/%s.conf' does not exist",
+					node, vmid), http.StatusInternalServerError)
+				return
+			}
+		}
+		mock.ServeHTTP(w, r)
+	})
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	client, err := api.New(srv.URL, api.TokenCredentials("root@pam!mock", "mock-secret"))
+	if err != nil {
+		t.Fatalf("wire client: %v", err)
+	}
+	return client
+}
+
+// mockHasVM asks the mock's list endpoint whether a VM exists.
+func mockHasVM(ctx context.Context, t *testing.T, mock *mockpve.Server, node, vmid string) bool {
+	t.Helper()
+	req := httptest.NewRequestWithContext(
+		ctx, http.MethodGet, "/api2/json/nodes/"+node+"/qemu", http.NoBody)
+	req.Header.Set("Authorization", "PVEAPIToken=root@pam!mock=mock-secret")
+	rec := httptest.NewRecorder()
+	mock.ServeHTTP(rec, req)
+
+	var envelope struct {
+		Data []struct {
+			VMID json.Number `json:"vmid"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("parse mock vm list: %v (body: %s)", err, rec.Body.String())
+	}
+	for _, vm := range envelope.Data {
+		if vm.VMID.String() == vmid {
+			return true
+		}
+	}
+	return false
+}
+
+// TestVMsSurviveByIDGetWart reproduces the drill's first Phase 4
+// failure: against a server with the real 500-on-missing wart, the
+// full stage must still converge — fresh run creates and starts
+// everything, re-run applies nothing. The Get-based checks this
+// replaced die in the first Check here, exactly as they did live.
+func TestVMsSurviveByIDGetWart(t *testing.T) {
+	cfg := vmsCluster()
+	mock := mockpve.New()
+	mock.SeedVersion("9.2.1", "9.2", "test")
+	for _, n := range cfg.PVE.Nodes {
+		mock.AddNode(n.Name)
+	}
+	client := wartClient(t, mock)
+
+	var logBuf strings.Builder
+	p := &pve.Provisioner{
+		Cluster: cfg,
+		QEMU:    qemuFor(client),
+		Tasks:   tasks.NewService(client),
+		Log:     slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})),
+	}
+
+	if res := runVMs(t, p); res.Applied != 8 {
+		t.Errorf("fresh run applied %d steps, want 8", res.Applied)
+	}
+	if res := runVMs(t, p); res.Applied != 0 {
+		t.Errorf("second run applied %d steps, want 0", res.Applied)
 	}
 }
