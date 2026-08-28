@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/siderolabs/talos/pkg/machinery/config/generate/secrets"
 	"google.golang.org/grpc/codes"
@@ -23,6 +24,14 @@ const (
 	credentialMode  = 0o600
 )
 
+// defaultProbeTimeout bounds the etcd membership probe. On an
+// un-bootstrapped node machined's internal etcd client retries its
+// local dial until the caller's deadline — pass none and the probe
+// hangs forever (INV-0001 deviation 13, second round: the fixed
+// Check's first live run sat silently instead of bootstrapping).
+// Fifteen seconds is generous for a live etcd answering its own node.
+const defaultProbeTimeout = 15 * time.Second
+
 // Bootstrapper builds the Stage 5 step list: write the talosconfig,
 // bootstrap etcd once, and write the kubeconfig fetched from the live
 // cluster — the credentials the operator (and later the Hoomlab
@@ -35,6 +44,9 @@ type Bootstrapper struct {
 	Client Client
 	// OutDir is where the credentials land, e.g. <output>/out.
 	OutDir string
+	// ProbeTimeout bounds the etcd membership probe; zero means
+	// defaultProbeTimeout. Tests shrink it.
+	ProbeTimeout time.Duration
 	// Log receives progress. Nil means slog.Default().
 	Log *slog.Logger
 }
@@ -100,6 +112,12 @@ func (b *Bootstrapper) fileExists(name string) func(context.Context) (bool, erro
 // to run — while the cluster waited for bootstrap all night and
 // `talos health` hung on etcd in Preparing (INV-0001 deviation 13).
 func (b *Bootstrapper) bootstrapped(ctx context.Context) (bool, error) {
+	timeout := b.ProbeTimeout
+	if timeout == 0 {
+		timeout = defaultProbeTimeout
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 	members, err := b.Client.EtcdMemberList(ctx)
 	if err != nil {
 		b.logger().Debug("etcd has no member list yet, bootstrap pending", "err", err)

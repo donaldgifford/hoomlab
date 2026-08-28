@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	clientconfig "github.com/siderolabs/talos/pkg/machinery/client/config"
 	"github.com/stretchr/testify/mock"
@@ -73,6 +74,48 @@ func TestBootstrapProbesEtcdNotKubeconfig(t *testing.T) {
 
 	if res := runBootstrap(t, b); res.Applied != 3 {
 		t.Errorf("applied %d steps, want 3 (etcd-bootstrap must not skip itself)", res.Applied)
+	}
+}
+
+// TestBootstrapProbeCannotHang pins the second round of INV-0001
+// deviation 13. On an un-bootstrapped node, machined's internal etcd
+// client retries its local dial until the caller's deadline — so a
+// probe that passes no deadline sits forever, and the fixed Check's
+// first live run hung silently instead of bootstrapping. The mock
+// models that server: it returns only when the probe's context
+// expires. The stage must still finish, and bootstrap.
+func TestBootstrapProbeCannotHang(t *testing.T) {
+	b, client := newBootstrapper(t)
+	b.ProbeTimeout = 50 * time.Millisecond
+
+	client.EXPECT().EtcdMemberList(mock.Anything).RunAndReturn(
+		func(ctx context.Context) ([]string, error) {
+			<-ctx.Done()
+			return nil, ctx.Err()
+		}).Once()
+	client.EXPECT().Bootstrap(mock.Anything).Return(nil).Once()
+	client.EXPECT().Kubeconfig(mock.Anything).Return([]byte(kubeconfigBytes), nil).Once()
+
+	type runOut struct {
+		res steps.Result
+		err error
+	}
+	done := make(chan runOut, 1)
+	go func() {
+		r := steps.Runner{Log: discardLogger()}
+		res, err := r.Run(context.Background(), b.Steps())
+		done <- runOut{res, err}
+	}()
+	select {
+	case out := <-done:
+		if out.err != nil {
+			t.Fatalf("run bootstrap: %v", out.err)
+		}
+		if out.res.Applied != 3 {
+			t.Errorf("applied %d steps, want 3", out.res.Applied)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("bootstrap run hung: the etcd probe carries no deadline")
 	}
 }
 
