@@ -466,14 +466,25 @@ re-run, with INV-0001 as the log.
 
 #### Tasks
 
-- [ ] Add the completion surface to the drill config — `cluster` block
+- [x] Add the completion surface to the drill config — `cluster` block
       (cni cilium, v1.20.1 / Gateway API v1.6.1, values file adapted
       from `examples/cilium-values.yaml`) and the `base` profile
       (qemu-guest-agent + iscsi-tools) referenced by all six nodes —
       then `validate`, re-run `talos emit` + `talos ipxe`, rsync the
-      tree to ns1, restart booty, and re-verify the step-7 curls: the
-      boot assets move to schematic-scoped paths and now carry the
-      extensions baked in
+      tree to ns1, restart booty, and re-verify the step-7 curls —
+      **done 2026-08-28, all pass**: per-MAC scripts serve
+      schematic-scoped boot paths (`dc7b152c…`), machine-configs carry
+      the full delivery (cni none, proxy disabled, cilium-install +
+      values ConfigMap inline, topology region `shart` / zone =
+      hostname, rotate-server-certificates), unconfigured MAC 404s,
+      assets byte-exact (kernel 20455424 — identical to the vanilla
+      one, extensions ride the initramfs, which grew 86170982 →
+      87339873). The live factory answered the schematic POST with
+      exactly the sha256 of the posted body — the content-addressed ID
+      the emit tests predicted, confirmed against the real service.
+      En route, the config's first draft declared the profile but
+      referenced it from no node — caught in review and hardened into
+      a validate error (`33525f0`)
 - [ ] `bootstrap talos vms`: every configured VM created on its node
       and started
 - [ ] Watch the full first-boot cycle per VM (booty logs +
