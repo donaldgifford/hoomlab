@@ -1,7 +1,7 @@
 ---
 id: INV-0001
 title: "Bootstrap CLI hardware acceptance drill"
-status: In Progress
+status: Concluded
 author: Donald Gifford
 created: 2026-08-21
 ---
@@ -123,8 +123,11 @@ against production once the flow is proven.
       script embedded and pointing at the configured booty URL; the
       stamp matches `embed.ipxe`, and a re-run converges without
       rebuilding
-- [ ] Verify the built `ipxe.efi` actually chainloads — needs a machine
-      to PXE boot, so it lands in the drill
+- [x] Verify the built `ipxe.efi` actually chainloads — landed in the
+      drill exactly as predicted (2026-08-28): the first chainload
+      found the embedded script missing its `dhcp` (deviation 11); the
+      fixed embed then carried six first boots and an unattended
+      re-image
 - [ ] ~~Nested-lab rehearsal of `pve form` and `pve certs`~~ —
       superseded by IMPL-0002 (2026-08-22): first contact happens on
       the real hosts; the nested environment is deferred to a future
@@ -134,16 +137,16 @@ against production once the flow is proven.
 
 | Component | Version / Value |
 | --- | --- |
-| bootstrap CLI | built from `a97c287` (`feat/impl-hardware-drill`, clean tree, **proxmox-go-sdk v0.12.0 released** — the workspace-override interlude from `056ff89`–`296f483` is over and the branch pushes again) via `just bootstrap-build` → `build/bin/bootstrap` (prior builds retired by fold-backs: `4b443ea`, `b7968c4`, `99b9416`, `f4ba8d5`, `797127e`, `6120bd1`, `528976d`, `7bf52e9`, `1215d93`, `39e3642`) |
+| bootstrap CLI | final drill binary from `418795d` (`feat/impl-hardware-drill`, clean tree) via `just bootstrap-build` → `build/bin/bootstrap` (prior builds retired by fold-backs: `4b443ea`, `b7968c4`, `99b9416`, `f4ba8d5`, `797127e`, `6120bd1`, `528976d`, `7bf52e9`, `1215d93`, `39e3642`, `a97c287`, `fe901ae`, `94725cb`, `12c23a4`, `c161b2e`, `007023f`) |
 | Talos | `v1.13.8` (machinery `v1.13.9`) |
 | Kubernetes | `v1.36.3` (machinery default) |
 | booty | `v0.2.1` — image `ghcr.io/donaldgifford/booty:0.2.1` |
 | iPXE | `v1.21.1`, built in `debian:bookworm-slim`, `linux/amd64` |
-| Talos Image Factory schematic | `376567…b4ba` (vanilla, no extensions) |
-| proxmox-go-sdk | `v0.11.0` |
+| Talos Image Factory schematic | `dc7b152c…8586` (base profile: qemu-guest-agent + iscsi-tools; content-addressed ID confirmed against the live factory). Earlier pre-cilium verification ran vanilla `376567…b4ba` |
+| proxmox-go-sdk | `v0.12.0` |
 | Proxmox VE | `9.2.10` on r740a (live 2026-08-22); r640a/srv01 confirm at drill time |
 | Workstation | macOS 26.5.2, arm64 (Apple Silicon), Go 1.26.6; secrets injected via `op run --env-file` |
-| Lab topology | Nodes: `r740a` 10.10.11.20 (primary, R740xd, `fast`/`tank` pools), `r640a` 10.10.11.21, `srv01` 10.10.11.40 (NVMe-mirror `local-zfs`). Networks: mgmt/API 10.10.11.0/24 (`vmbr0`), storage 10.10.13.0/24 (`stor0`), corosync 10.10.15.0/24 (`sync0`); guests on VLAN-aware `vmbr1` (10 GbE). Cluster `shart`, cert domain `shart.sh`, Talos domain `fartlab.dev`. Datasets `fast/vm`/`tank/vm` pre-created on both dells; pool roots (live Garage data) off-limits to PVE. Snapshot: [bootstrap-handoff](../runbook/bootstrap-handoff.md), verified 2026-08-22/23. DHCP: *(record at drill time)* |
+| Lab topology | Nodes: `r740a` 10.10.11.20 (primary, R740xd, `fast`/`tank` pools), `r640a` 10.10.11.21, `srv01` 10.10.11.40 (NVMe-mirror `local-zfs`). Networks: mgmt/API 10.10.11.0/24 (`vmbr0`), storage 10.10.13.0/24 (`stor0`), corosync 10.10.15.0/24 (`sync0`); guests on VLAN-aware `vmbr1` (10 GbE). Cluster `shart`, cert domain `shart.sh`, Talos domain `fartlab.dev`. Datasets `fast/vm`/`tank/vm` pre-created on both dells; pool roots (live Garage data) off-limits to PVE. Snapshot: [bootstrap-handoff](../runbook/bootstrap-handoff.md), verified 2026-08-22/23. DHCP: UniFi on the Servers VLAN (11) with per-MAC reservations `.51–.53`/`.61–.63`; booty proxyDHCP alongside it (hands out no addresses) |
 
 ## Findings
 
@@ -282,19 +285,70 @@ bug: record which step re-fired and why.
 
 ## Conclusion
 
-**Answer:** *pending the drill.*
+**Answer: yes, on both counts — after fourteen deviations, every one
+fixed or deliberately accepted, none fatal.**
+
+1. `kubectl get nodes` via the emitted kubeconfig shows all six
+   configured nodes `Ready` (2026-08-28): three control planes, three
+   workers, kubelet v1.36.3 on Talos v1.13.8, no kube-proxy on the
+   cluster — the Cilium delivery proven end to end. Every drill row
+   (1–12) passed.
+2. The full-order second pass applied zero steps across all nine
+   stages. The single non-zero along the way was `talos emit`
+   re-firing once on genuine input drift (a template amendment that
+   postdated the deployed tree) and converging to zero on the
+   immediate re-run. The re-image spot-check closed the loop: one
+   `talosctl reset --wipe-mode all --reboot` took a worker through
+   the entire unattended PXE → install → rejoin cycle in minutes,
+   with the fresh `Ready` arriving with no human input.
+
+**The hypothesis held precisely.** Every one of the fourteen
+deviations lived in the hardware-facing surface; the convergence
+engine itself never mis-stepped. The failures sorted into classes the
+drill existed to find, each invisible to every workstation-side
+check:
+
+- **Mock-parity gaps** (deviations 2–4, 6–8, 10): mockpve encoded
+  beliefs about the PVE API — clean 404s on missing resources,
+  token-writable root-reserved endpoints, base64 round-trips — that
+  real PVE does not share. Filed upstream as proxmox-go-sdk #32.
+- **Guest-visible VM-config gaps** (12, 14): the API's defaults
+  diverge from the UI wizard's (`scsihw`), and an extension can need
+  a device the spec never provisioned (`agent`). No host-side check
+  can see either; only a booting guest falsifies the spec.
+- **Delivery-mode assumptions** (11): a script correct in one
+  delivery mode (fetched post-DHCP) embedded into another (in place
+  of autoboot) — nothing before first boot ever executed it.
+- **Probe assumptions** (13, both rounds): a Check probing via an
+  operation that succeeds for the wrong reason (locally generated
+  kubeconfig), then a probe with no deadline against a server that
+  retries until the caller's deadline. The home-grown variant of the
+  mock-parity class: our own tests seeded the belief.
+
+Every deviation produced a regression test proven failing before its
+fix, and the final binary re-ran the entire drill to zeros.
 
 ## Recommendation
 
-*Pending.* On a passing drill and a clean convergence pass:
+The drill passed and the convergence pass is clean — the conditions
+are met:
 
-1. Check off IMPL-0001's six remaining tasks and move it to
-   **Completed**.
-2. Move DESIGN-0001 from **Approved** to **Implemented**.
-3. Cut `tools/bootstrap/v0.1.0` via `tools-release.yml` (OQ-5).
+1. Check off IMPL-0001's remaining tasks — five of six done with
+   this fold-back; the sixth (the v0.1.0 cut) is annotated
+   conditions-met and moves IMPL-0001 to **Completed** when the tag
+   lands post-merge.
+2. Move DESIGN-0001 to **Implemented** — done with this fold-back.
+3. Cut `tools/bootstrap/v0.1.0` via `tools-release.yml` (OQ-5) once
+   the fold-back branch merges (`dont-release` on the PR — the main
+   release train stays inert).
 4. Fold every deviation into the code and
-   [the runbook](../runbook/bootstrap-cluster.md), and close this
-   investigation as **Concluded**.
+   [the runbook](../runbook/bootstrap-cluster.md) — done: every
+   deviations-table row references its fix commit or amendment, and
+   the upstream gaps are filed
+   ([proxmox-go-sdk#32](https://github.com/donaldgifford/proxmox-go-sdk/issues/32)
+   mock parity,
+   [#33](https://github.com/donaldgifford/proxmox-go-sdk/issues/33)
+   corosync linkN). This investigation closes as **Concluded**.
 
 ## References
 

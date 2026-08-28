@@ -1,7 +1,7 @@
 ---
 id: DESIGN-0001
 title: "Bootstrap CLI"
-status: In Review
+status: Implemented
 author: Donald Gifford
 created: 2026-08-17
 ---

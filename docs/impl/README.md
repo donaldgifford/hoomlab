@@ -33,5 +33,5 @@ docz create impl "Your Implementation Title"
 | ID | Title | Status | Date | Author | Link |
 |----|-------|--------|------|--------|------|
 | IMPL-0001 | Bootstrap CLI | In Progress | 2026-08-20 | Donald Gifford | [0001-bootstrap-cli.md](0001-bootstrap-cli.md) |
-| IMPL-0002 | Hardware acceptance drill for the bootstrap CLI | Draft | 2026-08-22 | Donald Gifford | [0002-hardware-acceptance-drill-for-the-bootstrap-cli.md](0002-hardware-acceptance-drill-for-the-bootstrap-cli.md) |
+| IMPL-0002 | Hardware acceptance drill for the bootstrap CLI | In Progress | 2026-08-22 | Donald Gifford | [0002-hardware-acceptance-drill-for-the-bootstrap-cli.md](0002-hardware-acceptance-drill-for-the-bootstrap-cli.md) |
 <!-- END DOCZ AUTO-GENERATED -->

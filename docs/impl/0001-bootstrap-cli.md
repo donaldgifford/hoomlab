@@ -231,10 +231,13 @@ against mockpve.
       interruption matrix (stop the runner after each step boundary,
       re-run the full stage, assert convergence) — table-driven over
       the boundaries
-- [ ] Spot-check `pve form` against a nested pvelab-style 3-node lab
+- [x] Spot-check `pve form` against a nested pvelab-style 3-node lab
       (OQ-2): formation, quorum, and a convergent re-run on real PVE
       *(operator-run: needs the lab hardware; everything up to it is
-      mockpve-verified)*
+      mockpve-verified)* — **superseded by the real thing 2026-08-25**:
+      the drill formed the production three-node cluster directly (no
+      nested rehearsal needed); formation, serial joins, quorum, and
+      the convergent re-run all verified in INV-0001
 
 #### Success Criteria
 
@@ -505,20 +508,27 @@ cluster drill on the real lab, re-run to prove end-to-end convergence.
       section covering the failure modes found so far. Steps that need
       the lab are marked unverified rather than implying confidence
       nobody has earned.
-- [ ] Run the full drill on the homelab hardware (OQ-2; nested-lab
+- [x] Run the full drill on the homelab hardware (OQ-2; nested-lab
       rehearsals first as needed): bare PVE nodes → `validate →
       pve form → pve certs → talos secrets → talos emit → talos ipxe →
       [start booty] → talos vms → talos bootstrap → talos health` —
-      executed from the runbook, not from memory
-- [ ] Re-run every stage after the drill and confirm the full pass is a
+      executed from the runbook, not from memory — **done 2026-08-25 →
+      2026-08-28** (IMPL-0002 phases 1–4): all 12 INV-0001 drill rows
+      pass, six nodes `Ready`
+- [x] Re-run every stage after the drill and confirm the full pass is a
       no-op (the "take ownership converges on no-op" property the
-      Hoomlab service will later rely on)
-- [ ] Record drill results and deviations in INV-0001; fold any fixes
-      back into code and docs — INV-0001 is prepared with a 12-step
-      result table, a per-stage convergence table, and a deviations
-      table awaiting the run
+      Hoomlab service will later rely on) — **done 2026-08-28**: zero
+      steps applied across all nine stages (INV-0001 convergence
+      table)
+- [x] Record drill results and deviations in INV-0001; fold any fixes
+      back into code and docs — **done 2026-08-28**: all three tables
+      filled; 14 deviations, every one folded back (regression-tested
+      code fixes, runbook amendments, or deliberate acceptances);
+      mock-parity and corosync gaps filed upstream (proxmox-go-sdk
+      #32/#33)
 - [ ] Cut `tools/bootstrap/v0.1.0` via `tools-release.yml` once the
-      drill and the no-op re-run have passed (OQ-5)
+      drill and the no-op re-run have passed (OQ-5) — both conditions
+      met 2026-08-28; dispatch once the fold-back branch merges
 
 #### Success Criteria
 
@@ -576,8 +586,9 @@ Per DESIGN-0001's Testing Strategy, distributed across the phases:
 - [x] Filesystem-touching tests use `t.TempDir()`; no test writes into
       the repo tree — the one exception is `-update`, which rewrites
       `internal/emit/testdata/golden` on demand
-- [ ] e2e: the Phase 6 real-lab drill — deliberately not a merge gate
-      (per DESIGN-0001), recorded in an INV/runbook appendix
+- [x] e2e: the Phase 6 real-lab drill — deliberately not a merge gate
+      (per DESIGN-0001), recorded in an INV/runbook appendix — **done
+      2026-08-28**: INV-0001 concluded, runbook fully verified
 
 ## Dependencies
 

@@ -5,12 +5,13 @@ Step-by-step operator procedure for the `bootstrap` CLI
 in IMPL-0001, remaining pre-drill work in INV-0001.
 
 **Scope of verification.** Every command, flag, and output string below
-was taken from the code and, where the stage does not need Proxmox
-hardware, executed on a workstation. Stages that need the lab are
-marked **`[unverified]`** — they are written from the code and are
-exactly what the acceptance drill is meant to confirm. When a step
-turns out to be wrong, fix the code and this document together; that is
-the whole point of running the drill from here rather than from memory.
+was taken from the code, and **every stage has now been executed for
+real**: the workstation stages first, and the hardware stages during
+the acceptance drill (INV-0001, concluded 2026-08-28 — six-node
+cluster up, full-order convergence pass at zero applied). Stages
+carry the date their live verification landed. When a step turns out
+to be wrong, fix the code and this document together; that is the
+whole point of running the drill from here rather than from memory.
 
 ## Table of contents
 
@@ -181,7 +182,7 @@ failed: environment variable HOOMLAB_CLOUDFLARE_API_TOKEN is not set.
 
 ## 3. `pve form`
 
-**`[unverified — needs the lab]`**
+**`[verified in the drill — 2026-08-25: cluster of one formed, grown to three, quorate]`**
 
 ```sh
 bootstrap pve form
@@ -276,7 +277,7 @@ root@pam-reserved endpoints.
 
 ## 5. `pve certs`
 
-**`[unverified — needs the lab]`**
+**`[verified in the drill — 2026-08-25/26: staging convergence, staging→production flip, production certs on all three nodes]`**
 
 ```sh
 bootstrap pve certs
@@ -430,7 +431,7 @@ a rebuild and nothing else does:
 
 ## 9. Start booty (operator step)
 
-**`[unverified on real PXE — HTTP endpoints verified]`**
+**`[verified in the drill — 2026-08-28: six VMs netbooted end to end over real proxyDHCP/TFTP/HTTP]`**
 
 The CLI never copies anything to the booty host; moving the tree is
 yours:
@@ -506,7 +507,7 @@ does not equal your node count, it is serving a stale or partial tree.
 
 ## 10. `talos vms`
 
-**`[unverified — needs the lab]`**
+**`[verified in the drill — 2026-08-28: 12/12 applied, six VMs created and started (deviations 10/12/14 folded back en route)]`**
 
 ```sh
 bootstrap talos vms
@@ -539,7 +540,7 @@ started.
 
 ## 11. `talos bootstrap`
 
-**`[unverified — needs the lab]`**
+**`[verified in the drill — 2026-08-28: etcd bootstrapped, credentials written 0600 and never overwritten (deviation 13 folded back en route)]`**
 
 Run once the VMs have PXE-booted, installed, and rebooted into Talos.
 
@@ -569,7 +570,7 @@ would hand you new credentials on every run.
 
 ## 12. `talos health`
 
-**`[unverified — needs the lab]`**
+**`[verified in the drill — 2026-08-28: full battery green on the six-node cluster]`**
 
 ```sh
 bootstrap talos health            # --wait defaults to 10m
@@ -595,7 +596,7 @@ maintenance, any time you want the cluster to prove itself.
 
 ## 13. Convergence pass
 
-**`[unverified — needs the lab]`**
+**`[verified in the drill — 2026-08-28: zero steps applied across all nine stages; re-image spot-check rejoined unattended]`**
 
 Re-run **every** stage. This no-op property is what the Hoomlab service
 later relies on when it takes ownership of the cluster.

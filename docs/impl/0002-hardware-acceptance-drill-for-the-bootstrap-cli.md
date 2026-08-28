@@ -17,11 +17,23 @@ created: 2026-08-22
   - [Out of Scope](#out-of-scope)
 - [Implementation Phases](#implementation-phases)
   - [Phase 1: Preparation on the existing hosts](#phase-1-preparation-on-the-existing-hosts)
+    - [Tasks](#tasks)
+    - [Success Criteria](#success-criteria)
   - [Phase 2: Form and certify the real cluster](#phase-2-form-and-certify-the-real-cluster)
+    - [Tasks](#tasks-1)
+    - [Success Criteria](#success-criteria-1)
   - [Phase 3: Talos artifacts and the booty environment](#phase-3-talos-artifacts-and-the-booty-environment)
+    - [Tasks](#tasks-2)
+    - [Success Criteria](#success-criteria-2)
   - [Phase 4: Talos cluster creation](#phase-4-talos-cluster-creation)
+    - [Tasks](#tasks-3)
+    - [Success Criteria](#success-criteria-3)
   - [Phase 5: Convergence pass and fold-back](#phase-5-convergence-pass-and-fold-back)
+    - [Tasks](#tasks-4)
+    - [Success Criteria](#success-criteria-4)
   - [Phase 6: Release and closure](#phase-6-release-and-closure)
+    - [Tasks](#tasks-5)
+    - [Success Criteria](#success-criteria-5)
 - [Testing Plan](#testing-plan)
 - [Dependencies](#dependencies)
 - [Open Questions](#open-questions)
@@ -595,13 +607,19 @@ next doc.
       GitHub release with binary archives, and that
       `go install github.com/donaldgifford/hoomlab/tools/bootstrap@v0.1.0`
       resolves
-- [ ] Complete INV-0001: Conclusion answered, Environment table
-      filled, status → **Concluded**
-- [ ] IMPL-0001: annotate the nested spot-check task per OQ-3's
-      decision, check off the remaining tasks, status → **Completed**
-- [ ] DESIGN-0001 status → **Implemented**
-- [ ] Update the runbook's `[unverified]` markers to match what this
-      run verified; `docz update` for the index tables
+- [x] Complete INV-0001: Conclusion answered, Environment table
+      filled, status → **Concluded** — **done 2026-08-28**
+- [x] IMPL-0001: annotate the nested spot-check task per OQ-3's
+      decision, check off the remaining tasks — **done 2026-08-28**
+      (five of six checked; the v0.1.0 cut is annotated conditions-met
+      and flips the status to **Completed** when the tag lands
+      post-merge)
+- [x] DESIGN-0001 status → **Implemented** — **done 2026-08-28**
+- [x] Update the runbook's `[unverified]` markers to match what this
+      run verified; `docz update` for the index tables — **done
+      2026-08-28**: all seven markers now carry their live-verification
+      dates; the scope-of-verification header states the drill's
+      conclusion
 - [ ] Write the future test environment's DESIGN doc (OQ-4), carrying
       the requirements this run observed: what booty's environment
       needed, what nested provisioning must provide, what a
@@ -609,8 +627,8 @@ next doc.
       built on the production cluster this run created, validated
       against the production cluster and Talos cluster as the
       reference
-- [ ] File the multi-link corosync follow-up against proxmox-go-sdk
-      (noted 2026-08-23): the PVE API accepts `link0`–`link7` on both
+- [x] File the multi-link corosync follow-up against proxmox-go-sdk
+      (noted 2026-08-23) — **filed 2026-08-28 as proxmox-go-sdk#33**: the PVE API accepts `link0`–`link7` on both
       cluster create and join, and `GET /cluster/config/nodes` exposes
       each node's ring addresses — so links are both settable and
       listable. Today the SDK only carries them via the untyped
@@ -620,8 +638,10 @@ next doc.
       has that, bootstrap can grow a per-node second address and form
       with `link1` redundancy directly instead of the manual
       post-formation `corosync.conf` edit the runbook documents
-- [ ] File the mockpve-parity follow-ups against proxmox-go-sdk
-      collected by Phase 2's deviations, so the mock's model of
+- [x] File the mockpve-parity follow-ups against proxmox-go-sdk
+      collected by Phase 2's deviations — **filed 2026-08-28 as
+      proxmox-go-sdk#32, including the drill's deviation 10
+      (`status/current` 500-on-missing)** — so the mock's model of
       Proxmox tightens to what the lab proved: enforce root@pam-only
       on cluster create/join and ACME account endpoints (deviation 2
       and 3 — the mock accepted token-authed calls PVE reserves);
