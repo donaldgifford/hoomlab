@@ -45,6 +45,16 @@ const (
 	// serialDevice gives "qm terminal" somewhere to attach, which is
 	// the only console into a Talos node that will not boot.
 	serialDevice = "socket"
+	// agentEnabled provisions the QEMU guest agent's virtio-serial
+	// channel. The base extension profile ships qemu-guest-agent, and
+	// without the channel that service can never start: the boot
+	// sequence's startAllServices never completes, every node's stage
+	// sticks at "Booting", and `talos health` fails its boot-sequence
+	// phase against an otherwise fully healthy cluster (INV-0001
+	// deviation 14). The property form rather than bare "1": PVE
+	// accepts both, but a bare numeric round-trips as a JSON number
+	// out of the config read and the SDK types the field as string.
+	agentEnabled = "enabled=1"
 )
 
 // Provisioner builds the Stage 4 step list: create each configured VM
@@ -194,6 +204,7 @@ func VMSpec(node *config.TalosNode) *qemu.CreateSpec {
 		Net0:   net0(node),
 		Boot:   bootOrder,
 		Extra: map[string]string{
+			"agent":   agentEnabled,
 			"bios":    biosType,
 			"machine": machineType,
 			"scsihw":  scsiHW,

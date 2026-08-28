@@ -309,6 +309,22 @@ func TestVMSpecPinsVirtIOSCSI(t *testing.T) {
 	}
 }
 
+// TestVMSpecEnablesGuestAgent pins the fix for INV-0001 deviation 14.
+// The base extension profile ships qemu-guest-agent, and its service
+// talks to a virtio-serial channel that exists only when the VM
+// config enables the agent. Without it the service can never start,
+// startAllServices never completes, the machine stage sticks at
+// "Booting" on every node, and `talos health` fails its
+// boot-sequence phase against an otherwise healthy cluster.
+func TestVMSpecEnablesGuestAgent(t *testing.T) {
+	cfg := vmsCluster()
+	spec := pve.VMSpec(&cfg.Talos.Nodes[0])
+	if got := spec.Extra["agent"]; got != "enabled=1" {
+		t.Fatalf("agent = %q, want %q (the guest-agent extension needs its virtio channel)",
+			got, "enabled=1")
+	}
+}
+
 // TestVMsNoNodesIsEmptyStage guards the degenerate config rather than
 // letting it panic somewhere downstream.
 func TestVMsNoNodesIsEmptyStage(t *testing.T) {
