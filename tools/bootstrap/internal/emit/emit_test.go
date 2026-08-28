@@ -117,6 +117,38 @@ func TestTreeGolden(t *testing.T) {
 	}
 }
 
+// TestEmbedScriptConfiguresNICBeforeFetch pins the fix for INV-0001
+// deviation 11. The embedded script runs in place of iPXE's autoboot
+// sequence — the sequence that would have configured the NIC — so
+// net0 has no address until the script itself runs dhcp, and an embed
+// without that line dies on its very first fetch with ENETUNREACH
+// (exactly how the drill's first boot ended, six VMs at an iPXE
+// shell). booty's walkthrough calls the dhcp line load-bearing.
+func TestEmbedScriptConfiguresNICBeforeFetch(t *testing.T) {
+	tree, err := testEmitter(t).Tree(context.Background())
+	if err != nil {
+		t.Fatalf("Tree: %v", err)
+	}
+	script := string(tree["embed.ipxe"].Data)
+	dhcp, chain := -1, -1
+	for i, line := range strings.Split(script, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if dhcp < 0 && strings.HasPrefix(trimmed, "dhcp") {
+			dhcp = i
+		}
+		if chain < 0 && strings.HasPrefix(trimmed, "chain ") {
+			chain = i
+		}
+	}
+	if chain < 0 {
+		t.Fatalf("embed.ipxe has no chain line:\n%s", script)
+	}
+	if dhcp < 0 || dhcp > chain {
+		t.Fatalf("embed.ipxe never configures the NIC before its first fetch "+
+			"(dhcp line %d, chain line %d):\n%s", dhcp, chain, script)
+	}
+}
+
 // TestTreeDeterministic is the invariant the emit step's Check rests
 // on: identical inputs must render identical bytes, or every run would
 // report drift and tell the operator to restart booty forever.

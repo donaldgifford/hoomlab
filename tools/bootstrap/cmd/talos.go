@@ -144,9 +144,11 @@ func newTalosIPXECmd(opts *rootOptions) *cobra.Command {
 		Short: "Build the iPXE binary with the booty chain script embedded",
 		Long: `ipxe builds <output>/booty/boot/ipxe.efi in a container: a pinned
 iPXE source tree compiled with the emitted embed.ipxe baked in. That
-embedded script is what makes network boot work at all — iPXE sends no
-machine identity on its own, so the chain script is what turns a PXE
-request into booty's /ipxe?mac=… lookup.
+embedded script is what makes network boot work at all: it breaks the
+stock binary's chainload loop, configures the NIC (an embedded script
+runs in place of autoboot, so net0 has no address until it does), and
+chains to booty's served /boot.ipxe, which forwards the machine's
+identity to the /ipxe?mac=… lookup.
 
 The build is skipped unless it is needed: pending only when the binary
 is missing or when the chain script the config renders differs from the

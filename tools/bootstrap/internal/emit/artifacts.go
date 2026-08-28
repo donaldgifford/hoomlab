@@ -5,7 +5,6 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/donaldgifford/booty/render"
 	"github.com/donaldgifford/hoomlab/tools/bootstrap/internal/config"
 )
 
@@ -46,22 +45,39 @@ func bootyImage(booty config.Booty) string {
 	return "ghcr.io/donaldgifford/booty:" + strings.TrimPrefix(version, "v")
 }
 
-// renderEmbedIPXE renders the chainloading script that gets baked into
-// ipxe.efi. It comes from booty's own renderer rather than a copy of
-// the script: the embedded chain and the one booty serves at
-// /boot.ipxe must agree, and the only way to guarantee that is to ask
-// booty.
+// renderEmbedIPXE renders the script that gets baked into ipxe.efi —
+// booty's documented two-line embed (dhcp, then chain /boot.ipxe),
+// NOT the identity-forwarding chain script booty serves. The embedded
+// script runs in place of iPXE's autoboot sequence, and autoboot is
+// what would have configured the NIC: without the dhcp line the very
+// first fetch dies with ENETUNREACH and the node drops to an iPXE
+// shell (INV-0001 deviation 11 — the drill's first boot, six VMs at
+// once; booty's walkthrough calls the line load-bearing).
+//
+// An earlier version embedded booty's served chain script via its
+// renderer, to guarantee the embedded and served scripts agree. That
+// script is correct only in its own delivery mode — fetched over HTTP
+// after DHCP has already run. Chaining to /boot.ipxe makes the
+// agreement structural instead: the identity-forwarding script that
+// actually runs is always the one booty serves.
 func renderEmbedIPXE(baseURL string) ([]byte, error) {
-	r, err := render.New()
-	if err != nil {
-		return nil, fmt.Errorf("construct booty renderer: %w", err)
-	}
-	script, err := r.ChainScript(baseURL)
-	if err != nil {
-		return nil, fmt.Errorf("render chain script: %w", err)
-	}
-	return []byte(script), nil
+	return renderText(embedIPXEPath, embedIPXETemplate, struct{ BootyURL string }{baseURL})
 }
+
+const embedIPXETemplate = `#!ipxe
+# The embedded script — iPXE runs THIS in place of its autoboot sequence
+# (a stock binary would re-DHCP, be handed ipxe.efi again, and chainload
+# forever). Autoboot is also what would have configured the NIC, so net0
+# has no address yet: the dhcp below is load-bearing. The chain hands off
+# to booty's served /boot.ipxe, which forwards this machine's identity to
+# the /ipxe?mac=... lookup.
+dhcp || goto failed
+chain {{ .BootyURL }}/boot.ipxe || goto failed
+
+:failed
+echo booty: could not chainload boot script from {{ .BootyURL }}
+shell
+`
 
 // runScriptData is the model for the booty-run.sh template.
 type runScriptData struct {
