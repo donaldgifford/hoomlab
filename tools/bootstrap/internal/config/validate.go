@@ -168,13 +168,28 @@ func (c *Cluster) validateProfiles() hcl.Diagnostics {
 		}
 	}
 
+	referenced := make(map[string]struct{}, len(declared))
 	for i := range c.Talos.Nodes {
 		n := &c.Talos.Nodes[i]
 		for _, ref := range n.Profiles {
 			if _, ok := declared[ref]; !ok {
 				diags = append(diags, errf("Unknown profile reference",
 					"talos node %q: profiles entry %q names no declared profile block.", n.Name, ref))
+				continue
 			}
+			referenced[ref] = struct{}{}
+		}
+	}
+	// A declared profile no node references bakes nothing into any
+	// image — near-certainly a config that added the block and forgot
+	// the node attributes, which fails silently as vanilla boot images
+	// missing their extensions.
+	for i := range c.Talos.Profiles {
+		name := c.Talos.Profiles[i].Name
+		if _, ok := referenced[name]; !ok {
+			diags = append(diags, errf("Unreferenced profile",
+				"talos profile %q is referenced by no node; add profiles = [%q] to the nodes it should shape, or drop the block.",
+				name, name))
 		}
 	}
 	return diags

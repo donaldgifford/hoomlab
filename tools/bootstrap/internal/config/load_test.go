@@ -365,6 +365,17 @@ func TestLoad(t *testing.T) {
 			wantErrs: []string{"Unknown profile reference", `"gpu"`},
 		},
 		{
+			// The drill's own near-miss: a profile block added, the node
+			// attributes forgotten — which would silently boot every node
+			// on the vanilla image, extensions missing.
+			name: "unreferenced profile",
+			mutate: replace(`booty {`, `profile "base" {
+      extensions = ["siderolabs/qemu-guest-agent"]
+    }
+    booty {`),
+			wantErrs: []string{"Unreferenced profile", `add profiles = ["base"]`},
+		},
+		{
 			name: "schematic_id with profiles",
 			mutate: replace(`booty {`, `schematic_id = "deadbeef"
     profile "base" {
