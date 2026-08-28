@@ -86,17 +86,26 @@ func (b *Bootstrapper) fileExists(name string) func(context.Context) (bool, erro
 	}
 }
 
-// bootstrapped probes the cluster by fetching a kubeconfig: it only
-// succeeds once etcd is up and the API server answers, which is
-// exactly the post-bootstrap state. Any error reads as "not yet" —
-// an unreachable node and an unbootstrapped one both mean the step
-// should run, and Apply's error is the one with the real diagnosis.
+// bootstrapped probes etcd membership on the endpoint node: only a
+// bootstrapped etcd has a member list to enumerate. Any error reads
+// as "not yet" — an unreachable node and an unbootstrapped one both
+// mean the step should run, Apply's error carries the real diagnosis,
+// and Apply already treats "data directory is not empty" as success,
+// so a false pending is harmless.
+//
+// The previous probe fetched a kubeconfig, assuming that needs a live
+// API server. It does not: Talos generates the kubeconfig locally
+// from the cluster PKI, so the probe read "done" on every healthy
+// un-bootstrapped node and the stage skipped the one step it exists
+// to run — while the cluster waited for bootstrap all night and
+// `talos health` hung on etcd in Preparing (INV-0001 deviation 13).
 func (b *Bootstrapper) bootstrapped(ctx context.Context) (bool, error) {
-	if _, err := b.Client.Kubeconfig(ctx); err != nil {
-		b.logger().Debug("cluster not answering yet, bootstrap pending", "err", err)
+	members, err := b.Client.EtcdMemberList(ctx)
+	if err != nil {
+		b.logger().Debug("etcd has no member list yet, bootstrap pending", "err", err)
 		return false, nil
 	}
-	return true, nil
+	return len(members) > 0, nil
 }
 
 func (b *Bootstrapper) applyTalosconfig(context.Context) error {

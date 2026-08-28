@@ -134,6 +134,68 @@ func (_c *MockClient_Close_Call) RunAndReturn(run func() error) *MockClient_Clos
 	return _c
 }
 
+// EtcdMemberList provides a mock function for the type MockClient
+func (_mock *MockClient) EtcdMemberList(ctx context.Context) ([]string, error) {
+	ret := _mock.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for EtcdMemberList")
+	}
+
+	var r0 []string
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context) ([]string, error)); ok {
+		return returnFunc(ctx)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context) []string); ok {
+		r0 = returnFunc(ctx)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]string)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = returnFunc(ctx)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockClient_EtcdMemberList_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'EtcdMemberList'
+type MockClient_EtcdMemberList_Call struct {
+	*mock.Call
+}
+
+// EtcdMemberList is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockClient_Expecter) EtcdMemberList(ctx any) *MockClient_EtcdMemberList_Call {
+	return &MockClient_EtcdMemberList_Call{Call: _e.mock.On("EtcdMemberList", ctx)}
+}
+
+func (_c *MockClient_EtcdMemberList_Call) Run(run func(ctx context.Context)) *MockClient_EtcdMemberList_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_EtcdMemberList_Call) Return(strings []string, err error) *MockClient_EtcdMemberList_Call {
+	_c.Call.Return(strings, err)
+	return _c
+}
+
+func (_c *MockClient_EtcdMemberList_Call) RunAndReturn(run func(ctx context.Context) ([]string, error)) *MockClient_EtcdMemberList_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Health provides a mock function for the type MockClient
 func (_mock *MockClient) Health(ctx context.Context, timeout time.Duration, log *slog.Logger) error {
 	ret := _mock.Called(ctx, timeout, log)
