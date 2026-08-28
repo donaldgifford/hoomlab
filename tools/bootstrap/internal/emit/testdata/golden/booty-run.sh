@@ -19,6 +19,14 @@
 # booty loads the catalog and templates ONCE at startup: after every
 # re-emit, restart this container.
 #
+# Multi-homed host? proxyDHCP replies go to 255.255.255.255, and the
+# kernel routes those out the DEFAULT interface — usually not the boot
+# VLAN. Pin it, persistently (ip route add does not survive reboot):
+#
+#   ip route add 255.255.255.255/32 dev <boot-vlan-iface>
+#
+# Symptom otherwise: PXE-E16 on the client, "proxyDHCP offer" x4 here.
+#
 # Override the image with BOOTY_IMAGE=... if you need a different build.
 set -euo pipefail
 

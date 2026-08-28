@@ -461,6 +461,23 @@ plus a restart policy) is a proven substitution — just keep the
 "restart after every re-emit" rule, which no delivery mechanism can
 repeal.
 
+**Multi-homed booty host: pin the broadcast route.** proxyDHCP
+replies go to `255.255.255.255`, and the kernel sends those out the
+default-route interface — which on a multi-homed host is usually NOT
+the boot VLAN. The offers leave the wrong NIC, the firmware never
+sees them, and the symptom is `PXE-E16: No valid offer received`
+while booty's log shows `proxyDHCP offer` ×4 (backoff 0/4/8/16 s).
+The fix is a host route on the booty host:
+
+```sh
+ip route add 255.255.255.255/32 dev <boot-vlan-iface>
+```
+
+`ip route add` does not survive a reboot — persist it in whatever
+owns the host's network config (systemd-networkd `[Route]`, netplan
+`routes:`, or the config management that builds the host), or the
+next reboot of the booty host silently breaks all PXE.
+
 Verify it serves before creating any VMs — substitute a MAC from your
 config:
 
