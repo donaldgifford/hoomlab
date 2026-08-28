@@ -485,23 +485,37 @@ re-run, with INV-0001 as the log.
       En route, the config's first draft declared the profile but
       referenced it from no node — caught in review and hardened into
       a validate error (`33525f0`)
-- [ ] `bootstrap talos vms`: every configured VM created on its node
-      and started
-- [ ] Watch the full first-boot cycle per VM (booty logs +
+- [x] `bootstrap talos vms`: every configured VM created on its node
+      and started — **done 2026-08-28** (12/12 applied after
+      deviation 10's index-based fix; repeated in full after
+      deviation 12's destroy-and-recreate)
+- [x] Watch the full first-boot cycle per VM (booty logs +
       `qm terminal`): proxyDHCP/PXE → `ipxe.efi` chainload → per-MAC
       boot script → kernel/initramfs → Talos install → reboot from
-      disk into Talos; record per-VM notes in INV-0001
-- [ ] `bootstrap talos bootstrap`: etcd bootstrapped against the
+      disk into Talos; record per-VM notes in INV-0001 — **done
+      2026-08-28**: three cycles (deviations 11 and 12 en route), the
+      third fully unattended on all six nodes, ~90 s PXE-to-disk each
+- [x] `bootstrap talos bootstrap`: etcd bootstrapped against the
       endpoint (first control-plane node), `talosconfig` +
-      `kubeconfig` written 0600 under `<output>/out/`
-- [ ] `bootstrap talos health` passes within the wait
+      `kubeconfig` written 0600 under `<output>/out/` — **done
+      2026-08-28** after deviation 13's two rounds (false-done Check,
+      hanging probe); credentials never overwritten across every
+      re-run of the night
+- [x] `bootstrap talos health` passes within the wait — **done
+      2026-08-28**: `✓ cluster "shart" is healthy` after
+      deviation 14's rolling guest-agent remediation; `kube-proxy:
+      SKIP` in the battery is Cilium's replacement doing its job
 - [ ] `kubectl --kubeconfig <output>/out/kubeconfig get nodes`: every
       configured node `Ready` — fill INV-0001's 12-step drill table as
-      each step lands
-- [ ] For every failure along the way: deviations table first, then
+      each step lands (rows 8–11 recorded; row 12 awaits this check)
+- [x] For every failure along the way: deviations table first, then
       the fix — CLI defects get a regression test and a rebuilt
       binary; environment/config mistakes get a runbook amendment if
-      the runbook could have prevented them
+      the runbook could have prevented them — **held throughout**:
+      deviations 10–14 each carry a pre-fix-failing regression
+      (`fe901ae`, `94725cb`, `12c23a4`, `c161b2e`/`007023f`,
+      `418795d`); the broadcast-route gap became a runbook + launcher
+      amendment (`956fc9d`)
 
 #### Success Criteria
 
