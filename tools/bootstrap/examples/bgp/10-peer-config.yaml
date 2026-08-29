@@ -1,0 +1,30 @@
+# Session settings for peering with the UCG, referenced by name from
+# the CiliumBGPClusterConfig. authSecretRef points at the
+# kube-system/bgp-auth Secret (00-bgp-auth-secret.yaml) — TCP MD5 on
+# the session, matching `neighbor HOMELAB password` on the router.
+#
+# Timers: the router side sets none, so FRR's defaults (hold 180)
+# would win a quiet negotiation; 9/3 here negotiates down to hold 9,
+# putting failover of the /32 service routes under ten seconds when a
+# node dies without saying goodbye. Graceful restart keeps those
+# routes installed across a Cilium agent restart (upgrades, the §10
+# re-image), where the TCP session drops but the node is fine.
+---
+apiVersion: cilium.io/v2
+kind: CiliumBGPPeerConfig
+metadata:
+  name: ucg
+spec:
+  authSecretRef: bgp-auth
+  timers:
+    holdTimeSeconds: 9
+    keepAliveTimeSeconds: 3
+  gracefulRestart:
+    enabled: true
+    restartTimeSeconds: 15
+  families:
+    - afi: ipv4
+      safi: unicast
+      advertisements:
+        matchLabels:
+          advertise: bgp

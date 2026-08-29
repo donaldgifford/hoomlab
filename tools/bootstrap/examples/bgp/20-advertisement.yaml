@@ -1,0 +1,30 @@
+# What the peering announces: Service LoadBalancer IPs, nothing else.
+# The label ties this to the peer config's advertisement selector
+# (matchLabels: advertise: bgp). PodCIDRs stay unadvertised on
+# purpose — and the router's RM-HOMELAB-IN would drop them anyway,
+# since it accepts only the 172.20.10.0/24 pool; the policy holds on
+# both ends.
+#
+# The service selector below is Cilium's documented match-everything
+# idiom: a NotIn expression no Service satisfies the negative of.
+# Every LoadBalancer Service advertises; narrow it later per service
+# class if that stops being what you want.
+---
+apiVersion: cilium.io/v2
+kind: CiliumBGPAdvertisement
+metadata:
+  name: services
+  labels:
+    advertise: bgp
+spec:
+  advertisements:
+    - advertisementType: Service
+      service:
+        addresses:
+          - LoadBalancerIP
+      selector:
+        matchExpressions:
+          - key: never-used-key
+            operator: NotIn
+            values:
+              - never-used-value

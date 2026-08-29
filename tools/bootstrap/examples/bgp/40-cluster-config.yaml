@@ -1,0 +1,27 @@
+# The peering itself — applied last (the numbering is apply order)
+# so the secret, peer config, advertisement, and pool it depends on
+# all exist before any node dials the router.
+#
+# No nodeSelector: all six nodes peer. That is the point — the
+# router's `bgp listen range 10.10.11.0/24` accepts whoever dials
+# with the right ASN and password, so a re-imaged or newly added node
+# peers with no config change on either side.
+#
+# localASN 65200 ↔ frr.conf `neighbor HOMELAB remote-as 65200`;
+# peerASN 65100 + peerAddress 10.10.11.1 ↔ `router bgp 65100` /
+# `bgp router-id 10.10.11.1`.
+---
+apiVersion: cilium.io/v2
+kind: CiliumBGPClusterConfig
+metadata:
+  name: shart
+spec:
+  bgpInstances:
+    - name: instance-65200
+      localASN: 65200
+      peers:
+        - name: ucg
+          peerASN: 65100
+          peerAddress: 10.10.11.1
+          peerConfigRef:
+            name: ucg
