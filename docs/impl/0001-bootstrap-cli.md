@@ -1,7 +1,7 @@
 ---
 id: IMPL-0001
 title: "Bootstrap CLI"
-status: In Progress
+status: Completed
 author: Donald Gifford
 created: 2026-08-20
 ---
@@ -526,9 +526,12 @@ cluster drill on the real lab, re-run to prove end-to-end convergence.
       code fixes, runbook amendments, or deliberate acceptances);
       mock-parity and corosync gaps filed upstream (proxmox-go-sdk
       #32/#33)
-- [ ] Cut `tools/bootstrap/v0.1.0` via `tools-release.yml` once the
+- [x] Cut `tools/bootstrap/v0.1.0` via `tools-release.yml` once the
       drill and the no-op re-run have passed (OQ-5) — both conditions
-      met 2026-08-28; dispatch once the fold-back branch merges
+      met 2026-08-28; **released 2026-08-28**: fold-back PR #3 merged
+      as `ada9890`, workflow dispatched, tag `tools/bootstrap/v0.1.0`
+      cut with binary archives + checksums, and
+      `go install …/tools/bootstrap@v0.1.0` resolves
 
 #### Success Criteria
 

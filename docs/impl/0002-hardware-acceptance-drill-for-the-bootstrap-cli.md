@@ -1,7 +1,7 @@
 ---
 id: IMPL-0002
 title: "Hardware acceptance drill for the bootstrap CLI"
-status: In Progress
+status: Completed
 author: Donald Gifford
 created: 2026-08-22
 ---
@@ -600,13 +600,20 @@ next doc.
 
 #### Tasks
 
-- [ ] Merge the fold-back branch(es) to `main` with `dont-release`
-      (tools stay off the service release train)
-- [ ] Dispatch `tools-release.yml` with tool=`bootstrap`,
+- [x] Merge the fold-back branch(es) to `main` with `dont-release`
+      (tools stay off the service release train) — **done 2026-08-28**:
+      PR #3 (62 commits, the whole drill) merged as `ada9890`; the
+      main release train stayed inert
+- [x] Dispatch `tools-release.yml` with tool=`bootstrap`,
       version=`v0.1.0`; verify the `tools/bootstrap/v0.1.0` tag, the
       GitHub release with binary archives, and that
       `go install github.com/donaldgifford/hoomlab/tools/bootstrap@v0.1.0`
-      resolves
+      resolves — **done 2026-08-28**: workflow green in 4m30s; tag on
+      `ada9890`; release "bootstrap v0.1.0" carries linux/darwin ×
+      amd64/arm64 archives + checksums; `go install @v0.1.0` resolves
+      and builds (note: a source install stamps `version dev` — the
+      ldflags only reach the release archives; a
+      `debug.ReadBuildInfo` fallback is a future nicety)
 - [x] Complete INV-0001: Conclusion answered, Environment table
       filled, status → **Concluded** — **done 2026-08-28**
 - [x] IMPL-0001: annotate the nested spot-check task per OQ-3's
@@ -620,13 +627,15 @@ next doc.
       2026-08-28**: all seven markers now carry their live-verification
       dates; the scope-of-verification header states the drill's
       conclusion
-- [ ] Write the future test environment's DESIGN doc (OQ-4), carrying
+- [x] Write the future test environment's DESIGN doc (OQ-4), carrying
       the requirements this run observed: what booty's environment
       needed, what nested provisioning must provide, what a
       PVE-installer PXE profile would take — the environment to be
       built on the production cluster this run created, validated
       against the production cluster and Talos cluster as the
-      reference
+      reference — **done 2026-08-28 as DESIGN-0003** (Draft by
+      intent: the requirements capture with the drill's real inputs;
+      the mechanism design fills in when the build starts)
 - [x] File the multi-link corosync follow-up against proxmox-go-sdk
       (noted 2026-08-23) — **filed 2026-08-28 as proxmox-go-sdk#33**: the PVE API accepts `link0`–`link7` on both
       cluster create and join, and `GET /cluster/config/nodes` exposes
@@ -651,7 +660,8 @@ next doc.
       submitted base64 (deviation 6); refuse a certificate order while
       a custom certificate exists unless `force` is set, and grow
       typed `force` params on order/renew (deviation 7)
-- [ ] This doc: all boxes checked, status → **Completed**
+- [x] This doc: all boxes checked, status → **Completed** — **done
+      2026-08-28**
 
 #### Success Criteria
 
