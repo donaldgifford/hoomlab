@@ -1,0 +1,13 @@
+# The addresses Cilium hands to Services of type LoadBalancer. The
+# CIDR must stay inside what the router's HOMELAB-IN prefix-list
+# accepts (172.20.10.0/24 le 32 in frr.conf) — an IP allocated
+# outside it would advertise fine and route nowhere. Grow capacity by
+# adding blocks here and widening the prefix-list in the same change.
+---
+apiVersion: cilium.io/v2
+kind: CiliumLoadBalancerIPPool
+metadata:
+  name: default
+spec:
+  blocks:
+    - cidr: 172.20.10.0/24

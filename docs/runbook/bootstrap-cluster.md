@@ -30,6 +30,7 @@ whole point of running the drill from here rather than from memory.
 - [11. `talos bootstrap`](#11-talos-bootstrap)
 - [12. `talos health`](#12-talos-health)
 - [13. Convergence pass](#13-convergence-pass)
+- [14. After the handoff — the first BGP peering](#14-after-the-handoff--the-first-bgp-peering)
 - [Troubleshooting](#troubleshooting)
 
 ## Before you start
@@ -613,6 +614,89 @@ Every stage should report its steps already done and apply nothing
 (`0 steps applied`, or the equivalent "nothing to do" summary). A stage
 that applies something on the second pass is a convergence bug — record
 which step re-fired and why.
+
+## 14. After the handoff — the first BGP peering
+
+**`[unverified — written 2026-08-29 from the UCG's working FRR config;
+replace this marker when the live apply proves it, the way §§3–13
+earned theirs]`**
+
+The CLI's job ended at §13. DESIGN-0002's handoff contract left
+Cilium's BGP control plane **enabled but deliberately unconfigured**:
+the first peering is the next layer's first act, and it lands **in the
+same change set as the router side**. Until the gitops repo exists,
+that change set's reference copy is `tools/bootstrap/examples/bgp/` —
+five manifests and the router's FRR config, annotated where the two
+ends must agree.
+
+The design: cluster ASN **65200**, router (UCG) ASN **65100** at
+`10.10.11.1`. The router never enumerates nodes —
+`bgp listen range 10.10.11.0/24` accepts any peer dialing with the
+right ASN and MD5 password, so nodes re-image and scale with no
+router edit (the BGP twin of §10's re-image story). The cluster
+advertises Service LoadBalancer IPs from `172.20.10.0/24` and nothing
+else; the router's route-maps enforce the same boundary from their
+side.
+
+**Router side.** Upload `examples/bgp/frr.conf` via UniFi Network →
+Routing → BGP, with the real MD5 password in place of the
+placeholder. The password lives in one 1Password item that both ends
+read.
+
+**Cluster side.** Create the auth secret without ever writing the
+value to disk, then apply the manifests — they are numbered in apply
+order, ClusterConfig last so peering starts with everything it
+references in place:
+
+```sh
+kubectl create secret generic bgp-auth -n kube-system \
+  --from-literal=password="$(op read 'op://homelab/<bgp-item>/password')"
+kubectl apply -f tools/bootstrap/examples/bgp/
+```
+
+(The Secret's key must be named `password`, and it must live in
+`kube-system` — the chart's BGP secrets namespace. Skip
+`00-bgp-auth-secret.yaml` if it complains the secret exists; the
+manifest is the documented shape, the `op` command is the way in.)
+
+**Verify, cluster side** — one node config per node, every session
+established:
+
+```sh
+kubectl get ciliumbgpnodeconfigs
+kubectl -n kube-system exec ds/cilium -- cilium-dbg bgp peers
+```
+
+**Verify, router side** — six dynamic neighbors (flagged `*` under
+peer-group HOMELAB), all `Established`:
+
+```sh
+vtysh -c 'show bgp summary'
+```
+
+**Verify end to end** — a throwaway Service draws a pool IP, the /32
+lands on the router, and it answers from another VLAN:
+
+```sh
+kubectl create deployment bgp-check --image=traefik/whoami
+kubectl expose deployment bgp-check --port=80 --type=LoadBalancer
+kubectl get svc bgp-check          # EXTERNAL-IP from 172.20.10.0/24
+vtysh -c 'show ip bgp'             # the /32, up to 3 ECMP paths
+curl http://<EXTERNAL-IP>/         # from a machine on another VLAN
+kubectl delete svc,deployment bgp-check
+```
+
+**Established but no routes.** The router sets
+`bgp ebgp-requires-policy`, so prefixes move only through
+`RM-HOMELAB-IN`/`RM-HOMELAB-OUT` — check the prefix-lists before the
+peering. The same policy silently drops any LB pool outside
+`172.20.10.0/24`; grow the pool and the `HOMELAB-IN` prefix-list in
+the same change, never one without the other. ECMP across the six
+nodes is capped by the router's `maximum-paths 3`.
+
+These files are reference examples, not a bootstrap stage — the
+ownership boundary stands, and they graduate to the gitops repo as
+its first commit when that repo exists.
 
 ## Files you own
 
