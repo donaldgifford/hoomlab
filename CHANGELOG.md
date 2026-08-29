@@ -10,6 +10,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(design)* Capture the nested test environment requirements (DESIGN-0003)
 - *(impl)* Complete IMPL-0001 and IMPL-0002 — v0.1.0 released
 - *(bootstrap)* Example BGP peering — Cilium CRs, UCG frr.conf, runbook §14
+- *(bootstrap)* BGP peering verified live — fold back what the apply taught
 
 ## [tools/bootstrap/v0.1.0] - 2026-08-28
 

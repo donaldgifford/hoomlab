@@ -617,9 +617,7 @@ which step re-fired and why.
 
 ## 14. After the handoff — the first BGP peering
 
-**`[unverified — written 2026-08-29 from the UCG's working FRR config;
-replace this marker when the live apply proves it, the way §§3–13
-earned theirs]`**
+**`[verified live — 2026-08-29: six dynamic neighbors Established on the UCG; every node's session up with the router's /24 received; a whoami LoadBalancer Service drew a pool IP, its /32 reached the UCG with three ECMP paths installed (the maximum-paths cap visible), and it answered from another VLAN]`**
 
 The CLI's job ended at §13. DESIGN-0002's handoff contract left
 Cilium's BGP control plane **enabled but deliberately unconfigured**:
@@ -664,8 +662,11 @@ established:
 
 ```sh
 kubectl get ciliumbgpnodeconfigs
-kubectl -n kube-system exec ds/cilium -- cilium-dbg bgp peers
+kubectl -n kube-system exec ds/cilium -- cilium-dbg shell bgp/peers
 ```
+
+(`cilium-dbg bgp peers` still works but is deprecated on this Cilium;
+the shell form is the one that stays.)
 
 **Verify, router side** — six dynamic neighbors (flagged `*` under
 peer-group HOMELAB), all `Established`:
@@ -685,6 +686,14 @@ vtysh -c 'show ip bgp'             # the /32, up to 3 ECMP paths
 curl http://<EXTERNAL-IP>/         # from a machine on another VLAN
 kubectl delete svc,deployment bgp-check
 ```
+
+Two harmless surprises from the live run: the `create` prints a
+PodSecurity warning — Talos enforces `baseline` and *warns* at
+`restricted`, so the unhardened whoami pod grumbles but runs. And
+allocation starts at `.1` only because the example pool sets
+`allowFirstLastIPs: "No"`; without it, LB-IPAM happily hands out
+`172.20.10.0` itself (the live run's first Service drew exactly
+that — routable, but it reads like a typo forever).
 
 **Established but no routes.** The router sets
 `bgp ebgp-requires-policy`, so prefixes move only through
