@@ -5,6 +5,13 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
 ## [unreleased]
 
+### Documentation
+
+- *(design)* Capture the nested test environment requirements (DESIGN-0003)
+- *(impl)* Complete IMPL-0001 and IMPL-0002 — v0.1.0 released
+
+## [tools/bootstrap/v0.1.0] - 2026-08-28
+
 ### Features
 
 - *(bootstrap)* Add HCL config schema structs (IMPL-0001 P1.1)
