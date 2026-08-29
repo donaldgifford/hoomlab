@@ -3,11 +3,19 @@
 # accepts (172.20.10.0/24 le 32 in frr.conf) — an IP allocated
 # outside it would advertise fine and route nowhere. Grow capacity by
 # adding blocks here and widening the prefix-list in the same change.
+#
+# allowFirstLastIPs: LB-IPAM otherwise treats the block as a plain
+# range — the live verification's very first Service drew
+# 172.20.10.0 itself. A .0 /32 routes fine, but it reads like a typo
+# forever and some firewalls special-case it; opting out starts
+# allocation at .1. (Quoted "No" deliberately: unquoted YAML no is a
+# boolean, and the field is a string enum.)
 ---
 apiVersion: cilium.io/v2
 kind: CiliumLoadBalancerIPPool
 metadata:
   name: default
 spec:
+  allowFirstLastIPs: "No"
   blocks:
     - cidr: 172.20.10.0/24
