@@ -99,7 +99,7 @@ func RoleTemplates(bundle *secrets.Bundle, cluster *config.Cluster) (Templates, 
 	}
 	image := InstallImage(cluster.Talos.SchematicID, cluster.Talos.Version)
 
-	in, err := generate.NewInput(cluster.Name, cluster.Talos.Endpoint, kubernetesVersion,
+	in, err := generate.NewInput(cluster.TalosName(), cluster.Talos.Endpoint, kubernetesVersion,
 		generate.WithSecretsBundle(bundle),
 		generate.WithVersionContract(contract),
 		generate.WithInstallImage(image),

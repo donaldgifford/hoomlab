@@ -74,6 +74,13 @@ cluster "homelab" {
     version  = "v1.13.8"
     endpoint = "https://10.0.20.10:6443" # cluster VIP / endpoint
 
+    # Optional: names the Talos cluster independently of the PVE
+    # cluster (the label above, which pve form pins against the live
+    # cluster). Omitted means the Talos cluster inherits the label.
+    # Set it when the layers carry different names — or ever might:
+    # a second Talos cluster on the same PVE cluster needs its own.
+    # name = "fartlab"
+
     # Optional: pins the Kubernetes version the machineconfigs
     # install. Omitted means the default of the Talos machinery this
     # CLI was built against.
@@ -88,7 +95,8 @@ cluster "homelab" {
 
     # Optional: the cluster-completion surface (DESIGN-0002). The
     # block's presence turns on the completion knobs in the emitted
-    # machineconfigs — topology labels (region = cluster, zone = node)
+    # machineconfigs — topology labels (region = the PVE cluster
+    # label, deliberately shared by anything on that iron; zone = node)
     # and kubelet serving-certificate rotation with its pinned
     # approver manifest — and cni selects the cluster network. With
     # "cilium" the machineconfigs disable the built-in CNI and

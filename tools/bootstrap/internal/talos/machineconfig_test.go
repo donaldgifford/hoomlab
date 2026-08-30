@@ -57,6 +57,35 @@ func TestInstallImage(t *testing.T) {
 	}
 }
 
+// TestTalosNameFlowsToClusterName pins where each of the two names
+// lands: the machineconfig clusterName is the Talos cluster's own
+// name when the talos block sets one, and the cluster label only by
+// inheritance.
+func TestTalosNameFlowsToClusterName(t *testing.T) {
+	bundle := testBundle(t)
+
+	inherited, err := talos.RoleTemplates(bundle, testCluster())
+	if err != nil {
+		t.Fatalf("RoleTemplates (inherited): %v", err)
+	}
+	if !bytes.Contains(inherited.ControlPlane, []byte("clusterName: homelab")) {
+		t.Error("without talos name, clusterName must inherit the cluster label")
+	}
+
+	named := testCluster()
+	named.Talos.Name = "fartlab"
+	tmpl, err := talos.RoleTemplates(bundle, named)
+	if err != nil {
+		t.Fatalf("RoleTemplates (named): %v", err)
+	}
+	if !bytes.Contains(tmpl.ControlPlane, []byte("clusterName: fartlab")) {
+		t.Error("talos name set: clusterName must carry it")
+	}
+	if bytes.Contains(tmpl.ControlPlane, []byte("clusterName: homelab")) {
+		t.Error("talos name set: the PVE label leaked into clusterName")
+	}
+}
+
 func TestRoleTemplates(t *testing.T) {
 	bundle := testBundle(t)
 	tmpl, err := talos.RoleTemplates(bundle, testCluster())

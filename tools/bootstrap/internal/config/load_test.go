@@ -628,6 +628,29 @@ func TestLoadResolvesAndNormalizes(t *testing.T) {
 	if got, want := cluster.Talos.Nodes[0].Role, RoleControlPlane; got != want {
 		t.Errorf("Nodes[0].Role = %q, want %q", got, want)
 	}
+	if got, want := cluster.TalosName(), "test"; got != want {
+		t.Errorf("TalosName() without talos name = %q, want the label %q", got, want)
+	}
+}
+
+// TestTalosNameSplitsTheLayers pins the two-name contract: the label
+// stays the PVE cluster's name (pve form checks it against the live
+// cluster) while talos name renames only the Talos side.
+func TestTalosNameSplitsTheLayers(t *testing.T) {
+	setTestEnv(t)
+	path := writeConfig(t, strings.Replace(validHCL,
+		`  talos {`, "  talos {\n    name     = \"fartlab\"", 1))
+
+	cluster, diags := Load(path)
+	if diags.HasErrors() {
+		t.Fatalf("Load() failed:\n%s", renderDiags(t, diags))
+	}
+	if got, want := cluster.Name, "test"; got != want {
+		t.Errorf("cluster.Name = %q, want the label %q untouched", got, want)
+	}
+	if got, want := cluster.TalosName(), "fartlab"; got != want {
+		t.Errorf("TalosName() = %q, want the talos name %q", got, want)
+	}
 }
 
 // TestLoadExampleConfig pins the shipped example: it must stay valid.

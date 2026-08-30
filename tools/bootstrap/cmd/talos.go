@@ -127,7 +127,7 @@ prove itself.`,
 				return fmt.Errorf("talos health: %w", err)
 			}
 			if _, err := fmt.Fprintf(cmd.OutOrStdout(),
-				"✓ cluster %q is healthy\n", session.cluster.Name); err != nil {
+				"✓ cluster %q is healthy\n", session.cluster.TalosName()); err != nil {
 				return fmt.Errorf("write summary: %w", err)
 			}
 			return nil
