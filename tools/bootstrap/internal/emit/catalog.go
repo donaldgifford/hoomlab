@@ -66,7 +66,7 @@ func renderCatalog(cluster *config.Cluster, perNode []string) (map[string]File, 
 			"renderCatalog: %d schematics for %d nodes", len(perNode), len(cluster.Talos.Nodes))
 	}
 	data := catalogData{
-		ClusterName:  cluster.Name,
+		ClusterName:  cluster.TalosName(),
 		TalosVersion: cluster.Talos.Version,
 		BootyURL:     cluster.Talos.Booty.URL,
 	}

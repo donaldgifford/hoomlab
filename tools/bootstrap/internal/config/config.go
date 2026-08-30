@@ -27,6 +27,18 @@ type Cluster struct {
 	Talos Talos  `hcl:"talos,block"`
 }
 
+// TalosName returns the Talos cluster's own name: the talos block's
+// name attribute when set, else the cluster label. Everything on the
+// Talos side of the boundary — machineconfig clusterName, the
+// talosconfig context, the emitted booty catalog — carries this name;
+// the PVE side always carries the label.
+func (c *Cluster) TalosName() string {
+	if c.Talos.Name != "" {
+		return c.Talos.Name
+	}
+	return c.Name
+}
+
 // PrimaryNode returns the PVE node declared primary = true. Validated
 // clusters always have exactly one; ok is false on an unvalidated
 // cluster without one.
@@ -100,6 +112,13 @@ type ACME struct {
 // Talos release, the cluster endpoint, the booty server the VMs boot
 // from, and one node block per VM.
 type Talos struct {
+	// Name names the Talos cluster independently of the PVE cluster
+	// (the block label). Empty inherits the label. The two layers need
+	// separable names because pve form pins the label against the live
+	// PVE cluster's name — renaming the shared name would read as
+	// drift on the PVE side — and because a second Talos cluster on
+	// the same PVE cluster needs a name of its own.
+	Name    string `hcl:"name,optional"`
 	Version string `hcl:"version"`
 	// Endpoint is the cluster endpoint (VIP or first control plane),
 	// e.g. "https://10.0.20.10:6443".

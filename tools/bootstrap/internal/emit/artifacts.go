@@ -95,7 +95,7 @@ func renderRunScript(cluster *config.Cluster) ([]byte, error) {
 		return nil, fmt.Errorf("parse booty url %q: %w", bootyURL, err)
 	}
 	return renderText(runScriptPath, runScriptTemplate, runScriptData{
-		ClusterName: cluster.Name,
+		ClusterName: cluster.TalosName(),
 		Image:       bootyImage(cluster.Talos.Booty),
 		BootyURL:    bootyURL,
 		ServerIP:    u.Hostname(),

@@ -76,7 +76,7 @@ func Talosconfig(bundle *secrets.Bundle, cluster *config.Cluster) (*clientconfig
 	if err != nil {
 		return nil, fmt.Errorf("generate admin client certificate: %w", err)
 	}
-	return clientconfig.NewConfig(cluster.Name, []string{host}, bundle.Certs.OS.Crt, clientCert), nil
+	return clientconfig.NewConfig(cluster.TalosName(), []string{host}, bundle.Certs.OS.Crt, clientCert), nil
 }
 
 // NewClient dials the Talos API at the cluster endpoint host with

@@ -29,9 +29,10 @@ const (
 )
 
 // The topology labels every completion-surface node carries
-// (DESIGN-0002 node labels): region is the cluster, zone is the node,
-// which makes topology spread constraints meaningful on a small
-// cluster.
+// (DESIGN-0002 node labels): region is the PVE cluster — the site,
+// deliberately the label rather than TalosName, so two Talos clusters
+// on the same iron would share it — and zone is the node, which makes
+// topology spread constraints meaningful on a small cluster.
 const (
 	labelTopologyRegion = "topology.kubernetes.io/region"
 	labelTopologyZone   = "topology.kubernetes.io/zone"

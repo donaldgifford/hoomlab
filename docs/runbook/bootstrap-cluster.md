@@ -120,10 +120,15 @@ cp /path/to/repo/tools/bootstrap/examples/bootstrap.hcl .
 $EDITOR bootstrap.hcl
 ```
 
-Fill in real endpoints, MACs, VMIDs, storage, and bridges. Secret
-*values* never appear in the file — secret-bearing attributes carry
-`env("HOOMLAB_…")` references resolved at load time. Export them
-first; the names are yours to choose, these are what the example uses:
+Fill in real endpoints, MACs, VMIDs, storage, and bridges. The
+cluster *label* names the **PVE** cluster — `pve form` pins it
+against the live cluster on every check — and the Talos cluster
+inherits it unless the talos block sets its own `name` (do that when
+the layers carry different names; a second Talos cluster on the same
+PVE cluster would need its own). Secret *values* never appear in the
+file — secret-bearing attributes carry `env("HOOMLAB_…")` references
+resolved at load time. Export them first; the names are yours to
+choose, these are what the example uses:
 
 ```sh
 export HOOMLAB_PVE_TOKEN_ID='root@pam!bootstrap'
