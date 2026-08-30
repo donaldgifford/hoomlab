@@ -5,6 +5,12 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
 ## [unreleased]
 
+### Documentation
+
+- *(runbook)* §15 full re-image — verified by the rename rebuild
+
+## [tools/bootstrap/v0.2.0] - 2026-08-30
+
 ### Features
 
 - *(bootstrap)* Name the Talos cluster independently of the PVE cluster

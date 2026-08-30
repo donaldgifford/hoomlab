@@ -31,6 +31,7 @@ whole point of running the drill from here rather than from memory.
 - [12. `talos health`](#12-talos-health)
 - [13. Convergence pass](#13-convergence-pass)
 - [14. After the handoff — the first BGP peering](#14-after-the-handoff--the-first-bgp-peering)
+- [15. Full re-image — teardown and rebuild](#15-full-re-image--teardown-and-rebuild)
 - [Troubleshooting](#troubleshooting)
 
 ## Before you start
@@ -711,6 +712,62 @@ nodes is capped by the router's `maximum-paths 3`.
 These files are reference examples, not a bootstrap stage — the
 ownership boundary stands, and they graduate to the gitops repo as
 its first commit when that repo exists.
+
+## 15. Full re-image — teardown and rebuild
+
+**`[verified live — 2026-08-30: a Talos cluster rename (shart → fartlab) plus a DNS-server change in one window, driven by the released v0.2.0 binary; vms recreated 12/12, health green under the new name, all six BGP sessions reestablished with the router untouched, the first LB service drew 172.20.10.1, and the rebuilt nodes picked up the new resolvers via DHCP]`**
+
+When the change is bigger than one node — a Talos cluster rename, an
+environment shift you want proven end to end, or plain disaster
+recovery — the cheapest honest path is destroying the VMs and letting
+the stages rebuild the cluster. Destroying asks nothing of the
+(possibly sick) cluster, unlike `talosctl reset` with its
+quorum-teardown ordering, and the rebuild re-proves the vms stage's
+full VM contract on the way back up.
+
+What survives and what doesn't: `secrets.yaml` stays put (same PKI —
+the existing talosconfig/kubeconfig keep working; on a rename their
+context *names* go cosmetically stale, and `talosctl kubeconfig`
+regenerates them). The PVE layer is untouched. **Everything inside
+etcd is gone**: §14's BGP manifests and anything else applied to the
+cluster come back by reapplying them, not by magic. The same MACs
+return because identity is pinned in the config, so the DHCP
+reservations and booty groups still match — nothing on the network
+side needs touching.
+
+1. Make the config edits the window is for (`talos { name = … }`,
+   endpoint changes, …), re-emit, and sync the tree to the booty host
+   per §9, then restart booty.
+2. Stop and destroy the VMs on their hosting PVE nodes — bootstrap
+   has no destroy command on purpose (convergence creates, never
+   deletes), so this half is yours:
+
+   ```sh
+   for id in 201 202 203; do qm stop $id && qm destroy $id --purge; done
+   ```
+
+3. Run the stage loop from emit onward, §13 form:
+
+   ```sh
+   for stage in "talos emit" "talos ipxe" "talos vms" \
+                "talos bootstrap" "talos health"; do
+     echo "== $stage"; bootstrap $stage || break
+   done
+   ```
+
+   Expected shape: `emit` applies only what the config edits changed;
+   `ipxe` reports 0 (the boot binary keys on the booty URL alone);
+   `vms` applies the full recreate — 12 of 12; `bootstrap` applies
+   etcd-bootstrap against the fresh cluster; `health` gates the
+   result, reporting the Talos cluster's own name.
+4. Reapply in-cluster state — §14's secret and manifests first. The
+   router needs nothing: the listen range accepts the reborn nodes
+   and the six sessions simply return.
+
+A DNS-server change rides the same window for free: resolvers reach
+the nodes via DHCP and nothing in the config carries one —
+`talosctl get resolvers -n <node>` on a rebuilt node shows the new
+servers.
 
 ## Files you own
 
