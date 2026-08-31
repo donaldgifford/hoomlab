@@ -14,7 +14,7 @@ Design docs, plans, and implementation docs can reference investigations by ID
 | ID | Title | Status | Date | Author | Link |
 |----|-------|--------|------|--------|------|
 | INV-0001 | Bootstrap CLI hardware acceptance drill | Concluded | 2026-08-21 | Donald Gifford | [0001-bootstrap-cli-hardware-acceptance-drill.md](0001-bootstrap-cli-hardware-acceptance-drill.md) |
-| INV-0002 | Talos storage plane - second NIC and iSCSI readiness | In Progress | 2026-08-31 | Donald Gifford | [0002-talos-storage-plane-second-nic-and-iscsi-readiness.md](0002-talos-storage-plane-second-nic-and-iscsi-readiness.md) |
+| INV-0002 | Talos storage plane - second NIC and iSCSI readiness | Concluded | 2026-08-31 | Donald Gifford | [0002-talos-storage-plane-second-nic-and-iscsi-readiness.md](0002-talos-storage-plane-second-nic-and-iscsi-readiness.md) |
 <!-- END DOCZ AUTO-GENERATED -->
 <!-- BEGIN DOCZ AUTO-GENERATED -->
 <!-- END DOCZ AUTO-GENERATED -->

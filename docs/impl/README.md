@@ -34,4 +34,5 @@ docz create impl "Your Implementation Title"
 |----|-------|--------|------|--------|------|
 | IMPL-0001 | Bootstrap CLI | Completed | 2026-08-20 | Donald Gifford | [0001-bootstrap-cli.md](0001-bootstrap-cli.md) |
 | IMPL-0002 | Hardware acceptance drill for the bootstrap CLI | Completed | 2026-08-22 | Donald Gifford | [0002-hardware-acceptance-drill-for-the-bootstrap-cli.md](0002-hardware-acceptance-drill-for-the-bootstrap-cli.md) |
+| IMPL-0003 | Talos storage plane | In Progress | 2026-08-31 | Donald Gifford | [0003-talos-storage-plane.md](0003-talos-storage-plane.md) |
 <!-- END DOCZ AUTO-GENERATED -->

@@ -1,7 +1,7 @@
 ---
 id: INV-0002
 title: "Talos storage plane - second NIC and iSCSI readiness"
-status: In Progress
+status: Concluded
 author: Donald Gifford
 created: 2026-08-31
 ---
@@ -213,8 +213,10 @@ drift.
   CSI the forcing function for the whole change set?
 - MTU/jumbo stays a recorded deferral (1500 fleet-wide) until a
   deliberate, both-sided decision.
-- Which option (A/B/C below) — the operator's call; the doc concludes
-  when it's made.
+- ~~Which option (A/B/C below)~~ **decided 2026-08-31: C** — phased
+  implementation tracked in IMPL-0003, with the config-first rule (the
+  hand layer takes its values from the table the config will adopt,
+  so the two paths cannot disagree on a MAC).
 
 ## Conclusion
 
@@ -250,6 +252,11 @@ Option C, sequenced:
    node back with its storage plane from config alone — that closes
    this investigation's real question the way the rename window
    closed the rebuild's.
+
+**Decided 2026-08-31: Option C.** Execution is IMPL-0003, whose
+Phases 1–2 are the operator's manual steps — deliberately first,
+because their verified end state is the executable spec the code
+changes must reproduce.
 
 ## References
 
