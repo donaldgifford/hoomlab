@@ -6,7 +6,7 @@ author: Donald Gifford
 created: 2026-08-31
 ---
 
-<!-- markdownlint-disable-file MD024 MD025 MD041 -->
+<!-- markdownlint-disable-file MD024 MD025 MD041 MD046 -->
 
 # IMPL-0003: Talos storage plane
 
