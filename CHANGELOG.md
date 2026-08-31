@@ -12,6 +12,9 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(inv)* INV-0002 evidence in — extensions verified, mirror typo resolved
 - Conclude INV-0002 on Option C and open IMPL-0003 to execute it
 - *(impl)* IMPL-0003 OQs decided — the network/network_interface surface
+- *(impl)* Allow fenced blocks in IMPL-0003 (MD046)
+- *(impl)* IMPL-0003 layering addendum — primitives, planes, and the XOR rule
+- *(design)* DESIGN-0004 — network planes and interfaces, promoted from IMPL-0003
 
 ## [tools/bootstrap/v0.2.0] - 2026-08-30
 
