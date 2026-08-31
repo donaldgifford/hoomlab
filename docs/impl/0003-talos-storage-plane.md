@@ -51,7 +51,9 @@ first, whose verified end state becomes the executable spec the
 bootstrap CLI then learns to reproduce, proven by a §15 re-image that
 needs no hands.
 
-**Implements:** INV-0002 (Concluded 2026-08-31, Option C)
+**Implements:** INV-0002 (Concluded 2026-08-31, Option C) —
+executing **DESIGN-0004** (network planes and interfaces, the
+authoritative design record)
 
 ## Scope
 
@@ -339,6 +341,7 @@ answered the rebuild's.
 - [ ] Any deviation found → recorded here and folded back
       (INV-0001 discipline; a substantial one opens its own INV)
 - [ ] Runbook markers updated where this IMPL touched sections
+- [ ] DESIGN-0004 status → **Implemented**
 - [ ] This doc: all boxes checked, status → **Completed**
 
 #### Success Criteria
@@ -385,7 +388,9 @@ alternatives, "other" is yours to write in.
 **Decided (2026-08-31): d** — a fourth shape reached in review,
 combining a's declare-the-plane-once with c's generality, on the
 operator's principle that the CLI is explicit primitives (the future
-service abstracts on top, and the primitives stay reachable). Named
+service abstracts on top, and the primitives stay reachable). The
+full design is promoted to **DESIGN-0004** — that document is the
+authoritative record; this OQ keeps the decision trail. Named
 `network` blocks carry the plane facts; per-node `network_interface`
 blocks carry only identity, referencing their plane the same way
 nodes already reference `pve_node` and `storage`:
@@ -515,6 +520,7 @@ in code.
 
 ## References
 
+- DESIGN-0004 — the network planes/interfaces design this executes
 - INV-0002 — the investigation and Option C decision
 - DESIGN-0002 — the completion surface the interfaces emit extends
 - `docs/runbook/bootstrap-cluster.md` §13 (convergence), §15
