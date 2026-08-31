@@ -9,6 +9,8 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 - *(runbook)* §15 full re-image — verified by the rename rebuild
 - *(inv)* Open INV-0002 — the Talos storage plane against v0.2.0
+- *(inv)* INV-0002 evidence in — extensions verified, mirror typo resolved
+- Conclude INV-0002 on Option C and open IMPL-0003 to execute it
 
 ## [tools/bootstrap/v0.2.0] - 2026-08-30
 
