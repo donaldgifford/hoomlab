@@ -35,4 +35,5 @@ docz create design "Your Design Title"
 | DESIGN-0001 | Bootstrap CLI | Implemented | 2026-08-17 | Donald Gifford | [0001-bootstrap-cli.md](0001-bootstrap-cli.md) |
 | DESIGN-0002 | Talos cluster completion scope for bootstrap | Draft | 2026-08-26 | Donald Gifford | [0002-talos-cluster-completion-scope-for-bootstrap.md](0002-talos-cluster-completion-scope-for-bootstrap.md) |
 | DESIGN-0003 | Nested test environment for the bootstrap CLI | Draft | 2026-08-28 | Donald Gifford | [0003-nested-test-environment-for-the-bootstrap-cli.md](0003-nested-test-environment-for-the-bootstrap-cli.md) |
+| DESIGN-0004 | Network planes and interfaces for the bootstrap CLI | Approved | 2026-08-31 | Donald Gifford | [0004-network-planes-and-interfaces-for-the-bootstrap-cli.md](0004-network-planes-and-interfaces-for-the-bootstrap-cli.md) |
 <!-- END DOCZ AUTO-GENERATED -->
