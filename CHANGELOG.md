@@ -11,6 +11,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(inv)* Open INV-0002 — the Talos storage plane against v0.2.0
 - *(inv)* INV-0002 evidence in — extensions verified, mirror typo resolved
 - Conclude INV-0002 on Option C and open IMPL-0003 to execute it
+- *(impl)* IMPL-0003 OQs decided — the network/network_interface surface
 
 ## [tools/bootstrap/v0.2.0] - 2026-08-30
 
