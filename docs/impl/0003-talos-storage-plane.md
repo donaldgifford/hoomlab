@@ -224,23 +224,30 @@ Phase 2's gate (the OQs are decided).
 
 #### Tasks
 
+- [ ] The raw-vs-resolved split (OQ-1 layering addendum): raw HCL
+      types with optional mode attrs; one resolver producing a
+      fully-explicit resolved interface per NIC; everything
+      downstream consumes only the resolved form
 - [ ] Cluster-level `network "<name>"` blocks: `vlan`, `dhcp`
       (required — every plane states its mode), `primary`, `cidr`
       (required iff `dhcp = false`)
-- [ ] Per-node `network_interface "<netN>"` blocks: `network` (plane
-      reference), `mac`, `bridge`, `address` — **replacing** the
-      flat `mac`/`vlan`/`bridge` node attrs (the breaking change
-      OQ-1 accepted; validation errors guide the migration)
-- [ ] Validation, one rule at a time: unique plane names; exactly
-      one plane `primary = true`; every interface references a
-      declared plane; every node has exactly one interface on the
-      primary plane; dhcp plane → `address` forbidden; static plane
-      → `address` required, CIDR form, contained in the plane's
-      `cidr`; global MAC uniqueness across all interfaces; interface
-      labels `net\d+`, unique per node
-- [ ] Load tests: parse + one test per validation error, drill-style
+- [ ] Per-node `network_interface "<netN>"` blocks — **replacing**
+      the flat `mac`/`vlan`/`bridge` node attrs (the breaking change
+      OQ-1 accepted): `mac`, `bridge`, plus either `network` (plane
+      reference) or the inline mode facts, per the XOR rule
+- [ ] Validation on the resolved form, one rule at a time: unique
+      plane names; at most one plane `primary = true`; referenced
+      planes must be declared; the XOR rule (reference + inline
+      mode attr → error; neither → error naming what's missing);
+      every node resolves to exactly one primary interface; dhcp →
+      `address` forbidden; static → `address` required, CIDR form,
+      contained in the governing `cidr` when one exists; global MAC
+      uniqueness across all interfaces; interface labels `net\d+`,
+      unique per node
+- [ ] Load tests: parse + one test per validation error, drill-style,
+      covering both forms and the XOR conflicts
 - [ ] Migrate `examples/bootstrap.hcl` and test fixtures to the new
-      surface, documenting it in place
+      surface, documenting both forms in place
 
 #### Success Criteria
 
@@ -422,6 +429,28 @@ from whichever interface sits on the primary plane, machineconfig
 attrs are replaced — accepted deliberately at v0.3.0 with one config
 in existence.
 
+**Layering addendum (decided 2026-08-31):** the inline attributes
+are the primitives; `network` planes are the first abstraction on
+top of them — so both forms ship, governed by the **XOR rule**:
+
+- An interface either sets `network = "<plane>"` and none of the
+  plane-owned attrs (`vlan`, `dhcp`, `primary`, `cidr`), **or** sets
+  no reference and declares all its mode facts inline. Setting both
+  is an **error, never an override** — no precedence engine, ever.
+- An interface with neither a reference nor complete inline mode
+  facts is an error naming what's missing. There is **no implicit
+  default network** — rejected explicitly; explicit is the way.
+- `cidr` on an inline interface is optional (the address's prefix is
+  the primitive; plane-level `cidr` earns its keep as a
+  cross-fleet typo check).
+
+Implementation structure: a **raw-vs-resolved split**. HCL decodes
+into raw types where mode attrs are optional; one resolver produces
+a fully-explicit resolved interface per NIC; validation, `VMSpec`,
+and emit consume only the resolved form and never know how a fact
+arrived. Future plane features (MTU on the jumbo day, new modes)
+are resolver-and-plane changes with zero consumer churn.
+
 Superseded options, for the record:
 
 - ~~a: `storage_network` + per-node `storage` block — hardcoded
@@ -430,6 +459,8 @@ Superseded options, for the record:
 - ~~b: fully per-node attrs — six chances to typo the VLAN.~~
 - ~~c: generic `nic` blocks without the plane concept — genericity
   without the declare-once property.~~
+- ~~An implicit `network "default"` fallback for bare interfaces —
+  hidden behavior; the error stays an error.~~
 
 **OQ-2 — What do storage-less configs emit once the feature
 exists?**
