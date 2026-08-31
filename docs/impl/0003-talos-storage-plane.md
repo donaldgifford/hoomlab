@@ -96,6 +96,12 @@ MAC), last octet preserved from net0.
 Schematic after Phase 1: `<recorded on Phase 1 completion>`
 (today: `dc7b152c…8586`).
 
+Two MAC schemes coexist here on purpose: net0's last two octets are
+`<vmid-hex>` (`00:c9` = 201, `01:2d` = 301), while net1 repurposes
+the fifth octet as the VLAN (`14`). They can never collide — a vmid
+would need to reach 0x1400 = 5120, and the VMID convention caps at
+999.
+
 ## Implementation Phases
 
 Each phase builds on the previous one. A phase is complete when all
@@ -112,8 +118,12 @@ util-linux-tools beside the iscsi-tools already aboard.
 
 #### Tasks
 
-- [ ] Add `"siderolabs/util-linux-tools"` to `profile "base"` in
-      `~/drill/bootstrap.hcl`
+- [ ] Split the profiles in `~/drill/bootstrap.hcl`: `base` keeps
+      qemu-guest-agent only; a new `profile "iscsi"` carries
+      iscsi-tools + util-linux-tools; every node's `profiles`
+      becomes `["base", "iscsi"]`. (The schematic derives from each
+      node's flattened union, so this produces the same new image as
+      editing base — better organized, zero extra image impact.)
 - [ ] `bootstrap talos emit` — a new schematic is derived and new
       boot assets download; record the new schematic ID in the table
       above
@@ -209,28 +219,34 @@ is done when it reproduces exactly this, from config alone.
 
 ### Phase 3: Config surface (code)
 
-The tool learns the storage plane's shape. Blocked on Phase 2 and on
-OQ-1–OQ-5 decisions.
+The tool learns the network surface OQ-1 decided. Blocked on
+Phase 2's gate (the OQs are decided).
 
 #### Tasks
 
-- [ ] Config surface per OQ-1: the storage plane declared once, node
-      identity (MAC + address) per node
-- [ ] Validation: MAC uniqueness across the net0 *and* storage sets
-      together; address shape (OQ-4) and uniqueness; the
-      all-or-none rule (OQ-3); plane block required iff any node
-      declares storage
-- [ ] Load tests: parse + defaults, and one test per validation
-      error, drill-style
-- [ ] `examples/bootstrap.hcl` documents the surface in place
-- [ ] Confirm configs *without* storage load and behave
-      byte-identically (no new required anything)
+- [ ] Cluster-level `network "<name>"` blocks: `vlan`, `dhcp`
+      (required — every plane states its mode), `primary`, `cidr`
+      (required iff `dhcp = false`)
+- [ ] Per-node `network_interface "<netN>"` blocks: `network` (plane
+      reference), `mac`, `bridge`, `address` — **replacing** the
+      flat `mac`/`vlan`/`bridge` node attrs (the breaking change
+      OQ-1 accepted; validation errors guide the migration)
+- [ ] Validation, one rule at a time: unique plane names; exactly
+      one plane `primary = true`; every interface references a
+      declared plane; every node has exactly one interface on the
+      primary plane; dhcp plane → `address` forbidden; static plane
+      → `address` required, CIDR form, contained in the plane's
+      `cidr`; global MAC uniqueness across all interfaces; interface
+      labels `net\d+`, unique per node
+- [ ] Load tests: parse + one test per validation error, drill-style
+- [ ] Migrate `examples/bootstrap.hcl` and test fixtures to the new
+      surface, documenting it in place
 
 #### Success Criteria
 
 - `just bootstrap-test` and `bootstrap-lint` green.
-- A storage-less config produces identical behavior to v0.2.0 —
-  proven by untouched goldens and passing existing tests, unmodified.
+- A single-interface config (primary plane only) produces identical
+  *behavior* to v0.2.0 — syntax broke, artifacts didn't.
 - The example config stays valid (`TestLoadExampleConfig`).
 
 ---
@@ -242,19 +258,22 @@ Phase 2's end state.
 
 #### Tasks
 
-- [ ] `VMSpec` renders `net1` from the storage surface (bridge/VLAN
-      from the plane, MAC per node); **boot order unchanged** —
-      regression test pinning `order=scsi0;net0` with net1 present
-- [ ] Emit catalog: `storage_mac` / `storage_ip` per-group vars
-      beside `hostname`
-- [ ] Machineconfig templates gain the `machine.network.interfaces`
-      section — net0 by deviceSelector with `dhcp: true`, net1 by
-      deviceSelector with the static address, no routes — emitted
-      only when storage is declared (OQ-2)
-- [ ] Round-trip test: rendered storage configs re-validate in
-      machinery metal mode (the existing round-trip pattern)
-- [ ] Golden files: storage-less fixtures byte-identical (the
-      back-compat proof); new goldens for a storage-enabled fixture
+- [ ] `VMSpec` renders every declared interface in slot order —
+      `bridge` from the interface, `tag=` from its plane's `vlan`;
+      **boot order carries only the primary-plane interface's slot**
+      — regression test pinning `order=scsi0;net0` with a second
+      NIC present
+- [ ] Emit catalog: per-group interface vars (each interface's MAC;
+      static addresses) beside `hostname`
+- [ ] Machineconfig templates: `machine.network.interfaces` rendered
+      from the planes — the primary-plane interface by
+      deviceSelector with `dhcp: true`, static-plane interfaces by
+      deviceSelector with their address, no routes — emitted only
+      when a node has more than its primary interface (OQ-2)
+- [ ] Round-trip test: rendered multi-interface configs re-validate
+      in machinery metal mode (the existing round-trip pattern)
+- [ ] Golden files: single-interface fixtures byte-identical (the
+      back-compat proof); new goldens for a multi-interface fixture
 - [ ] Docs in the same change: runbook §1 (config surface), §10
       (vms expected fields), §15 (note that rebirth now covers the
       storage plane); example config final pass
@@ -265,7 +284,7 @@ Phase 2's end state.
 - The emitted `interfaces:` block for a storage node is
   **shape-identical** to a live node's hand-patched section (diff
   against `talosctl -n <ip> get machineconfig` output for one node).
-- Storage-less emit output is byte-identical to v0.2.0's.
+- Single-interface emit output is byte-identical to v0.2.0's.
 
 ---
 
@@ -326,12 +345,12 @@ answered the rebuild's.
 
 | File | Action | Description |
 | ---- | ------ | ----------- |
-| `internal/config/config.go` | Modify | storage plane + per-node identity surface (OQ-1) |
-| `internal/config/validate.go` | Modify | cross-set MAC uniqueness, address rules, all-or-none |
+| `internal/config/config.go` | Modify | `network` planes + `network_interface` surface (OQ-1) |
+| `internal/config/validate.go` | Modify | plane/interface cross-rules, one-primary, cidr containment, MAC uniqueness |
 | `internal/config/load_test.go` | Modify | parse/default/error coverage |
-| `internal/pve/vms.go` | Modify | net1 rendering; boot order pinned |
-| `internal/pve/vms_test.go` | Modify | net1 + boot-order regression tests |
-| `internal/emit/catalog.go` | Modify | storage_mac / storage_ip group vars |
+| `internal/pve/vms.go` | Modify | all-interface rendering; boot order pinned to the primary slot |
+| `internal/pve/vms_test.go` | Modify | multi-NIC + boot-order regression tests |
+| `internal/emit/catalog.go` | Modify | per-interface group vars |
 | `internal/talos/machineconfig.go` | Modify | interfaces section in role templates |
 | `internal/emit/testdata/golden/**` | Modify | storage fixture goldens; legacy untouched |
 | `examples/bootstrap.hcl` | Modify | document the surface |
@@ -356,61 +375,102 @@ alternatives, "other" is yours to write in.
 
 **OQ-1 — Where does the storage surface live in the config?**
 
-- **a (recommended):** the plane declared once, identity per node —
-  `talos { storage_network { bridge = "vmbr1"  vlan = 14 } }` plus a
-  per-node `storage { mac = "…"  address = "10.10.13.51/24" }`
-  block. One place for the plane means no per-node VLAN typos;
-  per-node blocks carry only what actually differs. Validation ties
-  the two: `storage_network` required iff any node declares
-  `storage`.
-- b: fully per-node (mac, address, vlan, bridge on every node),
-  mirroring how net0's bridge/vlan already work — more uniform with
-  the existing surface, six chances to typo the VLAN.
-- c: generic repeatable `nic "<name>" {}` blocks supporting arbitrary
-  extra NICs — the most general shape, and speculative until a third
-  NIC exists (out of scope by INV-0002).
+**Decided (2026-08-31): d** — a fourth shape reached in review,
+combining a's declare-the-plane-once with c's generality, on the
+operator's principle that the CLI is explicit primitives (the future
+service abstracts on top, and the primitives stay reachable). Named
+`network` blocks carry the plane facts; per-node `network_interface`
+blocks carry only identity, referencing their plane the same way
+nodes already reference `pve_node` and `storage`:
+
+```hcl
+network "servers" {
+  vlan    = 11
+  primary = true
+  dhcp    = true
+}
+
+network "storage" {
+  vlan = 14
+  dhcp = false
+  cidr = "10.10.13.0/24"
+}
+
+node "ctrl01" {
+  # …
+  profiles = ["base", "iscsi"]
+
+  network_interface "net0" {
+    network = "servers"              # PXE, booty identity, DHCP
+    mac     = "02:50:99:a2:00:c9"
+    bridge  = "vmbr1"
+  }
+  network_interface "net1" {
+    network = "storage"
+    mac     = "02:50:99:a2:14:c9"
+    bridge  = "vmbr1"
+    address = "10.10.13.51/24"       # static — VLAN 14 has no DHCP
+  }
+}
+```
+
+The `network` reference on each interface is the load-bearing wire:
+`tag=` derives from the plane's vlan, boot order and booty identity
+from whichever interface sits on the primary plane, machineconfig
+`dhcp: true` vs `addresses:` from the plane's mode. This is a
+**breaking config change** — the flat per-node `mac`/`vlan`/`bridge`
+attrs are replaced — accepted deliberately at v0.3.0 with one config
+in existence.
+
+Superseded options, for the record:
+
+- ~~a: `storage_network` + per-node `storage` block — hardcoded
+  storage semantics into a tool that shouldn't know what a NIC is
+  for.~~
+- ~~b: fully per-node attrs — six chances to typo the VLAN.~~
+- ~~c: generic `nic` blocks without the plane concept — genericity
+  without the declare-once property.~~
 
 **OQ-2 — What do storage-less configs emit once the feature
 exists?**
 
-- **a (recommended):** exactly what they emit today — no
-  `interfaces:` block at all; the block (with net0 then declared
-  explicitly, per the spec rule) appears only when storage is
-  declared. Back-compat is provable as golden byte-identity, and
-  existing clusters see zero re-image behavior change.
-- b: always emit `interfaces:` with net0 `dhcp: true` declared, even
-  without storage — more explicit everywhere, but churns every
-  golden, changes re-image behavior for running clusters, and buys
-  nothing functional.
+**Decided (2026-08-31): a**, restated for the generic model — a node
+whose only interface sits on the primary (dhcp) plane emits **no**
+`interfaces:` block: behaviorally byte-identical artifacts to v0.2.0
+despite the config-syntax break, provable as golden identity. The
+block appears — with the primary interface declared `dhcp: true` in
+it — as soon as a node has any second interface.
+
+- ~~b: always emit the block — golden churn and re-image behavior
+  change for nothing functional.~~
 
 **OQ-3 — Must every node declare storage, or may some?**
 
-- **a (recommended):** all-or-none, enforced at validation — a
-  half-storage fleet today is almost certainly a config mistake, and
-  the error message costs nothing. Relax it when a genuinely mixed
-  node class exists (that change is trivial; the reverse — cleaning
-  up after a silent half-fleet — is not).
-- b: allow partial from day one; nodes without `storage` simply get
-  no interfaces block.
+**Dissolved by OQ-1's decision (2026-08-31)**: under the generic
+model there is no "storage plane" for the tool to enforce uniformity
+on — a node with only its primary interface is valid config, and
+partial fleets are legal. The trade is accepted eyes-open: the
+authoritative table above is now the fleet-uniformity check, held by
+the operator, not the tool.
 
 **OQ-4 — Address form in the config?**
 
-- **a (recommended):** full CIDR (`"10.10.13.51/24"`) — it lands
-  verbatim in the machineconfig `addresses:` list, no hidden prefix
-  assumption, and a future /23 or /16 storage net needs no tool
-  change.
-- b: bare IP with `/24` hardcoded in the tool.
-- c: bare IP per node + a `prefix` attribute on `storage_network`.
+**Decided (2026-08-31): a**, folded into the OQ-1 shape — full CIDR
+on interface `address`, and a `cidr` on each static plane that
+validation checks containment against. No hidden prefix anywhere; a
+future /23 storage net is a config edit.
+
+- ~~b: bare IP + hardcoded /24.~~ ~~c: bare IP + prefix attr.~~
 
 **OQ-5 — Does the tool enforce the net1 MAC scheme?**
 
-- **a (recommended):** no — the fifth-octet-14 scheme stays a
-  documented convention (this doc's table); validation requires only
-  well-formed, unique MACs across both NIC sets, same rules as net0.
-  Conventions in docs, invariants in code.
-- b: derive net1 MACs from net0 automatically (fifth octet → 14) —
-  less config, more magic, and a scheme change becomes a code
-  change.
+**Decided (2026-08-31): a** — the fifth-octet-14 scheme stays a
+documented convention (this doc's table); validation requires only
+well-formed, globally unique MACs. Conventions in docs, invariants
+in code.
+
+- ~~b: derive net1 MACs automatically — magic, and a scheme change
+  becomes a code change.~~
 
 ## Dependencies
 
