@@ -126,7 +126,7 @@ func RoleTemplates(bundle *secrets.Bundle, cluster *config.Cluster) (Templates, 
 	image := InstallImage(cluster.Talos.SchematicID, cluster.Talos.Version)
 	shapes, err := roleShapes(cluster)
 	if err != nil {
-		return Templates{}, err
+		return Templates{}, fmt.Errorf("derive role interface shapes: %w", err)
 	}
 
 	in, err := generate.NewInput(cluster.TalosName(), cluster.Talos.Endpoint, kubernetesVersion,
@@ -270,11 +270,13 @@ func roleTemplate(
 // and mtu but no routes, gateway, or DNS — a secondary plane must
 // never attract the default route.
 //
-// device type (the deprecation points at documents that don't exist
-// yet at this version), and the legacy section is the exact shape the
-// live fleet carries (IMPL-0003 Phase 2).
+// The deprecated v1alpha1 section is deliberate: machinery v1.13
+// ships no multi-doc network device type (the deprecation notice
+// points at documents that don't exist yet at this version), and the
+// legacy section is the exact shape the live fleet carries
+// (IMPL-0003 Phase 2).
 //
-//nolint:staticcheck // machinery v1.13 ships no multi-doc network
+//nolint:staticcheck // v1.13 machinery has no multi-doc replacement; see above.
 func setInterfaces(cfg *v1alpha1.Config, shape []slotShape) {
 	devices := make([]*v1alpha1.Device, 0, len(shape))
 	for i, s := range shape {
@@ -340,11 +342,13 @@ func templatize(data []byte, image string, shape []slotShape) ([]byte, error) {
 	if len(shape) > 1 {
 		for i, s := range shape {
 			swaps = append(swaps, struct{ value, expr string }{
-				macPlaceholder(s.slot), varExpr(MACVarKey(s.slot)),
+				value: macPlaceholder(s.slot),
+				expr:  varExpr(MACVarKey(s.slot)),
 			})
 			if !s.dhcp {
 				swaps = append(swaps, struct{ value, expr string }{
-					addressPlaceholder(i), varExpr(AddressVarKey(s.slot)),
+					value: addressPlaceholder(i),
+					expr:  varExpr(AddressVarKey(s.slot)),
 				})
 			}
 		}
