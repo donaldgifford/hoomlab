@@ -12,6 +12,7 @@ package config
 import (
 	"net/netip"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -40,9 +41,10 @@ type ResolvedInterface struct {
 
 // ResolvedInterfaces returns the node's interfaces in slot order,
 // every fact explicit. Empty until Cluster.ResolveInterfaces has run;
-// Load always runs it.
+// Load always runs it. The slice is a copy — the resolver stays the
+// only write path to the resolved state.
 func (n *TalosNode) ResolvedInterfaces() []ResolvedInterface {
-	return n.resolved
+	return slices.Clone(n.resolved)
 }
 
 // PrimaryInterface returns the node's boot NIC — the one interface on

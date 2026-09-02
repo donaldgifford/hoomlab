@@ -102,6 +102,17 @@ func newProvisioner(t *testing.T, cfg *config.Cluster) (*pve.Provisioner, func(n
 	}, svc
 }
 
+// mustVMSpec builds the spec for a resolved node, failing the test on
+// the unresolved-cluster error path (covered by its own test below).
+func mustVMSpec(t *testing.T, node *config.TalosNode) *qemu.CreateSpec {
+	t.Helper()
+	spec, err := pve.VMSpec(node)
+	if err != nil {
+		t.Fatalf("VMSpec(%s): %v", node.Name, err)
+	}
+	return spec
+}
+
 func runVMs(t *testing.T, p *pve.Provisioner) steps.Result {
 	t.Helper()
 	r := steps.Runner{Log: p.Log}
@@ -281,7 +292,7 @@ func TestVMSpecVLANTag(t *testing.T) {
 	cfg := vmsCluster()
 	node := &cfg.Talos.Nodes[0]
 
-	if got := pve.VMSpec(node).Net0; strings.Contains(got, "tag=") {
+	if got := mustVMSpec(t, node).Net0; strings.Contains(got, "tag=") {
 		t.Errorf("net0 = %q carries a tag with no vlan configured", got)
 	}
 
@@ -290,8 +301,18 @@ func TestVMSpecVLANTag(t *testing.T) {
 	if diags := cfg.ResolveInterfaces(); diags.HasErrors() {
 		t.Fatalf("re-resolve with the vlan set: %s", diags.Error())
 	}
-	if got, want := pve.VMSpec(node).Net0, ",tag=11"; !strings.HasSuffix(got, want) {
+	if got, want := mustVMSpec(t, node).Net0, ",tag=11"; !strings.HasSuffix(got, want) {
 		t.Errorf("net0 = %q, want suffix %q", got, want)
+	}
+}
+
+// TestVMSpecUnresolvedNodeErrors pins the failure mode for a node
+// whose cluster never ran ResolveInterfaces: an error, not a spec
+// with an empty NIC that would create a VM on no network at all.
+func TestVMSpecUnresolvedNodeErrors(t *testing.T) {
+	node := &config.TalosNode{Name: "orphan", VMID: 999}
+	if spec, err := pve.VMSpec(node); err == nil {
+		t.Fatalf("VMSpec on an unresolved node = %+v, want an error", spec)
 	}
 }
 
@@ -303,7 +324,7 @@ func TestVMSpecMACMatchesConfig(t *testing.T) {
 	cfg := vmsCluster()
 	for i := range cfg.Talos.Nodes {
 		node := &cfg.Talos.Nodes[i]
-		spec := pve.VMSpec(node)
+		spec := mustVMSpec(t, node)
 		nic, ok := node.PrimaryInterface()
 		if !ok {
 			t.Fatalf("%s: no resolved primary interface", node.Name)
@@ -326,7 +347,7 @@ func TestVMSpecMACMatchesConfig(t *testing.T) {
 // forever while every host-side check reports a healthy VM.
 func TestVMSpecPinsVirtIOSCSI(t *testing.T) {
 	cfg := vmsCluster()
-	spec := pve.VMSpec(&cfg.Talos.Nodes[0])
+	spec := mustVMSpec(t, &cfg.Talos.Nodes[0])
 	if got := spec.Extra["scsihw"]; got != "virtio-scsi-single" {
 		t.Fatalf("scsihw = %q, want %q (PVE's API default is LSI 53C895A, invisible to Talos)",
 			got, "virtio-scsi-single")
@@ -342,7 +363,7 @@ func TestVMSpecPinsVirtIOSCSI(t *testing.T) {
 // boot-sequence phase against an otherwise healthy cluster.
 func TestVMSpecEnablesGuestAgent(t *testing.T) {
 	cfg := vmsCluster()
-	spec := pve.VMSpec(&cfg.Talos.Nodes[0])
+	spec := mustVMSpec(t, &cfg.Talos.Nodes[0])
 	if got := spec.Extra["agent"]; got != "enabled=1" {
 		t.Fatalf("agent = %q, want %q (the guest-agent extension needs its virtio channel)",
 			got, "enabled=1")

@@ -142,12 +142,11 @@ func (p *Provisioner) vmRunning(ctx context.Context, node *config.TalosNode) (bo
 }
 
 func (p *Provisioner) applyCreate(ctx context.Context, node *config.TalosNode) error {
-	nic, ok := node.PrimaryInterface()
-	if !ok {
-		return fmt.Errorf("create vm %d (%s): no resolved primary interface — the cluster was not resolved",
-			node.VMID, node.Name)
+	spec, err := VMSpec(node)
+	if err != nil {
+		return fmt.Errorf("create vm %d (%s) on %s: %w", node.VMID, node.Name, node.PVENode, err)
 	}
-	spec := VMSpec(node)
+	nic, _ := node.PrimaryInterface() // VMSpec above guaranteed it resolves
 	p.logger().Info("creating vm",
 		"vm", node.Name, "vmid", node.VMID, "pve_node", node.PVENode, "mac", nic.MAC)
 	ref, err := p.QEMU(node.PVENode).Create(ctx, spec)
@@ -177,15 +176,14 @@ func (p *Provisioner) waitTask(ctx context.Context, ref tasks.Ref, what string) 
 	return nil
 }
 
-// net0 renders the boot NIC from the node's resolved primary
-// interface. The tag goes on the PVE side of the bridge when a VLAN
-// is declared (a trunk port with no native VLAN drops untagged frames
-// — IMPL-0002 OQ-5), and PVE strips it before the guest, so the
-// firmware's PXE stack sees plain Ethernet either way. Secondary
-// interfaces render in IMPL-0003 Phase 4; until then the spec carries
-// only the boot NIC.
-func net0(node *config.TalosNode) string {
-	nic, _ := node.PrimaryInterface() // validated clusters resolve exactly one
+// net0 renders the boot NIC from the resolved primary interface. The
+// tag goes on the PVE side of the bridge when a VLAN is declared (a
+// trunk port with no native VLAN drops untagged frames — IMPL-0002
+// OQ-5), and PVE strips it before the guest, so the firmware's PXE
+// stack sees plain Ethernet either way. Secondary interfaces render
+// in IMPL-0003 Phase 4; until then the spec carries only the boot
+// NIC.
+func net0(nic *config.ResolvedInterface) string {
 	s := fmt.Sprintf("virtio,bridge=%s,macaddr=%s,firewall=0", nic.Bridge, nic.MAC)
 	if nic.VLAN > 0 {
 		s += fmt.Sprintf(",tag=%d", nic.VLAN)
@@ -200,8 +198,16 @@ func net0(node *config.TalosNode) string {
 //
 // The MAC is the primary interface's, pinned in the config, which is
 // also the one the emitted booty group selects on — identity flows
-// from a single source to both sides of the PXE handshake.
-func VMSpec(node *config.TalosNode) *qemu.CreateSpec {
+// from a single source to both sides of the PXE handshake. A node
+// whose cluster was never resolved is an error, not a spec with an
+// empty NIC — that spec would look valid and produce a VM on no
+// network at all.
+func VMSpec(node *config.TalosNode) (*qemu.CreateSpec, error) {
+	nic, ok := node.PrimaryInterface()
+	if !ok {
+		return nil, fmt.Errorf(
+			"vm spec for %s: no resolved primary interface — the cluster was not resolved", node.Name)
+	}
 	return &qemu.CreateSpec{
 		VMID:   types.VMID(node.VMID),
 		Name:   node.Name,
@@ -210,7 +216,7 @@ func VMSpec(node *config.TalosNode) *qemu.CreateSpec {
 		CPU:    cpuType,
 		OSType: osType,
 		SCSI0:  fmt.Sprintf("%s:%d", node.Storage, node.DiskGB),
-		Net0:   net0(node),
+		Net0:   net0(&nic),
 		Boot:   bootOrder,
 		Extra: map[string]string{
 			"agent":   agentEnabled,
@@ -224,5 +230,5 @@ func VMSpec(node *config.TalosNode) *qemu.CreateSpec {
 			"rng0":     rngDevice,
 			"serial0":  serialDevice,
 		},
-	}
+	}, nil
 }
