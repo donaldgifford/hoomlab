@@ -459,9 +459,12 @@ Phase 2's end state.
       groups; `TestRoleTemplatesSingleNICByteIdentical` proves the
       template layer emits no `machine.network` for primary-only
       nodes)*
-- [ ] Docs in the same change: runbook §1 (config surface), §10
+- [x] Docs in the same change: runbook §1 (config surface), §10
       (vms expected fields), §15 (note that rebirth now covers the
       storage plane); example config final pass
+      *(§15's storage-plane note carries an explicit
+      not-yet-executed-live marker — Phase 6 is that proof; the
+      example config got its full two-form pass in Phase 3)*
 
 #### Success Criteria
 

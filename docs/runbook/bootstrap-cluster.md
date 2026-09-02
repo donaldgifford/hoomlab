@@ -121,15 +121,29 @@ cp /path/to/repo/tools/bootstrap/examples/bootstrap.hcl .
 $EDITOR bootstrap.hcl
 ```
 
-Fill in real endpoints, MACs, VMIDs, storage, and bridges. The
-cluster *label* names the **PVE** cluster — `pve form` pins it
-against the live cluster on every check — and the Talos cluster
-inherits it unless the talos block sets its own `name` (do that when
-the layers carry different names; a second Talos cluster on the same
-PVE cluster would need its own). Secret *values* never appear in the
-file — secret-bearing attributes carry `env("HOOMLAB_…")` references
-resolved at load time. Export them first; the names are yours to
-choose, these are what the example uses:
+Fill in real endpoints, MACs, VMIDs, and storage. The cluster
+*label* names the **PVE** cluster — `pve form` pins it against the
+live cluster on every check — and the Talos cluster inherits it
+unless the talos block sets its own `name` (do that when the layers
+carry different names; a second Talos cluster on the same PVE
+cluster would need its own).
+
+Networking is declared in two layers (DESIGN-0004): `network`
+blocks in the talos block state each plane's shared facts once —
+`dhcp` always, `vlan`/`primary`/`cidr`/`mtu` as the plane needs
+them — and each node carries one `network_interface "netN"` block
+per NIC with its `mac` and `bridge`, plus either `network =
+"<plane>"` (inheriting the plane whole) or the same facts inline.
+Setting a reference *and* a plane-owned attribute is an error, never
+an override. Static planes require a per-interface `address` inside
+the plane's `cidr`; exactly one interface per node must resolve
+primary — that NIC is the PXE boot path. The example file shows both
+forms and a commented storage plane.
+
+Secret *values* never appear in the file — secret-bearing attributes
+carry `env("HOOMLAB_…")` references resolved at load time. Export
+them first; the names are yours to choose, these are what the
+example uses:
 
 ```sh
 export HOOMLAB_PVE_TOKEN_ID='root@pam!bootstrap'
@@ -531,13 +545,19 @@ next: bootstrap talos bootstrap
 
 The VM settings are deliberate, not Proxmox defaults — UEFI (`ovmf` +
 `q35`) *without* pre-enrolled Secure Boot keys, a VirtIO RNG,
-`cpu=host`, and boot order `scsi0` then `net0`. Each is required for the
-PXE → install → boot-from-disk cycle: disk-first with an empty disk
-falls through to PXE on the first boot and boots the installed system
-on every boot after.
+`cpu=host`, and boot order `scsi0` then the **primary interface's
+slot only**. Each is required for the PXE → install → boot-from-disk
+cycle: disk-first with an empty disk falls through to PXE on the
+first boot and boots the installed system on every boot after — and
+a secondary NIC in boot order would PXE into a VLAN booty doesn't
+serve and hang in silence.
 
-The NIC MAC is the one from the config — the same MAC the emitted
-catalog selects on, so a VM gets its own machineconfig by construction.
+Every `network_interface` block renders into its PVE slot: `bridge`
+and `macaddr` per NIC, `tag=` only when its plane declares a VLAN,
+`mtu=` explicitly when the plane sets one (never PVE's `mtu=1`
+inherit-the-bridge magic). The primary interface's MAC is the one
+the emitted catalog selects on, so a VM gets its own machineconfig
+by construction.
 
 Watch progress in the booty logs, or `qm terminal <vmid>` on the
 Proxmox node. Re-imaging a node later is: wipe its disk and reboot.
@@ -734,6 +754,13 @@ cluster come back by reapplying them, not by magic. The same MACs
 return because identity is pinned in the config, so the DHCP
 reservations and booty groups still match — nothing on the network
 side needs touching.
+
+With the network surface in the config (DESIGN-0004), the rebuild
+also carries the **storage plane**: recreated VMs come back with
+every declared NIC, and the served machineconfigs already hold the
+static storage addresses by MAC selector — no hand patching on the
+way back up. `[not yet executed live — IMPL-0003 Phase 6 is the
+single-worker proof of exactly this]`
 
 1. Make the config edits the window is for (`talos { name = … }`,
    endpoint changes, …), re-emit, and sync the tree to the booty host
