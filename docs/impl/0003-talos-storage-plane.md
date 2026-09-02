@@ -528,6 +528,20 @@ code-side work is complete and committed; every remaining step
 needs the release train or the live cluster, which the operator
 drives (IMPL-0002 operating rule).
 
+**Pre-merge pre-flight (2026-09-02, branch build, read-only):** the
+operator ran the full loop as `--dry-run` from a branch-built binary
+against `bootstrap.hcl.next` and the live tree. `validate` clean
+(3 pve, 6 talos), `vms` 0 of 12 pending (no retrofit — the multi-NIC
+config converges against the running VMs untouched), `health` green,
+`boot-assets` done (schematic `88d1f7a5…` assets already staged from
+Phase 1). `emit` drift matched the predicted shape exactly —
+`catalog/20-groups.hcl` plus both role templates — after aligning
+`.next`'s booty url with the live tree's (a drafted future url had
+crept in, reproducing the same input-drift trio of `booty-run.sh` /
+`00-variables.hcl` / `embed.ipxe` that IMPL-0002 recorded on
+08-27). The apply itself stays with the released v0.3.0 binary per
+the tasks above.
+
 #### Success Criteria
 
 - Zero cluster mutations across both loop runs; the only writes were
