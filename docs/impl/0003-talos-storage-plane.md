@@ -399,6 +399,14 @@ Phase 2's gate (the OQs are decided).
   *behavior* to v0.2.0 — syntax broke, artifacts didn't.
 - The example config stays valid (`TestLoadExampleConfig`).
 
+**Phase 3 complete (2026-09-02).** All criteria verified: race
+tests and lint at 0 issues; the emit goldens never changed across
+the surface swap — the single-interface byte-identity proof came
+for free from the shim; `TestLoadExampleConfig` pins the migrated
+example. Style review pass produced two hardening fixes (accessor
+returns a copy; `VMSpec` errors on an unresolved node instead of
+rendering an empty NIC). Commits `0b773c6`, `53bc0ae`, `e847b6c`.
+
 ---
 
 ### Phase 4: VM and emit surface (code)
@@ -408,12 +416,17 @@ Phase 2's end state.
 
 #### Tasks
 
-- [ ] `VMSpec` renders every declared interface in slot order —
+- [x] `VMSpec` renders every declared interface in slot order —
       `bridge` from the interface, `tag=` only when a `vlan` is
       declared, `mtu=` when the plane sets one;
       **boot order carries only the primary-plane interface's slot**
       — regression test pinning `order=scsi0;net0` with a second
       NIC present
+      *(`netN` renders any slot — net0 via the SDK's typed field,
+      the rest via Extra; `bootOrder` derives from the primary slot;
+      `TestVMSpecRendersAllInterfaces` pins the struct,
+      `TestVMsMultiNICWireFields` pins it through a real create and
+      read-back)*
 - [ ] Emit catalog: per-group interface vars (each interface's MAC;
       static addresses) beside `hostname`
 - [ ] Machineconfig templates: `machine.network.interfaces` rendered

@@ -16,11 +16,6 @@ import (
 // Each one is here because leaving it to the PVE default breaks the
 // PXE boot in a way that is hard to diagnose from inside the guest.
 const (
-	// bootOrder puts the disk first and the NIC second. The empty disk
-	// falls through to PXE on the first boot; once Talos has installed
-	// itself the node boots from disk. Re-imaging is "wipe the disk and
-	// reboot" — the firmware falls back to PXE again.
-	bootOrder = "order=scsi0;net0"
 	// cpuType must expose a modern instruction set: Talos requires
 	// x86-64-v2, and PVE's default kvm64 panics the kernel.
 	cpuType = "host"
@@ -176,17 +171,29 @@ func (p *Provisioner) waitTask(ctx context.Context, ref tasks.Ref, what string) 
 	return nil
 }
 
-// net0 renders the boot NIC from the resolved primary interface. The
-// tag goes on the PVE side of the bridge when a VLAN is declared (a
-// trunk port with no native VLAN drops untagged frames — IMPL-0002
-// OQ-5), and PVE strips it before the guest, so the firmware's PXE
-// stack sees plain Ethernet either way. Secondary interfaces render
-// in IMPL-0003 Phase 4; until then the spec carries only the boot
-// NIC.
-func net0(nic *config.ResolvedInterface) string {
+// bootOrder puts the disk first and the primary interface second. The
+// empty disk falls through to PXE on the first boot; once Talos has
+// installed itself the node boots from disk. Re-imaging is "wipe the
+// disk and reboot" — the firmware falls back to PXE again. Only the
+// primary-plane NIC ever appears here: booty serves one VLAN, and a
+// VM PXE-booting from a secondary NIC hangs in silence.
+func bootOrder(primary *config.ResolvedInterface) string {
+	return "order=scsi0;" + primary.Slot
+}
+
+// netN renders one NIC. The tag goes on the PVE side of the bridge
+// when a VLAN is declared (a trunk port with no native VLAN drops
+// untagged frames — IMPL-0002 OQ-5), and PVE strips it before the
+// guest, so the firmware's PXE stack sees plain Ethernet either way.
+// The mtu is rendered explicitly when the plane sets one — never
+// PVE's mtu=1 inherit-the-bridge magic (DESIGN-0004 derivations).
+func netN(nic *config.ResolvedInterface) string {
 	s := fmt.Sprintf("virtio,bridge=%s,macaddr=%s,firewall=0", nic.Bridge, nic.MAC)
 	if nic.VLAN > 0 {
 		s += fmt.Sprintf(",tag=%d", nic.VLAN)
+	}
+	if nic.MTU > 0 {
+		s += fmt.Sprintf(",mtu=%d", nic.MTU)
 	}
 	return s
 }
@@ -196,19 +203,20 @@ func net0(nic *config.ResolvedInterface) string {
 // field here is load-bearing, and a regression in any of them produces
 // a VM that looks fine and never boots.
 //
-// The MAC is the primary interface's, pinned in the config, which is
-// also the one the emitted booty group selects on — identity flows
+// Every declared interface renders into its slot: net0 through the
+// SDK's typed field, the rest through Extra. The primary interface's
+// MAC is the one the emitted booty group selects on — identity flows
 // from a single source to both sides of the PXE handshake. A node
 // whose cluster was never resolved is an error, not a spec with an
 // empty NIC — that spec would look valid and produce a VM on no
 // network at all.
 func VMSpec(node *config.TalosNode) (*qemu.CreateSpec, error) {
-	nic, ok := node.PrimaryInterface()
+	primary, ok := node.PrimaryInterface()
 	if !ok {
 		return nil, fmt.Errorf(
 			"vm spec for %s: no resolved primary interface — the cluster was not resolved", node.Name)
 	}
-	return &qemu.CreateSpec{
+	spec := &qemu.CreateSpec{
 		VMID:   types.VMID(node.VMID),
 		Name:   node.Name,
 		Memory: node.Memory,
@@ -216,8 +224,7 @@ func VMSpec(node *config.TalosNode) (*qemu.CreateSpec, error) {
 		CPU:    cpuType,
 		OSType: osType,
 		SCSI0:  fmt.Sprintf("%s:%d", node.Storage, node.DiskGB),
-		Net0:   net0(&nic),
-		Boot:   bootOrder,
+		Boot:   bootOrder(&primary),
 		Extra: map[string]string{
 			"agent":   agentEnabled,
 			"bios":    biosType,
@@ -230,5 +237,13 @@ func VMSpec(node *config.TalosNode) (*qemu.CreateSpec, error) {
 			"rng0":     rngDevice,
 			"serial0":  serialDevice,
 		},
-	}, nil
+	}
+	for _, nic := range node.ResolvedInterfaces() {
+		if nic.Slot == "net0" {
+			spec.Net0 = netN(&nic)
+			continue
+		}
+		spec.Extra[nic.Slot] = netN(&nic)
+	}
+	return spec, nil
 }

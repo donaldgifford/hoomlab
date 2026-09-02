@@ -316,6 +316,66 @@ func TestVMSpecUnresolvedNodeErrors(t *testing.T) {
 	}
 }
 
+// addStorageNIC appends a static jumbo second NIC to a node — the
+// storage-plane shape from IMPL-0003 — and re-resolves the cluster.
+func addStorageNIC(t *testing.T, cfg *config.Cluster, node *config.TalosNode, mac, address string) {
+	t.Helper()
+	dhcp, mtu := false, 9000
+	node.Interfaces = append(node.Interfaces, config.NetworkInterface{
+		Name: "net1", MAC: mac, Bridge: "storbr0",
+		DHCP: &dhcp, Address: address, MTU: &mtu,
+	})
+	if diags := cfg.ResolveInterfaces(); diags.HasErrors() {
+		t.Fatalf("re-resolve with the storage NIC: %s", diags.Error())
+	}
+}
+
+// TestVMSpecRendersAllInterfaces pins the multi-NIC derivations
+// (DESIGN-0004): every declared interface lands in its slot — the
+// secondary untagged on its own bridge with an explicit mtu, never
+// PVE's mtu=1 magic — and the boot order still carries ONLY the
+// primary slot. A second NIC in boot order is the silent PXE hang
+// this rule exists to prevent.
+func TestVMSpecRendersAllInterfaces(t *testing.T) {
+	cfg := vmsCluster()
+	node := &cfg.Talos.Nodes[3] // worker-01
+	addStorageNIC(t, cfg, node, "02:50:99:a2:14:2f", "10.10.13.63/24")
+
+	spec := mustVMSpec(t, node)
+	if want := "virtio,bridge=vmbr1,macaddr=02:50:99:a2:01:01,firewall=0"; spec.Net0 != want {
+		t.Errorf("net0 = %q, want %q", spec.Net0, want)
+	}
+	if want := "virtio,bridge=storbr0,macaddr=02:50:99:a2:14:2f,firewall=0,mtu=9000"; spec.Extra["net1"] != want {
+		t.Errorf("net1 = %q, want %q", spec.Extra["net1"], want)
+	}
+	if want := "order=scsi0;net0"; spec.Boot != want {
+		t.Errorf("boot = %q, want %q — only the primary slot may boot", spec.Boot, want)
+	}
+}
+
+// TestVMsMultiNICWireFields drives the multi-NIC spec through a real
+// create and reads it back: the secondary NIC and the pinned boot
+// order must survive the wire, not just the struct.
+func TestVMsMultiNICWireFields(t *testing.T) {
+	cfg := vmsCluster()
+	node := &cfg.Talos.Nodes[3] // worker-01
+	addStorageNIC(t, cfg, node, "02:50:99:a2:14:2f", "10.10.13.63/24")
+
+	p, qsvc := newProvisioner(t, cfg)
+	runVMs(t, p)
+
+	got, err := qsvc(node.PVENode).Config(context.Background(), node.VMID)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	if want := "virtio,bridge=storbr0,macaddr=02:50:99:a2:14:2f,firewall=0,mtu=9000"; got.Net1 != want {
+		t.Errorf("net1 = %q, want %q", got.Net1, want)
+	}
+	if want := "order=scsi0;net0"; got.Boot != want {
+		t.Errorf("boot = %q, want %q", got.Boot, want)
+	}
+}
+
 // TestVMSpecMACMatchesConfig pins the identity binding: the MAC on the
 // NIC is the one from the config, which is the same one the emitted
 // booty group selects on. If these ever diverge the node PXE boots and
