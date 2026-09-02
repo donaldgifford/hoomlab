@@ -11,7 +11,11 @@ import (
 
 // validHCL is the minimal valid config the mutation table below edits.
 // Every mutable token is unique within the string so a single
-// strings.Replace hits exactly the intended spot.
+// strings.Replace hits exactly the intended spot; where alignment
+// makes two lines identical, the mutation anchors carry their leading
+// indentation (interface attrs sit two spaces deeper than plane
+// attrs). cp-01's interface takes the referenced form and worker-01's
+// the inline form, so the base fixture exercises both (DESIGN-0004).
 const validHCL = `
 cluster "test" {
   pve {
@@ -40,6 +44,11 @@ cluster "test" {
     version  = "v1.13.8"
     endpoint = "https://10.0.20.10:6443"
 
+    network "servers" {
+      dhcp    = true
+      primary = true
+    }
+
     booty {
       url = "http://10.0.10.5:8080"
     }
@@ -48,23 +57,32 @@ cluster "test" {
       role     = "controlplane"
       pve_node = "pve-01"
       vmid     = 200
-      mac      = "02:50:99:a2:00:01"
       cores    = 4
       memory   = 8192
       disk_gb  = 64
       storage  = "local-zfs"
-      bridge   = "vmbr0"
+
+      network_interface "net0" {
+        network = "servers"
+        mac     = "02:50:99:a2:00:01"
+        bridge  = "vmbr0"
+      }
     }
     node "worker-01" {
       role     = "worker"
       pve_node = "pve-02"
       vmid     = 300
-      mac      = "02:50:99:a2:01:01"
       cores    = 4
       memory   = 8192
       disk_gb  = 64
       storage  = "local-zfs"
-      bridge   = "vmbr0"
+
+      network_interface "net0" {
+        mac     = "02:50:99:a2:01:01"
+        bridge  = "vmbr1"
+        dhcp    = true
+        primary = true
+      }
     }
   }
 }
@@ -123,7 +141,7 @@ func TestLoad(t *testing.T) {
 		},
 		{
 			name:   "mac normalized from dash notation",
-			mutate: replace(`mac      = "02:50:99:a2:00:01"`, `mac      = "02-50-99-A2-00-01"`),
+			mutate: replace(`mac     = "02:50:99:a2:00:01"`, `mac     = "02-50-99-A2-00-01"`),
 		},
 		{
 			name:     "missing env var",
@@ -147,12 +165,12 @@ func TestLoad(t *testing.T) {
 		},
 		{
 			name:     "duplicate mac literal",
-			mutate:   replace(`mac      = "02:50:99:a2:01:01"`, `mac      = "02:50:99:a2:00:01"`),
-			wantErrs: []string{"Duplicate node mac"},
+			mutate:   replace(`mac     = "02:50:99:a2:01:01"`, `mac     = "02:50:99:a2:00:01"`),
+			wantErrs: []string{"Duplicate network_interface mac"},
 		},
 		{
 			name:     "duplicate mac case variant",
-			mutate:   replace(`mac      = "02:50:99:a2:01:01"`, `mac      = "02:50:99:A2:00:01"`),
+			mutate:   replace(`mac     = "02:50:99:a2:01:01"`, `mac     = "02:50:99:A2:00:01"`),
 			wantErrs: []string{`mac "02:50:99:a2:00:01" is already used by node "cp-01"`},
 		},
 		{
@@ -184,8 +202,8 @@ func TestLoad(t *testing.T) {
 		},
 		{
 			name:     "invalid mac",
-			mutate:   replace(`mac      = "02:50:99:a2:00:01"`, `mac      = "not-a-mac"`),
-			wantErrs: []string{"Invalid talos node mac", "not-a-mac"},
+			mutate:   replace(`mac     = "02:50:99:a2:00:01"`, `mac     = "not-a-mac"`),
+			wantErrs: []string{"Invalid network_interface mac", "not-a-mac"},
 		},
 		{
 			name:     "vmid below pve floor",
@@ -193,9 +211,12 @@ func TestLoad(t *testing.T) {
 			wantErrs: []string{"vmid 42 is below 100"},
 		},
 		{
-			name: "vlan tag accepted",
-			mutate: replace(`bridge   = "vmbr0"`, `bridge   = "vmbr0"
-      vlan     = 11`),
+			// The inline-form anchors carry their 8-space indentation:
+			// worker-01's interface attrs would otherwise collide with
+			// the identically aligned plane attrs at 6 spaces.
+			name: "inline vlan tag accepted",
+			mutate: replace(`        primary = true`, `        primary = true
+        vlan    = 11`),
 		},
 		{
 			name: "storage block accepted",
@@ -255,16 +276,16 @@ func TestLoad(t *testing.T) {
 			wantErrs: []string{"Undeclared talos node storage", `storage "local-zfs" matches no declared`},
 		},
 		{
-			name: "vlan above 802.1q range",
-			mutate: replace(`bridge   = "vmbr0"`, `bridge   = "vmbr0"
-      vlan     = 4095`),
-			wantErrs: []string{"Invalid talos node vlan", "vlan 4095 is outside the 802.1Q range 1-4094"},
+			name: "inline vlan above 802.1q range",
+			mutate: replace(`        primary = true`, `        primary = true
+        vlan    = 4095`),
+			wantErrs: []string{"Invalid network_interface vlan", "vlan 4095 is outside the 802.1Q range 1-4094"},
 		},
 		{
-			name: "negative vlan",
-			mutate: replace(`bridge   = "vmbr0"`, `bridge   = "vmbr0"
-      vlan     = -1`),
-			wantErrs: []string{"Invalid talos node vlan"},
+			name: "negative inline vlan",
+			mutate: replace(`        primary = true`, `        primary = true
+        vlan    = -1`),
+			wantErrs: []string{"Invalid network_interface vlan"},
 		},
 		{
 			name: "invalid cluster cni",
@@ -327,7 +348,7 @@ func TestLoad(t *testing.T) {
       extensions = ["siderolabs/qemu-guest-agent", "siderolabs/iscsi-tools"]
     }
     booty {`)(s)
-				return replace(`bridge   = "vmbr0"`, `bridge   = "vmbr0"
+				return replace(`vmid     = 200`, `vmid     = 200
       profiles = ["base"]`)(s)
 			},
 		},
@@ -360,7 +381,7 @@ func TestLoad(t *testing.T) {
 		},
 		{
 			name: "unknown profile reference",
-			mutate: replace(`bridge   = "vmbr0"`, `bridge   = "vmbr0"
+			mutate: replace(`vmid     = 200`, `vmid     = 200
       profiles = ["gpu"]`),
 			wantErrs: []string{"Unknown profile reference", `"gpu"`},
 		},
@@ -426,9 +447,9 @@ func TestLoad(t *testing.T) {
 				second = strings.Replace(second, "vmid     = 200", "vmid     = 400", 1)
 				second = strings.Replace(second, "vmid     = 300", "vmid     = 401", 1)
 				second = strings.Replace(second,
-					`mac      = "02:50:99:a2:00:01"`, `mac      = "02:50:99:a2:02:01"`, 1)
+					`mac     = "02:50:99:a2:00:01"`, `mac     = "02:50:99:a2:02:01"`, 1)
 				second = strings.Replace(second,
-					`mac      = "02:50:99:a2:01:01"`, `mac      = "02:50:99:a2:02:02"`, 1)
+					`mac     = "02:50:99:a2:01:01"`, `mac     = "02:50:99:a2:02:02"`, 1)
 				return s + second
 			},
 			wantErrs: []string{"Exactly one cluster block required"},
@@ -606,7 +627,7 @@ k8sServicePort: 6443
 func TestLoadResolvesAndNormalizes(t *testing.T) {
 	setTestEnv(t)
 	path := writeConfig(t,
-		strings.Replace(validHCL, `mac      = "02:50:99:a2:00:01"`, `mac      = "02-50-99-A2-00-01"`, 1))
+		strings.Replace(validHCL, `mac     = "02:50:99:a2:00:01"`, `mac     = "02-50-99-A2-00-01"`, 1))
 
 	cluster, diags := Load(path)
 	if diags.HasErrors() {
@@ -622,14 +643,33 @@ func TestLoadResolvesAndNormalizes(t *testing.T) {
 	if got, want := cluster.ACME.Token, secretMarker+"-cf-token"; got != want {
 		t.Errorf("ACME.Token = %q, want the resolved env value %q", got, want)
 	}
-	if got, want := cluster.Talos.Nodes[0].MAC, "02:50:99:a2:00:01"; got != want {
-		t.Errorf("Nodes[0].MAC = %q, want canonical %q", got, want)
-	}
 	if got, want := cluster.Talos.Nodes[0].Role, RoleControlPlane; got != want {
 		t.Errorf("Nodes[0].Role = %q, want %q", got, want)
 	}
 	if got, want := cluster.TalosName(), "test"; got != want {
 		t.Errorf("TalosName() without talos name = %q, want the label %q", got, want)
+	}
+
+	// Both layers carry the canonical MAC after load: the raw block
+	// and the resolved interface.
+	cp := &cluster.Talos.Nodes[0]
+	if got, want := cp.Interfaces[0].MAC, "02:50:99:a2:00:01"; got != want {
+		t.Errorf("Interfaces[0].MAC = %q, want canonical %q", got, want)
+	}
+	nics := cp.ResolvedInterfaces()
+	if len(nics) != 1 {
+		t.Fatalf("ResolvedInterfaces() has %d entries, want 1", len(nics))
+	}
+	if got, want := nics[0].MAC, "02:50:99:a2:00:01"; got != want {
+		t.Errorf("resolved MAC = %q, want canonical %q", got, want)
+	}
+	// cp-01 takes the referenced form: the plane's facts arrive whole.
+	if !nics[0].DHCP || !nics[0].Primary {
+		t.Errorf("resolved interface = %+v, want the servers plane's dhcp and primary facts", nics[0])
+	}
+	nic, ok := cp.PrimaryInterface()
+	if !ok || nic.Slot != "net0" {
+		t.Errorf("PrimaryInterface() = %+v, %t; want net0, true", nic, ok)
 	}
 }
 

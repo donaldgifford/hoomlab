@@ -21,6 +21,15 @@ import (
 	"github.com/donaldgifford/proxmox-go-sdk/proxmox/version"
 )
 
+// bootNIC is a single inline-form boot NIC; vmsCluster resolves after
+// construction, the same way Load resolves a real config.
+func bootNIC(mac, bridge string) []config.NetworkInterface {
+	dhcp, primary := true, true
+	return []config.NetworkInterface{{
+		Name: "net0", MAC: mac, Bridge: bridge, DHCP: &dhcp, Primary: &primary,
+	}}
+}
+
 // vmsCluster is the three-PVE-node cluster with four Talos VMs spread
 // across it — two roles, three hosts, so placement is actually
 // exercised rather than assumed.
@@ -33,25 +42,32 @@ func vmsCluster() *config.Cluster {
 		Nodes: []config.TalosNode{
 			{
 				Name: "cp-01", Role: config.RoleControlPlane, PVENode: "pve-01",
-				VMID: 200, MAC: "02:50:99:a2:00:01", Cores: 4, Memory: 8192,
-				DiskGB: 64, Storage: "local-zfs", Bridge: "vmbr0",
+				VMID: 200, Cores: 4, Memory: 8192,
+				DiskGB: 64, Storage: "local-zfs",
+				Interfaces: bootNIC("02:50:99:a2:00:01", "vmbr0"),
 			},
 			{
 				Name: "cp-02", Role: config.RoleControlPlane, PVENode: "pve-02",
-				VMID: 201, MAC: "02:50:99:a2:00:02", Cores: 4, Memory: 8192,
-				DiskGB: 64, Storage: "local-zfs", Bridge: "vmbr0",
+				VMID: 201, Cores: 4, Memory: 8192,
+				DiskGB: 64, Storage: "local-zfs",
+				Interfaces: bootNIC("02:50:99:a2:00:02", "vmbr0"),
 			},
 			{
 				Name: "cp-03", Role: config.RoleControlPlane, PVENode: "pve-03",
-				VMID: 202, MAC: "02:50:99:a2:00:03", Cores: 4, Memory: 8192,
-				DiskGB: 64, Storage: "local-zfs", Bridge: "vmbr0",
+				VMID: 202, Cores: 4, Memory: 8192,
+				DiskGB: 64, Storage: "local-zfs",
+				Interfaces: bootNIC("02:50:99:a2:00:03", "vmbr0"),
 			},
 			{
 				Name: "worker-01", Role: config.RoleWorker, PVENode: "pve-01",
-				VMID: 300, MAC: "02:50:99:a2:01:01", Cores: 8, Memory: 16384,
-				DiskGB: 128, Storage: "local-lvm", Bridge: "vmbr1",
+				VMID: 300, Cores: 8, Memory: 16384,
+				DiskGB: 128, Storage: "local-lvm",
+				Interfaces: bootNIC("02:50:99:a2:01:01", "vmbr1"),
 			},
 		},
+	}
+	if diags := c.ResolveInterfaces(); diags.HasErrors() {
+		panic("vmsCluster does not resolve: " + diags.Error())
 	}
 	return c
 }
@@ -258,9 +274,9 @@ func TestVMSpecWireFields(t *testing.T) {
 }
 
 // TestVMSpecVLANTag pins the net0 tag behavior (IMPL-0002 OQ-5): a
-// configured VLAN lands as a PVE-side tag on the NIC — the lab's
+// declared VLAN lands as a PVE-side tag on the NIC — the lab's
 // vm-trunk bridge has no native VLAN, so an untagged VM is on no
-// network at all — and an unset VLAN adds no tag parameter.
+// network at all — and an undeclared VLAN adds no tag parameter.
 func TestVMSpecVLANTag(t *testing.T) {
 	cfg := vmsCluster()
 	node := &cfg.Talos.Nodes[0]
@@ -269,7 +285,11 @@ func TestVMSpecVLANTag(t *testing.T) {
 		t.Errorf("net0 = %q carries a tag with no vlan configured", got)
 	}
 
-	node.VLAN = 11
+	vlan := 11
+	node.Interfaces[0].VLAN = &vlan
+	if diags := cfg.ResolveInterfaces(); diags.HasErrors() {
+		t.Fatalf("re-resolve with the vlan set: %s", diags.Error())
+	}
 	if got, want := pve.VMSpec(node).Net0, ",tag=11"; !strings.HasSuffix(got, want) {
 		t.Errorf("net0 = %q, want suffix %q", got, want)
 	}
@@ -284,8 +304,12 @@ func TestVMSpecMACMatchesConfig(t *testing.T) {
 	for i := range cfg.Talos.Nodes {
 		node := &cfg.Talos.Nodes[i]
 		spec := pve.VMSpec(node)
-		if !strings.Contains(spec.Net0, "macaddr="+node.MAC) {
-			t.Errorf("%s: net0 %q does not carry the config MAC %s", node.Name, spec.Net0, node.MAC)
+		nic, ok := node.PrimaryInterface()
+		if !ok {
+			t.Fatalf("%s: no resolved primary interface", node.Name)
+		}
+		if !strings.Contains(spec.Net0, "macaddr="+nic.MAC) {
+			t.Errorf("%s: net0 %q does not carry the config MAC %s", node.Name, spec.Net0, nic.MAC)
 		}
 		if spec.VMID != types.VMID(node.VMID) {
 			t.Errorf("%s: vmid = %d, want %d", node.Name, spec.VMID, node.VMID)

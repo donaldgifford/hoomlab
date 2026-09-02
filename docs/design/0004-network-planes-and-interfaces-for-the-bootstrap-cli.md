@@ -262,6 +262,11 @@ Flat rules over the resolved form, each with its own test:
 9. `mtu`, when set, within virtio's 576–65520. The fabric ceiling
    (aggregator jumbo, host bridge MTUs, the portal end) is the
    operator's to verify — the tool cannot see the wire.
+10. Every declared plane is referenced by at least one interface
+    (added at implementation, Phase 3): an unreferenced plane
+    governs nothing, which is near-certainly a config that added
+    the block and forgot the interfaces — the same silently-inert
+    failure the unreferenced-profile rule already catches.
 
 Deliberately absent: any uniformity rule across nodes (a node with
 only its primary interface is valid — the fleet table in IMPL-0003

@@ -38,20 +38,34 @@ func (metalMode) String() string        { return "metal" }
 func (metalMode) RequiresInstall() bool { return true }
 func (metalMode) InContainer() bool     { return false }
 
+// bootNIC is the single inline-form boot NIC the emit fixtures need.
+// The fixtures resolve after construction, the same way Load resolves
+// a real config.
+func bootNIC(mac string) []config.NetworkInterface {
+	dhcp, primary := true, true
+	return []config.NetworkInterface{{
+		Name: "net0", MAC: mac, Bridge: "vmbr0", DHCP: &dhcp, Primary: &primary,
+	}}
+}
+
 func testCluster() *config.Cluster {
-	return &config.Cluster{
+	c := &config.Cluster{
 		Name: "homelab",
 		Talos: config.Talos{
 			Version:  talosVersion,
 			Endpoint: "https://10.0.20.10:6443",
 			Booty:    config.Booty{URL: bootyURL},
 			Nodes: []config.TalosNode{
-				{Name: "cp-01", Role: config.RoleControlPlane, PVENode: "pve-01", VMID: 200, MAC: cpMAC},
-				{Name: "cp-02", Role: config.RoleControlPlane, PVENode: "pve-02", VMID: 201, MAC: "02:50:99:a2:00:02"},
-				{Name: "worker-01", Role: config.RoleWorker, PVENode: "pve-01", VMID: 300, MAC: workerMAC},
+				{Name: "cp-01", Role: config.RoleControlPlane, PVENode: "pve-01", VMID: 200, Interfaces: bootNIC(cpMAC)},
+				{Name: "cp-02", Role: config.RoleControlPlane, PVENode: "pve-02", VMID: 201, Interfaces: bootNIC("02:50:99:a2:00:02")},
+				{Name: "worker-01", Role: config.RoleWorker, PVENode: "pve-01", VMID: 300, Interfaces: bootNIC(workerMAC)},
 			},
 		},
 	}
+	if diags := c.ResolveInterfaces(); diags.HasErrors() {
+		panic("testCluster does not resolve: " + diags.Error())
+	}
+	return c
 }
 
 func testBundle(t *testing.T) *secrets.Bundle {

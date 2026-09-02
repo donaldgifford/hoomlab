@@ -339,21 +339,29 @@ Phase 2's gate (the OQs are decided).
 
 #### Tasks
 
-- [ ] The raw-vs-resolved split (OQ-1 layering addendum): raw HCL
+- [x] The raw-vs-resolved split (OQ-1 layering addendum): raw HCL
       types with optional mode attrs; one resolver producing a
       fully-explicit resolved interface per NIC; everything
       downstream consumes only the resolved form
-- [ ] Cluster-level `network "<name>"` blocks: `vlan` (optional —
+      *(`internal/config/resolve.go`: `ResolvedInterface`,
+      `Cluster.ResolveInterfaces()` — exported so struct-literal
+      test fixtures resolve the same way `Load` does; resolved
+      interfaces stored per node, read via
+      `TalosNode.ResolvedInterfaces()`/`PrimaryInterface()`)*
+- [x] Cluster-level `network "<name>"` blocks: `vlan` (optional —
       omitted renders untagged; the bridge and switch port profile
       own membership), `dhcp` (required — every plane states its
       mode), `primary`, `cidr` (required iff `dhcp = false`), `mtu`
       (optional — rendered into the VM NIC and machineconfig when
       set)
-- [ ] Per-node `network_interface "<netN>"` blocks — **replacing**
+- [x] Per-node `network_interface "<netN>"` blocks — **replacing**
       the flat `mac`/`vlan`/`bridge` node attrs (the breaking change
       OQ-1 accepted): `mac`, `bridge`, plus either `network` (plane
       reference) or the inline mode facts, per the XOR rule
-- [ ] Validation on the resolved form, one rule at a time: unique
+      *(decode-level MAC uniqueness validator moved from
+      `("node","mac")` to `("network_interface","mac")` — hclkit's
+      walk recurses into nested blocks)*
+- [x] Validation on the resolved form, one rule at a time: unique
       plane names; at most one plane `primary = true`; referenced
       planes must be declared; the XOR rule (reference + inline
       mode attr → error; neither → error naming what's missing);
@@ -363,10 +371,21 @@ Phase 2's gate (the OQs are decided).
       within virtio's 576–65520 when set; global MAC uniqueness
       across all interfaces; interface labels `net\d+`, unique per
       node
+      *(one added rule beyond the design list, per the unreferenced-
+      profile doctrine: a plane no interface references is an error,
+      not silently inert config — recorded as rule 10 in
+      DESIGN-0004)*
 - [ ] Load tests: parse + one test per validation error, drill-style,
       covering both forms and the XOR conflicts
-- [ ] Migrate `examples/bootstrap.hcl` and test fixtures to the new
+- [x] Migrate `examples/bootstrap.hcl` and test fixtures to the new
       surface, documenting both forms in place
+      *(example: `servers` plane + referenced form on the control
+      planes, inline form on worker-01, storage plane and net1 shown
+      commented; fixtures: `load_test.go` validHCL exercises both
+      forms, emit/pve test clusters build `network_interface` blocks
+      and call `ResolveInterfaces()`; Phase 3 shims keep `VMSpec`
+      net0 and the catalog group selector reading the resolved
+      primary interface — emit goldens byte-identical)*
 
 #### Success Criteria
 

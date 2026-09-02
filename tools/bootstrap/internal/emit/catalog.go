@@ -109,10 +109,16 @@ func renderCatalog(cluster *config.Cluster, perNode []string) (map[string]File, 
 	data.Nodes = make([]catalogGroup, 0, len(cluster.Talos.Nodes))
 	for i := range cluster.Talos.Nodes {
 		n := &cluster.Talos.Nodes[i]
+		// The group selector is the primary interface's MAC — the NIC
+		// that PXE boots and therefore the one iPXE reports.
+		nic, ok := n.PrimaryInterface()
+		if !ok {
+			return nil, fmt.Errorf("renderCatalog: node %q has no resolved primary interface", n.Name)
+		}
 		data.Nodes = append(data.Nodes, catalogGroup{
 			Name:    n.Name,
 			Profile: profileNames[class{role: n.Role, schematic: perNode[i]}],
-			MAC:     n.MAC,
+			MAC:     nic.MAC,
 		})
 	}
 

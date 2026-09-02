@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
@@ -18,19 +19,29 @@ const dnsCloudflare = "cloudflare"
 const pveVMIDMin = 100
 
 // The valid 802.1Q VLAN ID range: 0 is priority-tagged-only and 4095
-// is reserved, so a talos node's vlan must land inside this window
-// (or be omitted entirely for untagged).
+// is reserved, so a declared vlan must land inside this window (or be
+// omitted entirely for untagged).
 const (
 	vlanMin = 1
 	vlanMax = 4094
 )
 
+// The MTU window virtio accepts: below 576 IPv4 stops working by
+// spec, above 65520 the virtio ring rejects the frame. The fabric
+// ceiling (switch jumbo settings, host bridge MTUs, the far end) is
+// the operator's to verify — the tool cannot see the wire.
+const (
+	mtuMin = 576
+	mtuMax = 65520
+)
+
 // ValidateAndNormalize runs the semantic checks gohcl decoding cannot
 // express and returns every violation as a diagnostic naming the
 // offending block and field. The "normalize" in the name is real: it
-// rewrites each talos node MAC to the canonical NormalizeMAC form, so
-// a validated cluster always carries canonical MACs. Positions are
-// not available post-decode; these diagnostics carry summaries and
+// resolves every node's interfaces (Cluster.ResolveInterfaces) with
+// each MAC rewritten to the canonical NormalizeMAC form, so a
+// validated cluster always carries canonical MACs. Positions are not
+// available post-decode; these diagnostics carry summaries and
 // details only.
 func (c *Cluster) ValidateAndNormalize() hcl.Diagnostics {
 	diags := c.validatePVE()
@@ -39,6 +50,123 @@ func (c *Cluster) ValidateAndNormalize() hcl.Diagnostics {
 	diags = append(diags, c.validateTalos()...)
 	diags = append(diags, c.validateTalosCluster()...)
 	diags = append(diags, c.validateProfiles()...)
+	diags = append(diags, c.validateNetworks()...)
+	diags = append(diags, c.ResolveInterfaces()...)
+	diags = append(diags, c.validateInterfaceMACs()...)
+	return diags
+}
+
+// validateNetworks checks the network plane blocks: unique names, at
+// most one primary plane, the dhcp/cidr relation in both directions,
+// well-formed cidr, and the vlan/mtu ranges. Plane-sourced values are
+// checked here, once; the resolver checks inline-sourced values — one
+// error per mistake, whichever way the fact arrived. A declared plane
+// no interface references is an error for the same reason an
+// unreferenced profile is: it governs nothing, which is near-certainly
+// a config that added the block and forgot the interfaces.
+func (c *Cluster) validateNetworks() hcl.Diagnostics {
+	var diags hcl.Diagnostics
+
+	declared := make(map[string]struct{}, len(c.Talos.Networks))
+	var primaries []string
+	for i := range c.Talos.Networks {
+		p := &c.Talos.Networks[i]
+		if _, dup := declared[p.Name]; dup {
+			diags = append(diags, errf("Duplicate network name",
+				"talos network %q is declared more than once.", p.Name))
+			continue
+		}
+		declared[p.Name] = struct{}{}
+		if p.Primary {
+			primaries = append(primaries, p.Name)
+		}
+		diags = append(diags, validateNetwork(p)...)
+	}
+	if len(primaries) > 1 {
+		diags = append(diags, errf("Multiple primary networks",
+			"talos declares %d networks with primary = true (%v); at most one plane is the boot path.",
+			len(primaries), primaries))
+	}
+	return append(diags, c.validateUnreferencedNetworks()...)
+}
+
+// validateNetwork checks one plane's own facts: the vlan/mtu ranges
+// and the dhcp/cidr relation in both directions.
+func validateNetwork(p *Network) hcl.Diagnostics {
+	var diags hcl.Diagnostics
+	if p.VLAN != 0 && (p.VLAN < vlanMin || p.VLAN > vlanMax) {
+		diags = append(diags, errf("Invalid network vlan",
+			"talos network %q: vlan %d is outside the 802.1Q range %d-%d (omit the attribute for untagged).",
+			p.Name, p.VLAN, vlanMin, vlanMax))
+	}
+	if p.MTU != 0 && (p.MTU < mtuMin || p.MTU > mtuMax) {
+		diags = append(diags, errf("Invalid network mtu",
+			"talos network %q: mtu %d is outside virtio's %d-%d (omit the attribute for the fabric default).",
+			p.Name, p.MTU, mtuMin, mtuMax))
+	}
+	switch {
+	case !p.DHCP && p.CIDR == "":
+		diags = append(diags, errf("Missing network cidr",
+			"talos network %q: a static (dhcp = false) plane requires cidr — member addresses are validated against it.",
+			p.Name))
+	case p.DHCP && p.CIDR != "":
+		diags = append(diags, errf("Cidr on a dhcp network",
+			"talos network %q: cidr %q is declared but the plane is dhcp — the lease owns addressing; drop the cidr.",
+			p.Name, p.CIDR))
+	case p.CIDR != "":
+		if _, err := netip.ParsePrefix(p.CIDR); err != nil {
+			diags = append(diags, errf("Invalid network cidr",
+				"talos network %q: cidr %q is not CIDR form (network/prefix): %v.",
+				p.Name, p.CIDR, err))
+		}
+	}
+	return diags
+}
+
+// validateUnreferencedNetworks flags planes no interface references.
+func (c *Cluster) validateUnreferencedNetworks() hcl.Diagnostics {
+	var diags hcl.Diagnostics
+	referenced := make(map[string]struct{}, len(c.Talos.Networks))
+	for i := range c.Talos.Nodes {
+		n := &c.Talos.Nodes[i]
+		for j := range n.Interfaces {
+			if name := n.Interfaces[j].Network; name != "" {
+				referenced[name] = struct{}{}
+			}
+		}
+	}
+	for i := range c.Talos.Networks {
+		name := c.Talos.Networks[i].Name
+		if _, ok := referenced[name]; !ok {
+			diags = append(diags, errf("Unreferenced network",
+				"talos network %q is referenced by no network_interface; add network = %q to the interfaces it should govern, or drop the block.",
+				name, name))
+		}
+	}
+	return diags
+}
+
+// validateInterfaceMACs enforces global MAC uniqueness across every
+// interface of every node, over the canonical resolved form so case
+// and notation variants collide. It runs after resolution; a node
+// that failed to resolve already has its own diagnostics and is
+// skipped here.
+func (c *Cluster) validateInterfaceMACs() hcl.Diagnostics {
+	var diags hcl.Diagnostics
+	type owner struct{ node, slot string }
+	seen := make(map[string]owner)
+	for i := range c.Talos.Nodes {
+		n := &c.Talos.Nodes[i]
+		for _, r := range n.resolved {
+			if first, dup := seen[r.MAC]; dup {
+				diags = append(diags, errf("Duplicate network_interface mac",
+					"talos node %q network_interface %q: mac %q is already used by node %q network_interface %q.",
+					n.Name, r.Slot, r.MAC, first.node, first.slot))
+				continue
+			}
+			seen[r.MAC] = owner{node: n.Name, slot: r.Slot}
+		}
+	}
 	return diags
 }
 
@@ -312,7 +440,6 @@ func (c *Cluster) validateTalos() hcl.Diagnostics {
 		pveNodes[n.Name] = struct{}{}
 	}
 
-	seenMACs := make(map[string]string, len(c.Talos.Nodes))
 	var controlPlanes int
 	for i := range c.Talos.Nodes {
 		n := &c.Talos.Nodes[i]
@@ -338,26 +465,6 @@ func (c *Cluster) validateTalos() hcl.Diagnostics {
 				"talos node %q: vmid %d is below %d, the lowest ID Proxmox allows for guests.",
 				n.Name, n.VMID, pveVMIDMin))
 		}
-
-		if n.VLAN != 0 && (n.VLAN < vlanMin || n.VLAN > vlanMax) {
-			diags = append(diags, errf("Invalid talos node vlan",
-				"talos node %q: vlan %d is outside the 802.1Q range %d-%d (omit the attribute for untagged).",
-				n.Name, n.VLAN, vlanMin, vlanMax))
-		}
-
-		mac, err := NormalizeMAC(n.MAC)
-		if err != nil {
-			diags = append(diags, errf("Invalid talos node mac",
-				"talos node %q: %v.", n.Name, err))
-			continue
-		}
-		n.MAC = mac
-		if first, dup := seenMACs[mac]; dup {
-			diags = append(diags, errf("Duplicate talos node mac",
-				"talos node %q: mac %q is already used by node %q.", n.Name, mac, first))
-			continue
-		}
-		seenMACs[mac] = n.Name
 	}
 	if controlPlanes == 0 {
 		diags = append(diags, errf("No controlplane node declared",

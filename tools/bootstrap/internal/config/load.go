@@ -17,8 +17,9 @@ const errExactlyOneCluster = "Exactly one cluster block required"
 
 // Load reads the bootstrap config file at path and decodes it into the
 // schema, resolving env() references against the process environment.
-// It returns the file's single cluster with every node MAC rewritten
-// to the canonical NormalizeMAC form; a file with zero or multiple
+// It returns the file's single cluster with every node's interfaces
+// resolved (TalosNode.ResolvedInterfaces) and every MAC rewritten to
+// the canonical NormalizeMAC form; a file with zero or multiple
 // cluster blocks is an error. Decode problems (syntax, missing
 // attributes, unresolvable env() references, duplicate vmid/mac
 // literals) come back position-anchored; semantic violations
@@ -31,7 +32,7 @@ func Load(path string) (*Cluster, hclkit.Diagnostics) {
 		}),
 		hclkit.WithValidators(
 			validate.NewUniqueValidator("node", "vmid"),
-			validate.NewUniqueValidator("node", "mac"),
+			validate.NewUniqueValidator("network_interface", "mac"),
 		),
 	)
 
