@@ -98,8 +98,11 @@ func TestSchematicClassesSplitARole(t *testing.T) {
 	// worker-01 keeps the base profile; a second worker runs vanilla.
 	e.Cluster.Talos.Nodes = append(e.Cluster.Talos.Nodes, config.TalosNode{
 		Name: "worker-02", Role: config.RoleWorker, PVENode: "pve-02",
-		VMID: 301, MAC: "02:50:99:a2:01:02",
+		VMID: 301, Interfaces: bootNIC("02:50:99:a2:01:02"),
 	})
+	if diags := e.Cluster.ResolveInterfaces(); diags.HasErrors() {
+		t.Fatalf("resolve the appended node: %s", diags.Error())
+	}
 	e.Factory = resolver
 
 	tree, err := e.Tree(context.Background())

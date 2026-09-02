@@ -47,11 +47,22 @@ type catalogProfile struct {
 	InstallImage string
 }
 
-// catalogGroup binds one VM to a profile by MAC.
+// catalogGroup binds one VM to a profile by MAC. ExtraVars carries
+// the per-node interface identity (each slot's MAC, static slots'
+// addresses) the multi-interface machineconfig templates consume —
+// empty on single-interface nodes, whose templates read only
+// hostname (DESIGN-0004 OQ-2).
 type catalogGroup struct {
-	Name    string
-	Profile string
-	MAC     string
+	Name      string
+	Profile   string
+	MAC       string
+	ExtraVars []catalogVar
+}
+
+// catalogVar is one rendered group var beside hostname.
+type catalogVar struct {
+	Key   string
+	Value string
 }
 
 // renderCatalog renders the three catalog files for the cluster.
@@ -109,10 +120,17 @@ func renderCatalog(cluster *config.Cluster, perNode []string) (map[string]File, 
 	data.Nodes = make([]catalogGroup, 0, len(cluster.Talos.Nodes))
 	for i := range cluster.Talos.Nodes {
 		n := &cluster.Talos.Nodes[i]
+		// The group selector is the primary interface's MAC — the NIC
+		// that PXE boots and therefore the one iPXE reports.
+		nic, ok := n.PrimaryInterface()
+		if !ok {
+			return nil, fmt.Errorf("renderCatalog: node %q has no resolved primary interface", n.Name)
+		}
 		data.Nodes = append(data.Nodes, catalogGroup{
-			Name:    n.Name,
-			Profile: profileNames[class{role: n.Role, schematic: perNode[i]}],
-			MAC:     n.MAC,
+			Name:      n.Name,
+			Profile:   profileNames[class{role: n.Role, schematic: perNode[i]}],
+			MAC:       nic.MAC,
+			ExtraVars: interfaceVars(n),
 		})
 	}
 
@@ -129,6 +147,30 @@ func renderCatalog(cluster *config.Cluster, perNode []string) (map[string]File, 
 		out[path] = File{Data: rendered}
 	}
 	return out, nil
+}
+
+// interfaceVars builds the per-node group vars a multi-interface
+// machineconfig template consumes: every slot's MAC, plus each static
+// slot's address. A single-interface node gets none — its template
+// reads only hostname, and a var nothing reads is a lie waiting to
+// drift. The var keys come from the talos package, the same source
+// the template expressions are derived from, so the two sides agree
+// by construction; per-role shape uniformity (enforced when the
+// templates render, in the same emit) guarantees the template
+// consuming these vars actually declares the matching slots.
+func interfaceVars(n *config.TalosNode) []catalogVar {
+	nics := n.ResolvedInterfaces()
+	if len(nics) <= 1 {
+		return nil
+	}
+	vars := make([]catalogVar, 0, 2*len(nics))
+	for _, nic := range nics {
+		vars = append(vars, catalogVar{Key: talos.MACVarKey(nic.Slot), Value: nic.MAC})
+		if !nic.DHCP {
+			vars = append(vars, catalogVar{Key: talos.AddressVarKey(nic.Slot), Value: nic.Address})
+		}
+	}
+	return vars
 }
 
 // renderText executes one of this package's templates. The templates
@@ -234,6 +276,9 @@ group "{{ .Name }}" {
   }
   vars = {
     hostname = "{{ .Name }}"
+{{- range .ExtraVars }}
+    {{ .Key }} = "{{ .Value }}"
+{{- end }}
   }
 }
 {{ end -}}

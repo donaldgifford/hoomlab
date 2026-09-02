@@ -72,11 +72,14 @@ authoritative design record)
 
 - democratic-csi itself — this IMPL ends where the CSI's
   prerequisites (reachable portals, iscsid, util-linux-tools) begin.
-- Jumbo frames. MTU stays unset (1500) fleet-wide; a jumbo decision
-  is its own deliberate, both-sided change.
+- ~~Jumbo frames.~~ *Amended 2026-09-01 — in scope.* The
+  storbr0/port-profile decision (see the authoritative table's
+  amendment) made jumbo both-sided and safe: Phase 2 carries the
+  fabric work, Phases 3–4 the `mtu` surface.
 - Generic N-NIC support beyond the storage plane (see OQ-1's option
   c — deliberately not chosen until a third NIC exists).
-- The storage portals and their VLAN-14 configuration (TrueNAS side).
+- The storage portals and their configuration (ZFS on r740a — the
+  PVE host serves the portals over its `storbr0` address).
 
 ## The authoritative table
 
@@ -95,14 +98,30 @@ MAC), last octet preserved from net0.
 | work02 | 302 | 10.10.11.62 | 02:50:99:a2:01:2e | 02:50:99:a2:14:2e | 10.10.13.62/24 |
 | work03 | 303 | 10.10.11.63 | 02:50:99:a2:01:2f | 02:50:99:a2:14:2f | 10.10.13.63/24 |
 
-Schematic after Phase 1: `<recorded on Phase 1 completion>`
-(today: `dc7b152c…8586`).
+Schematic after Phase 1 (recorded 2026-09-01):
+`88d1f7a5c4f1d3aba7df787c448c1d3d008ed29cfb34af53fa0df4336a56040b`
+— flattened union `[iscsi-tools, qemu-guest-agent,
+util-linux-tools]`. The pre-split image was `dc7b152c…8586`.
 
 Two MAC schemes coexist here on purpose: net0's last two octets are
 `<vmid-hex>` (`00:c9` = 201, `01:2d` = 301), while net1 repurposes
 the fifth octet as the VLAN (`14`). They can never collide — a vmid
 would need to reach 0x1400 = 5120, and the VMID convention caps at
 999.
+
+**Amended 2026-09-01 — the fabric decision.** net1 does not ride
+the vmbr1 trunk: each host gained a dedicated `storbr0` bridge
+enslaving its `stor0` NIC (done on r740a/r640a/srv01), and the
+stor0 switch ports carry a storage-only profile — native storage
+VLAN, **block all tagged**. So net1 renders **no `tag=`** (the port
+profile is the access control, enforced at the switch, and a stray
+tag would be dropped outright, not flooded), and the storage path
+runs **MTU 9000** end-to-end — the deliberate both-sided jumbo
+decision INV-0002's deferral was waiting on, made safe precisely
+because the NIC, bridge, and ports are storage-only. Jumbo enables
+at the UniFi aggregator (switch-wide), then each port/server end
+opts in explicitly. The primary plane (net0, vmbr1, VLAN 11) stays
+untouched at 1500.
 
 ## Implementation Phases
 
@@ -120,28 +139,43 @@ util-linux-tools beside the iscsi-tools already aboard.
 
 #### Tasks
 
-- [ ] Split the profiles in `~/drill/bootstrap.hcl`: `base` keeps
+- [x] Split the profiles in `~/drill/bootstrap.hcl`: `base` keeps
       qemu-guest-agent only; a new `profile "iscsi"` carries
       iscsi-tools + util-linux-tools; every node's `profiles`
       becomes `["base", "iscsi"]`. (The schematic derives from each
       node's flattened union, so this produces the same new image as
       editing base — better organized, zero extra image impact.)
-- [ ] `bootstrap talos emit` — a new schematic is derived and new
+- [x] `bootstrap talos emit` — a new schematic is derived and new
       boot assets download; record the new schematic ID in the table
-      above
-- [ ] rsync the tree to ns1 and restart booty (the served
-      `install_image` and PXE assets now reference the new schematic)
-- [ ] Rolling upgrade, one node at a time, control planes first,
-      health green between nodes:
+      above (done 2026-09-01, after first re-verifying the
+      reconstructed config against the served tree — schematic
+      identity + checksum rsync — following the config-overwrite
+      recovery)
+- [x] rsync the tree to ns1 and restart booty (the served
+      `install_image` and PXE assets now reference the new schematic).
+      **Deviation found and fixed (2026-09-01)**: ns1's compose
+      mounted a role-owned catalog frozen at `/etc/booty/catalog`
+      (Aug 29 vintage — also the root cause of the rename-day
+      mixed tree), so rsync + restart didn't update what booty
+      served. Switched the mount to the emit-managed
+      `/root/booty/catalog` (single owner; the role's catalog
+      deploy dropped) — `rsync -a` + restart is now the entire
+      update contract. Verified by `/ipxe?mac=` rendering the new
+      schematic.
+- [x] Rolling upgrade, one node at a time, control planes first,
+      health green between nodes (done overnight 2026-09-01/02;
+      full health battery green after):
 
       ```sh
       talosctl -n <node-ip> upgrade \
         --image factory.talos.dev/installer/<new-schematic>:v1.13.8
       ```
 
-- [ ] Verify on one control plane and one worker:
+- [x] Verify on one control plane and one worker:
       `talosctl get extensions -n <ip>` lists iscsi-tools,
       util-linux-tools, qemu-guest-agent, and the new schematic ID
+      (exceeded: all six nodes swept, uniform `88d1f7a5…`;
+      ctrl01's full list shows util-linux-tools 2.42.2 aboard)
 
 #### Success Criteria
 
@@ -153,6 +187,15 @@ util-linux-tools beside the iscsi-tools already aboard.
 - A full stage loop after the emit applies zero (the one apply was
   the emit that introduced the change).
 
+**Phase 1 complete (2026-09-02).** All six nodes uniform on
+`88d1f7a5…`; health battery green. The closing loop applied zero
+cluster mutations — emit and vms nothing-to-do, `etcd-bootstrap`
+skipped. Two local-only reconciliation applies rode along, both
+artifacts of the workspace being rebuilt after the config
+overwrite: `ipxe-build` (no stamp in the fresh tree; same booty
+URL, equivalent binary) and the talosconfig/kubeconfig credential
+writes (empty `out/`). Cluster state untouched.
+
 ---
 
 ### Phase 2: Hand layer — storage NICs live (operator)
@@ -163,18 +206,67 @@ is done when it reproduces exactly this, from config alone.
 
 #### Tasks
 
-- [ ] `qm set` on each VM's hosting PVE node (PVE hot-plugs NICs by
+- [x] Fabric first — jumbo is end-to-end or it is a silent iSCSI
+      killer, so the wire is proven before any VM touches it
+      (verified 2026-09-01; live state recorded in the fleet NIC
+      map — stor0 native-storage/block-tagged on Agg 4/1/5,
+      storbr0 at 9000 holding 10.10.13.20/.21/.40):
+  - [x] UniFi: storage-only port profile (native storage VLAN,
+        block all tagged) on the three stor0 ports (the portal end
+        is r740a itself — ZFS on the PVE host — so its port is
+        already in the set); jumbo frames enabled on the
+        aggregator (a switch-wide setting — ports then opt in per
+        end)
+  - [x] Each host, **one at a time** (`ifreload -a` blips the
+        host's storage IP — live iSCSI/ZFS sessions hiccup):
+        `mtu 9000` on both the `stor0` and `storbr0` stanzas in
+        `/etc/network/interfaces`, then verify
+        `ip link show storbr0` reports 9000
+  - [x] Prove the path: host ↔ host and host ↔ portal
+        `ping -M do -s 8972 <storage-ip>` — do-not-fragment at
+        9000-byte frames; silence means a 1500 link is lurking
+  - [x] Harden the trunk: VLAN 14 dropped from `pve-guest-trunk`
+        (now tagged 11 only, native None) — `storbr0` is the
+        **only** guest path to storage, and an untagged or
+        `tag=14` guest NIC on vmbr1 dies at the switch instead of
+        landing somewhere surprising (2026-09-01)
+- [x] `qm set` on each VM's hosting PVE node (PVE hot-plugs NICs by
       default — confirm each with `talosctl -n <ip> get links`
       showing a new link with the net1 MAC; if a link doesn't
-      appear, a rolling `talosctl reboot` picks it up):
+      appear, a rolling `talosctl reboot` picks it up). Done
+      2026-09-02: hot-plug took on all six — every node shows
+      `ens18` = net0 MAC and `ens19` = net1 MAC, link up, zero
+      reboots:
 
       ```sh
-      qm set <vmid> --net1 virtio=<net1-mac>,bridge=vmbr1,tag=14,firewall=0
+      qm set <vmid> --net1 virtio=<net1-mac>,bridge=storbr0,firewall=0,mtu=9000
       ```
 
-- [ ] Patch each node's machineconfig — both NICs declared, selection
+- [x] **Deviation found and fixed (2026-09-02)** — the live Storage
+      network contradicted the "no DHCP, no gateway" premise: the
+      UCG ran a DHCP server on it (pool `.6–.254`, containing every
+      planned static and host address), offered `10.10.13.1` via
+      Auto Default Gateway, and routed the VLAN as an L3 interface
+      with internet access allowed. Surfaced by work01's
+      implicit-DHCP lease (`10.10.13.222`) on the hot-plugged NIC —
+      Talos runs DHCP on any unconfigured link, so the whole fleet
+      had silently joined. Fixed at the UCG: DHCP off, internet
+      access off, network converted to third-party gateway —
+      **L2-only like sync, unroutable by construction**. The
+      documented access boundary is now structurally true rather
+      than firewall-dependent.
+- [x] Patch each node's machineconfig — both NICs declared, selection
       by `deviceSelector.hardwareAddr` only, net0 explicit `dhcp`,
-      net1 static with **no routes, no gateway, no DNS**:
+      net1 static with **no routes, no gateway, no DNS**. Done
+      2026-09-02, with a recorded stumble: all six patch files were
+      first applied to work03 (`-n` didn't move with the filename),
+      and Talos **strategic-merges** the interfaces list keyed by
+      selector — so they appended silently, inert (an unmatched
+      deviceSelector is ignored, and `patch` reports success either
+      way; the tell was DHCP leases surviving on ens19). Cleaned
+      via `talosctl edit machineconfig` (6902 replace is refused on
+      multi-doc configs), then re-applied with the correct
+      node/file pairing and verified per node:
 
       ```yaml
       # storage-patch-<node>.yaml — values from the table
@@ -187,6 +279,7 @@ is done when it reproduces exactly this, from config alone.
             - deviceSelector:
                 hardwareAddr: "<net1-mac>"
               dhcp: false
+              mtu: 9000
               addresses:
                 - "<storage-address>"
       ```
@@ -195,27 +288,47 @@ is done when it reproduces exactly this, from config alone.
       talosctl -n <node-ip> patch machineconfig -p @storage-patch-<node>.yaml
       ```
 
-- [ ] Verify per node: `talosctl -n <ip> get addresses` shows the
+- [x] Verify per node: `talosctl -n <ip> get addresses` shows the
       table address on the net1 link; iscsid is present
-      (`talosctl -n <ip> services` → ext service running)
-- [ ] Verify the boundary held: `talosctl -n <ip> get routes` shows
+      (`talosctl -n <ip> services` → ext service running). All six
+      statics exact; `ext-iscsid` Running ×6 (2026-09-02).
+- [x] Verify the boundary held: `talosctl -n <ip> get routes` shows
       **no** default route via 10.10.13.0/24 — net1's unroutability
-      is the storage plane's access boundary
-- [ ] Verify reachability: a storage portal answers on VLAN 14 from
-      at least one node (hostNetwork debug pod + `nc`, or the first
-      democratic-csi session — either counts)
-- [ ] Verify invisibility: a full bootstrap stage loop applies zero —
-      the hand layer is invisible to the tool's checks
+      is the storage plane's access boundary. Verified ×6: only the
+      connected `10.10.13.0/24` on ens19 plus each node's ens18
+      default — and the boundary is now structural (L2-only
+      network, no gateway exists to leak).
+- [x] Verify reachability and the jumbo path: proven from the
+      portal host itself — `ping -M do -s 8972` from r740a
+      (`10.10.13.20`) answered by **all six** nodes, sub-ms, zero
+      loss: bidirectional L2 + 9000 end-to-end in one sweep. The
+      `nc` to an iSCSI target deferred to democratic-csi's first
+      session (no target listening yet).
+- [x] Verify invisibility: a full bootstrap stage loop applies zero —
+      the hand layer is invisible to the tool's checks (2026-09-02:
+      health green, emit/ipxe/vms/bootstrap all nothing-to-do, 0
+      steps applied anywhere)
 
 #### Success Criteria
 
 - All six nodes hold their table address on the VLAN-14 NIC,
   selected by MAC, with cluster health green throughout.
 - No routing change rode along (the unroutability boundary is
-  intact); MTU untouched at 1500 everywhere.
+  intact); the storage path carries 9000 end-to-end (proven by
+  do-not-fragment ping), the primary plane untouched at 1500.
 - The convergence loop still applies zero.
 - **Gate**: Phases 3–4 do not start until every box above is checked
   — this state is their spec.
+
+**Phase 2 complete — gate open (2026-09-02).** All six nodes carry
+their exact table state: static storage address by MAC selector,
+MTU 9000, defaults intact, iscsid running, jumbo proven from the
+portal host, and the whole hand layer invisible to the convergence
+loop. Three deviations were found and fixed along the way (the
+frozen role-owned booty catalog, the Storage network's
+DHCP/gateway/routing contradicting the design premise, and the
+patch-file/node mismatch) — each recorded in its task above. This
+verified end state is now the executable spec for Phases 3–4.
 
 ---
 
@@ -226,30 +339,58 @@ Phase 2's gate (the OQs are decided).
 
 #### Tasks
 
-- [ ] The raw-vs-resolved split (OQ-1 layering addendum): raw HCL
+- [x] The raw-vs-resolved split (OQ-1 layering addendum): raw HCL
       types with optional mode attrs; one resolver producing a
       fully-explicit resolved interface per NIC; everything
       downstream consumes only the resolved form
-- [ ] Cluster-level `network "<name>"` blocks: `vlan`, `dhcp`
-      (required — every plane states its mode), `primary`, `cidr`
-      (required iff `dhcp = false`)
-- [ ] Per-node `network_interface "<netN>"` blocks — **replacing**
+      *(`internal/config/resolve.go`: `ResolvedInterface`,
+      `Cluster.ResolveInterfaces()` — exported so struct-literal
+      test fixtures resolve the same way `Load` does; resolved
+      interfaces stored per node, read via
+      `TalosNode.ResolvedInterfaces()`/`PrimaryInterface()`)*
+- [x] Cluster-level `network "<name>"` blocks: `vlan` (optional —
+      omitted renders untagged; the bridge and switch port profile
+      own membership), `dhcp` (required — every plane states its
+      mode), `primary`, `cidr` (required iff `dhcp = false`), `mtu`
+      (optional — rendered into the VM NIC and machineconfig when
+      set)
+- [x] Per-node `network_interface "<netN>"` blocks — **replacing**
       the flat `mac`/`vlan`/`bridge` node attrs (the breaking change
       OQ-1 accepted): `mac`, `bridge`, plus either `network` (plane
       reference) or the inline mode facts, per the XOR rule
-- [ ] Validation on the resolved form, one rule at a time: unique
+      *(decode-level MAC uniqueness validator moved from
+      `("node","mac")` to `("network_interface","mac")` — hclkit's
+      walk recurses into nested blocks)*
+- [x] Validation on the resolved form, one rule at a time: unique
       plane names; at most one plane `primary = true`; referenced
       planes must be declared; the XOR rule (reference + inline
       mode attr → error; neither → error naming what's missing);
       every node resolves to exactly one primary interface; dhcp →
       `address` forbidden; static → `address` required, CIDR form,
-      contained in the governing `cidr` when one exists; global MAC
-      uniqueness across all interfaces; interface labels `net\d+`,
-      unique per node
-- [ ] Load tests: parse + one test per validation error, drill-style,
+      contained in the governing `cidr` when one exists; `mtu`
+      within virtio's 576–65520 when set; global MAC uniqueness
+      across all interfaces; interface labels `net\d+`, unique per
+      node
+      *(one added rule beyond the design list, per the unreferenced-
+      profile doctrine: a plane no interface references is an error,
+      not silently inert config — recorded as rule 10 in
+      DESIGN-0004)*
+- [x] Load tests: parse + one test per validation error, drill-style,
       covering both forms and the XOR conflicts
-- [ ] Migrate `examples/bootstrap.hcl` and test fixtures to the new
+      *(24 new mutation-table cases in `load_test.go`: both XOR
+      directions, every plane rule, every interface rule, the
+      fartlab storage-plane shape accepted end to end, and
+      `TestLoadResolvesAndNormalizes` now pins canonical MACs in
+      both the raw and resolved layers)*
+- [x] Migrate `examples/bootstrap.hcl` and test fixtures to the new
       surface, documenting both forms in place
+      *(example: `servers` plane + referenced form on the control
+      planes, inline form on worker-01, storage plane and net1 shown
+      commented; fixtures: `load_test.go` validHCL exercises both
+      forms, emit/pve test clusters build `network_interface` blocks
+      and call `ResolveInterfaces()`; Phase 3 shims keep `VMSpec`
+      net0 and the catalog group selector reading the resolved
+      primary interface — emit goldens byte-identical)*
 
 #### Success Criteria
 
@@ -257,6 +398,14 @@ Phase 2's gate (the OQs are decided).
 - A single-interface config (primary plane only) produces identical
   *behavior* to v0.2.0 — syntax broke, artifacts didn't.
 - The example config stays valid (`TestLoadExampleConfig`).
+
+**Phase 3 complete (2026-09-02).** All criteria verified: race
+tests and lint at 0 issues; the emit goldens never changed across
+the surface swap — the single-interface byte-identity proof came
+for free from the shim; `TestLoadExampleConfig` pins the migrated
+example. Style review pass produced two hardening fixes (accessor
+returns a copy; `VMSpec` errors on an unresolved node instead of
+rendering an empty NIC). Commits `0b773c6`, `53bc0ae`, `e847b6c`.
 
 ---
 
@@ -267,25 +416,55 @@ Phase 2's end state.
 
 #### Tasks
 
-- [ ] `VMSpec` renders every declared interface in slot order —
-      `bridge` from the interface, `tag=` from its plane's `vlan`;
+- [x] `VMSpec` renders every declared interface in slot order —
+      `bridge` from the interface, `tag=` only when a `vlan` is
+      declared, `mtu=` when the plane sets one;
       **boot order carries only the primary-plane interface's slot**
       — regression test pinning `order=scsi0;net0` with a second
       NIC present
-- [ ] Emit catalog: per-group interface vars (each interface's MAC;
+      *(`netN` renders any slot — net0 via the SDK's typed field,
+      the rest via Extra; `bootOrder` derives from the primary slot;
+      `TestVMSpecRendersAllInterfaces` pins the struct,
+      `TestVMsMultiNICWireFields` pins it through a real create and
+      read-back)*
+- [x] Emit catalog: per-group interface vars (each interface's MAC;
       static addresses) beside `hostname`
-- [ ] Machineconfig templates: `machine.network.interfaces` rendered
+      *(`net0_mac`/`net1_mac`/`net1_address` per group, keys derived
+      from `talos.MACVarKey`/`AddressVarKey` — the same source the
+      template expressions come from; single-interface nodes emit no
+      extra vars, keeping their groups byte-identical)*
+- [x] Machineconfig templates: `machine.network.interfaces` rendered
       from the planes — the primary-plane interface by
       deviceSelector with `dhcp: true`, static-plane interfaces by
-      deviceSelector with their address, no routes — emitted only
-      when a node has more than its primary interface (OQ-2)
-- [ ] Round-trip test: rendered multi-interface configs re-validate
+      deviceSelector with their address (and `mtu` when the plane
+      sets one), no routes — emitted only when a node has more than
+      its primary interface (OQ-2)
+      *(implementation decision: one machineconfig template per role
+      is booty's overlay contract, so the section renders from a
+      per-role interface **shape** — slot/dhcp/mtu, identity via
+      group vars — and nodes of a role with divergent shapes are an
+      emit error naming both sides. Placeholder identity is
+      machinery-validated then swapped: marker strings for
+      hardwareAddr, TEST-NET-3 addresses for the CIDR-checked
+      addresses. The deprecated v1alpha1 section is deliberate —
+      machinery v1.13 ships no multi-doc device type and the live
+      fleet carries exactly this shape)*
+- [x] Round-trip test: rendered multi-interface configs re-validate
       in machinery metal mode (the existing round-trip pattern)
-- [ ] Golden files: single-interface fixtures byte-identical (the
+      *(`TestRoleTemplatesMultiNICRoundTrip`)*
+- [x] Golden files: single-interface fixtures byte-identical (the
       back-compat proof); new goldens for a multi-interface fixture
-- [ ] Docs in the same change: runbook §1 (config surface), §10
+      *(existing `testdata/golden` untouched through the whole
+      change; `testdata/golden-multinic` pins the vars-bearing
+      groups; `TestRoleTemplatesSingleNICByteIdentical` proves the
+      template layer emits no `machine.network` for primary-only
+      nodes)*
+- [x] Docs in the same change: runbook §1 (config surface), §10
       (vms expected fields), §15 (note that rebirth now covers the
       storage plane); example config final pass
+      *(§15's storage-plane note carries an explicit
+      not-yet-executed-live marker — Phase 6 is that proof; the
+      example config got its full two-form pass in Phase 3)*
 
 #### Success Criteria
 
@@ -294,6 +473,32 @@ Phase 2's end state.
   **shape-identical** to a live node's hand-patched section (diff
   against `talosctl -n <ip> get machineconfig` output for one node).
 - Single-interface emit output is byte-identical to v0.2.0's.
+
+**Phase 4 code complete (2026-09-02).** Battery green (race tests,
+lint 0 issues, goldens, build); single-interface output
+byte-identical (the golden set never changed;
+`TestRoleTemplatesSingleNICByteIdentical` proves the template
+layer). The live shape-diff criterion is **verified (2026-09-02)**: the
+operator ran
+
+```sh
+talosctl -n 10.10.11.63 get machineconfig -o yaml | rg -A 14 'interfaces:'
+```
+
+and work03's hand-patched live block matches the generated template
+block **field-for-field after var substitution** — same
+deviceSelector/hardwareAddr style, same field order, `dhcp: true`
+on net0, `addresses`/`mtu: 9000`/`dhcp: false` on net1, no routes,
+no tag. The manual Phase 2 patch went to the nodes only (the served
+tree's templates were never hand-edited — the emit diff is pure
+addition), so the code reproduces the verified end state exactly.
+One expected leftover: the live machineconfig's `install.image`
+still names the pre-split schematic (`dc7b152c…`) — `talosctl
+upgrade --image` doesn't rewrite the stored config; the Phase 6
+rebirth aligns it. `TestRoleTemplatesMultiNICRoundTrip` pins the
+same shape in CI. Style review pass produced three fixes (error wrapping,
+named substitution fields, doc repair). Commits `4f8e5c5`,
+`6547181`, `c9c0ad0`, `c8f0768`.
 
 ---
 
@@ -306,8 +511,14 @@ change must not break or change the cluster.
 
 - [ ] PR merged with `dont-release`; dispatch `tools-release.yml`
       tool=`bootstrap` version=`v0.3.0`; verify tag + archives
+      *(code side done — PR #10 opened from `feat/network-planes`
+      with `dont-release`; merge and dispatch are the operator's)*
 - [ ] Operator: add the storage surface to `~/drill/bootstrap.hcl`
       with the authoritative table's exact values
+      *(the verified draft already exists as
+      `~/drill/bootstrap.hcl.next` — servers plane `vlan = 11`,
+      storage plane with **no vlan** + `mtu = 9000` +
+      `cidr = "10.10.13.0/24"`, per-node net0/net1 blocks)*
 - [ ] Operator: full stage loop from the released v0.3.0 binary —
       expected shape: `emit` applies once (artifact drift only:
       machine-configs gain the interfaces block, catalog gains the
@@ -316,6 +527,31 @@ change must not break or change the cluster.
 - [ ] rsync + restart booty; re-run the loop — zero everywhere
 - [ ] Confirm live cluster state untouched (nodes, workloads, ArgoCD
       apps — nothing restarted, nothing changed)
+
+**Phase 5 status (2026-09-02): `deferred - human required`.** All
+code-side work is complete and committed; every remaining step
+needs the release train or the live cluster, which the operator
+drives (IMPL-0002 operating rule).
+
+**Pre-merge pre-flight (2026-09-02, branch build, read-only):** the
+operator ran the full loop as `--dry-run` from a branch-built binary
+against `bootstrap.hcl.next` and the live tree. `validate` clean
+(3 pve, 6 talos), `vms` 0 of 12 pending (no retrofit — the multi-NIC
+config converges against the running VMs untouched), `health` green,
+`boot-assets` done (schematic `88d1f7a5…` assets already staged from
+Phase 1). `emit` drift matched the predicted shape exactly —
+`catalog/20-groups.hcl` plus both role templates — after aligning
+`.next`'s booty url with the live tree's (a drafted future url had
+crept in, reproducing the same input-drift trio of `booty-run.sh` /
+`00-variables.hcl` / `embed.ipxe` that IMPL-0002 recorded on
+08-27). Content verified via a scratch render (`--output
+/tmp/preflight`) diffed against the live tree: the template hunks
+are pure addition of the interfaces block, the catalog hunks add
+exactly the authoritative table's MACs and addresses for all six
+nodes, and substituting work03's vars into the generated block
+reproduces the live node's hand-patched machineconfig section
+byte-for-byte (see the Phase 4 live shape-diff result). The apply
+itself stays with the released v0.3.0 binary per the tasks above.
 
 #### Success Criteria
 
@@ -341,8 +577,15 @@ answered the rebuild's.
 - [ ] Any deviation found → recorded here and folded back
       (INV-0001 discipline; a substantial one opens its own INV)
 - [ ] Runbook markers updated where this IMPL touched sections
+      *(§1/§10/§15 already describe the new surface; the §15
+      storage-plane note carries a not-yet-executed-live marker that
+      flips when the rebirth runs)*
 - [ ] DESIGN-0004 status → **Implemented**
 - [ ] This doc: all boxes checked, status → **Completed**
+
+**Phase 6 status (2026-09-02): `deferred - human required`.** The
+rebirth is a live-cluster window; the two status flips are gated on
+its outcome, so nothing here can move until the operator runs it.
 
 #### Success Criteria
 
@@ -362,19 +605,21 @@ answered the rebuild's.
 | `internal/pve/vms_test.go` | Modify | multi-NIC + boot-order regression tests |
 | `internal/emit/catalog.go` | Modify | per-interface group vars |
 | `internal/talos/machineconfig.go` | Modify | interfaces section in role templates |
-| `internal/emit/testdata/golden/**` | Modify | storage fixture goldens; legacy untouched |
+| `internal/config/resolve.go` | Add | the resolver: raw → `ResolvedInterface`, XOR + per-interface rules |
+| `internal/emit/testdata/golden-multinic/**` | Add | multi-interface goldens; the legacy `golden/**` set untouched |
 | `examples/bootstrap.hcl` | Modify | document the surface |
 | `docs/runbook/bootstrap-cluster.md` | Modify | §1, §10, §15 notes |
 
 ## Testing Plan
 
-- [ ] Load tests per validation rule (drill-style, one failing input
+- [x] Load tests per validation rule (drill-style, one failing input
       each)
-- [ ] `VMSpec` regression tests: net1 fields, boot order unchanged
-- [ ] Template round-trip in machinery metal mode with storage vars
-      substituted
-- [ ] Golden byte-identity for storage-less fixtures — the
-      back-compat contract as a test
+- [x] `VMSpec` regression tests: net1 fields, boot order unchanged
+- [x] Template round-trip in machinery metal mode with storage vars
+      substituted (`TestRoleTemplatesMultiNICRoundTrip`)
+- [x] Golden byte-identity for storage-less fixtures — the
+      back-compat contract as a test (`testdata/golden/**` unchanged
+      through the whole change; `TestRoleTemplatesSingleNICByteIdentical`)
 - [ ] The two live proofs (Phases 5–6) stay out of CI, recorded here
       (IMPL-0001's decision: the e2e drill is not a merge gate)
 
@@ -515,8 +760,17 @@ in code.
   — Phase 6 deliberately re-images only one worker.
 - DESIGN-0006's corrected address table (homelab docs) — the
   authoritative table above is the in-repo copy.
-- Storage portals live on VLAN 14 (TrueNAS side) for Phase 2's
-  reachability check.
+- Storage portals are ZFS on r740a, served over its `storbr0`
+  address (`10.10.13.20`) — so the portal end of the jumbo chain
+  was covered by the host fabric work, and VMs hosted on r740a
+  reach their portal without touching a wire.
+- `storbr0` bridges on all three hosts, enslaving `stor0`; port
+  profiles, aggregator jumbo, and host MTU stanzas all verified
+  2026-09-01 (the Phase 2 fabric tasks — done). Caution for any
+  future MTU work: r640a's qede SFP+ NICs can wedge into a carrier
+  flap loop on **live** MTU changes (hit 2026-09-01; recovery
+  documented in the network role) — no remaining phase touches a
+  host NIC MTU.
 
 ## References
 

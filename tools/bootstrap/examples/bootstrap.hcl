@@ -117,6 +117,29 @@ cluster "homelab" {
       }
     }
 
+    # Network planes (DESIGN-0004): a network block states the shared
+    # facts once — vlan (omit for untagged: the bridge and switch
+    # port profile own membership), dhcp (required; every plane
+    # states its mode), primary (at most one plane; its member
+    # interface is each node's PXE path and booty identity), cidr
+    # (required exactly when dhcp = false), mtu (optional; rendered
+    # into the VM NIC and machineconfig when set). Node interfaces
+    # reference a plane by name and inherit its facts whole — never
+    # overridden, per the XOR rule below.
+    network "servers" {
+      vlan    = 11 # tagged into the guest trunk (native VLAN: none)
+      dhcp    = true
+      primary = true
+    }
+
+    # A static plane, for a second NIC per node — e.g. a dedicated
+    # storage network with jumbo frames and no DHCP anywhere:
+    # network "storage" {
+    #   dhcp = false             # no vlan: untagged — the switch port
+    #   cidr = "10.0.30.0/24"    # profile owns membership
+    #   mtu  = 9000              # jumbo; verify the fabric end to end
+    # }
+
     # Optional: named, composable extension profiles. Nodes reference
     # them below; emit flattens each node's set, resolves it to an
     # Image Factory schematic, and bakes the extensions into that
@@ -144,62 +167,97 @@ cluster "homelab" {
 
     # One node block per VM, everything explicit. role is
     # "controlplane" or "worker" (at least one controlplane). vmid is
-    # unique, >= 100. mac is unique in any standard notation; the CLI
-    # normalizes to lowercase-colon form everywhere it is used.
-    # vlan (optional) tags net0 on the PVE side — required when the
-    # bridge uplinks to a trunk with no native VLAN, where untagged
-    # frames go nowhere; the guest still sees plain Ethernet, so PXE
-    # is unaffected. Omit for an access-port or native-VLAN bridge.
+    # unique, >= 100. Each NIC is a network_interface block labeled
+    # with its PVE slot (net0, net1, …); mac is globally unique in
+    # any standard notation (the CLI normalizes to lowercase-colon
+    # form everywhere it is used), bridge is per-NIC, and the mode
+    # facts arrive exactly one of two ways (the XOR rule — setting
+    # both is an error, never an override):
+    #
+    #   referenced:  network = "servers"     # inherits the plane whole
+    #   inline:      dhcp = true             # states every fact itself
+    #                primary = true          # (vlan/cidr/mtu optional)
+    #
+    # Static planes additionally require address (CIDR form, inside
+    # the plane's cidr); dhcp planes forbid it. Exactly one interface
+    # per node resolves primary — that NIC is the PXE boot path.
     node "cp-01" {
       role     = "controlplane"
       pve_node = "pve-01"
       vmid     = 200
-      mac      = "02:50:99:a2:00:01"
       cores    = 4
       memory   = 8192 # MiB
       disk_gb  = 64
       storage  = "local-zfs"
-      bridge   = "vmbr0"
-      vlan     = 11
       # profiles names the extension profiles baked into this node's
       # boot image; omit for the vanilla (or schematic_id) image.
       profiles = ["base"]
+
+      network_interface "net0" {
+        network = "servers"
+        mac     = "02:50:99:a2:00:01"
+        bridge  = "vmbr0"
+      }
+
+      # The storage-plane second NIC, when the plane above is real:
+      # network_interface "net1" {
+      #   network = "storage"
+      #   mac     = "02:50:99:a2:14:01"
+      #   bridge  = "storbr0"           # dedicated bridge — untagged
+      #   address = "10.0.30.51/24"     # static: the plane has no DHCP
+      # }
     }
     node "cp-02" {
       role     = "controlplane"
       pve_node = "pve-02"
       vmid     = 201
-      mac      = "02:50:99:a2:00:02"
       cores    = 4
       memory   = 8192
       disk_gb  = 64
       storage  = "local-zfs"
-      bridge   = "vmbr0"
       profiles = ["base"]
+
+      network_interface "net0" {
+        network = "servers"
+        mac     = "02:50:99:a2:00:02"
+        bridge  = "vmbr0"
+      }
     }
     node "cp-03" {
       role     = "controlplane"
       pve_node = "pve-03"
       vmid     = 202
-      mac      = "02:50:99:a2:00:03"
       cores    = 4
       memory   = 8192
       disk_gb  = 64
       storage  = "local-zfs"
-      bridge   = "vmbr0"
       profiles = ["base"]
+
+      network_interface "net0" {
+        network = "servers"
+        mac     = "02:50:99:a2:00:03"
+        bridge  = "vmbr0"
+      }
     }
     node "worker-01" {
       role     = "worker"
       pve_node = "pve-01"
       vmid     = 300
-      mac      = "02:50:99:a2:01:01"
       cores    = 8
       memory   = 16384
       disk_gb  = 128
       storage  = "local-zfs"
-      bridge   = "vmbr0"
       profiles = ["base"]
+
+      # The inline form, equally valid — the primitives are always
+      # reachable without declaring a plane:
+      network_interface "net0" {
+        mac     = "02:50:99:a2:01:01"
+        bridge  = "vmbr0"
+        vlan    = 11
+        dhcp    = true
+        primary = true
+      }
     }
   }
 }

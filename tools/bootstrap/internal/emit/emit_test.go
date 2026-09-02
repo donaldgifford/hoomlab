@@ -38,20 +38,34 @@ func (metalMode) String() string        { return "metal" }
 func (metalMode) RequiresInstall() bool { return true }
 func (metalMode) InContainer() bool     { return false }
 
+// bootNIC is the single inline-form boot NIC the emit fixtures need.
+// The fixtures resolve after construction, the same way Load resolves
+// a real config.
+func bootNIC(mac string) []config.NetworkInterface {
+	dhcp, primary := true, true
+	return []config.NetworkInterface{{
+		Name: "net0", MAC: mac, Bridge: "vmbr0", DHCP: &dhcp, Primary: &primary,
+	}}
+}
+
 func testCluster() *config.Cluster {
-	return &config.Cluster{
+	c := &config.Cluster{
 		Name: "homelab",
 		Talos: config.Talos{
 			Version:  talosVersion,
 			Endpoint: "https://10.0.20.10:6443",
 			Booty:    config.Booty{URL: bootyURL},
 			Nodes: []config.TalosNode{
-				{Name: "cp-01", Role: config.RoleControlPlane, PVENode: "pve-01", VMID: 200, MAC: cpMAC},
-				{Name: "cp-02", Role: config.RoleControlPlane, PVENode: "pve-02", VMID: 201, MAC: "02:50:99:a2:00:02"},
-				{Name: "worker-01", Role: config.RoleWorker, PVENode: "pve-01", VMID: 300, MAC: workerMAC},
+				{Name: "cp-01", Role: config.RoleControlPlane, PVENode: "pve-01", VMID: 200, Interfaces: bootNIC(cpMAC)},
+				{Name: "cp-02", Role: config.RoleControlPlane, PVENode: "pve-02", VMID: 201, Interfaces: bootNIC("02:50:99:a2:00:02")},
+				{Name: "worker-01", Role: config.RoleWorker, PVENode: "pve-01", VMID: 300, Interfaces: bootNIC(workerMAC)},
 			},
 		},
 	}
+	if diags := c.ResolveInterfaces(); diags.HasErrors() {
+		panic("testCluster does not resolve: " + diags.Error())
+	}
+	return c
 }
 
 func testBundle(t *testing.T) *secrets.Bundle {
@@ -81,7 +95,64 @@ func testEmitter(t *testing.T) *emit.Emitter {
 // and cannot be golden — TestEmittedCatalogLoadsInBooty validates those
 // through booty and machinery instead.
 func TestTreeGolden(t *testing.T) {
-	tree, err := testEmitter(t).Tree(context.Background())
+	treeGolden(t, testEmitter(t), "golden")
+}
+
+// withStorageNIC appends the static jumbo storage NIC to a boot NIC —
+// the fartlab shape from IMPL-0003.
+func withStorageNIC(nics []config.NetworkInterface, mac, address string) []config.NetworkInterface {
+	dhcp, mtu := false, 9000
+	return append(nics, config.NetworkInterface{
+		Name: "net1", MAC: mac, Bridge: "storbr0", DHCP: &dhcp, Address: address, MTU: &mtu,
+	})
+}
+
+// multiNICTestCluster is testCluster with the storage plane on every
+// node, so the catalog groups carry the per-interface vars.
+func multiNICTestCluster() *config.Cluster {
+	c := &config.Cluster{
+		Name: "homelab",
+		Talos: config.Talos{
+			Version:  talosVersion,
+			Endpoint: "https://10.0.20.10:6443",
+			Booty:    config.Booty{URL: bootyURL},
+			Nodes: []config.TalosNode{
+				{
+					Name: "cp-01", Role: config.RoleControlPlane, PVENode: "pve-01", VMID: 200,
+					Interfaces: withStorageNIC(bootNIC(cpMAC), "02:50:99:a2:14:01", "192.0.2.51/24"),
+				},
+				{
+					Name: "cp-02", Role: config.RoleControlPlane, PVENode: "pve-02", VMID: 201,
+					Interfaces: withStorageNIC(bootNIC("02:50:99:a2:00:02"), "02:50:99:a2:14:02", "192.0.2.52/24"),
+				},
+				{
+					Name: "worker-01", Role: config.RoleWorker, PVENode: "pve-01", VMID: 300,
+					Interfaces: withStorageNIC(bootNIC(workerMAC), "02:50:99:a2:14:03", "192.0.2.61/24"),
+				},
+			},
+		},
+	}
+	if diags := c.ResolveInterfaces(); diags.HasErrors() {
+		panic("multiNICTestCluster does not resolve: " + diags.Error())
+	}
+	return c
+}
+
+// TestTreeGoldenMultiNIC pins the multi-interface artifacts: the
+// groups catalog gains each slot's MAC and the static slot's address
+// as per-node vars; everything else is byte-identical to the
+// single-interface goldens by construction.
+func TestTreeGoldenMultiNIC(t *testing.T) {
+	e := testEmitter(t)
+	e.Cluster = multiNICTestCluster()
+	treeGolden(t, e, "golden-multinic")
+}
+
+// treeGolden compares the deterministic tree artifacts against one
+// golden set; -update rewrites the set.
+func treeGolden(t *testing.T, e *emit.Emitter, goldenDir string) {
+	t.Helper()
+	tree, err := e.Tree(context.Background())
 	if err != nil {
 		t.Fatalf("Tree: %v", err)
 	}
@@ -96,7 +167,7 @@ func TestTreeGolden(t *testing.T) {
 		if !ok {
 			t.Fatalf("tree is missing %s", path)
 		}
-		golden := filepath.Join("testdata", "golden", filepath.FromSlash(path))
+		golden := filepath.Join("testdata", goldenDir, filepath.FromSlash(path))
 		if *update {
 			if err := os.MkdirAll(filepath.Dir(golden), 0o755); err != nil {
 				t.Fatalf("create golden dir: %v", err)

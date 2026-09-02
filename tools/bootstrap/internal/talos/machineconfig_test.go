@@ -164,6 +164,191 @@ func TestRoleTemplatesRoundTrip(t *testing.T) {
 	}
 }
 
+// multiNIC is the storage-plane interface pair (DESIGN-0004): a dhcp
+// primary boot NIC and a static jumbo second NIC.
+func multiNIC(bootMAC, storMAC, address string) []config.NetworkInterface {
+	dhcp, primary := true, true
+	static, mtu := false, 9000
+	return []config.NetworkInterface{
+		{Name: "net0", MAC: bootMAC, Bridge: "vmbr1", DHCP: &dhcp, Primary: &primary},
+		{Name: "net1", MAC: storMAC, Bridge: "storbr0", DHCP: &static, Address: address, MTU: &mtu},
+	}
+}
+
+// multiNICCluster carries the storage-plane shape on both roles.
+func multiNICCluster(t *testing.T) *config.Cluster {
+	t.Helper()
+	c := testCluster()
+	c.Talos.Nodes = []config.TalosNode{
+		{
+			Name: "ctrl01", Role: config.RoleControlPlane, PVENode: "pve-01", VMID: 201,
+			Interfaces: multiNIC("02:50:99:a2:00:c9", "02:50:99:a2:14:c9", "192.0.2.51/24"),
+		},
+		{
+			Name: "work01", Role: config.RoleWorker, PVENode: "pve-01", VMID: 301,
+			Interfaces: multiNIC("02:50:99:a2:00:2d", "02:50:99:a2:14:2d", "192.0.2.61/24"),
+		},
+	}
+	if diags := c.ResolveInterfaces(); diags.HasErrors() {
+		t.Fatalf("resolve multi-NIC cluster: %s", diags.Error())
+	}
+	return c
+}
+
+// TestRoleTemplatesInterfaces pins the multi-interface machineconfig
+// shape (DESIGN-0004): every slot declared by deviceSelector with a
+// per-node MAC expression, the static slot carrying its address
+// expression and mtu, no placeholder identity leaked, and no routes —
+// a secondary plane must never attract the default route.
+func TestRoleTemplatesInterfaces(t *testing.T) {
+	tmpl, err := talos.RoleTemplates(testBundle(t), multiNICCluster(t))
+	if err != nil {
+		t.Fatalf("RoleTemplates: %v", err)
+	}
+	for name, data := range map[string][]byte{
+		"controlplane": tmpl.ControlPlane,
+		"worker":       tmpl.Worker,
+	} {
+		s := string(data)
+		for _, want := range []string{
+			`hardwareAddr: {{ index .Vars "net0_mac" }}`,
+			`hardwareAddr: {{ index .Vars "net1_mac" }}`,
+			`- {{ index .Vars "net1_address" }}`,
+			"mtu: 9000",
+			"dhcp: true",
+			"dhcp: false",
+		} {
+			if !strings.Contains(s, want) {
+				t.Errorf("%s template is missing %q", name, want)
+			}
+		}
+		for _, leak := range []string{"-mac-placeholder", "203.0.113."} {
+			if strings.Contains(s, leak) {
+				t.Errorf("%s template leaked placeholder identity %q", name, leak)
+			}
+		}
+		if strings.Contains(s, "routes:") {
+			t.Errorf("%s template carries routes; secondary planes must never attract the default route", name)
+		}
+	}
+}
+
+// TestRoleTemplatesSingleNICByteIdentical is the OQ-2 back-compat
+// proof at the template layer: nodes with only their primary
+// interface produce templates byte-identical to a cluster that
+// declares no interfaces at all — no machine.network section, exactly
+// the v0.2.0 artifact.
+func TestRoleTemplatesSingleNICByteIdentical(t *testing.T) {
+	bundle := testBundle(t)
+	bare, err := talos.RoleTemplates(bundle, testCluster())
+	if err != nil {
+		t.Fatalf("RoleTemplates (no nodes): %v", err)
+	}
+
+	single := testCluster()
+	dhcp, primary := true, true
+	single.Talos.Nodes = []config.TalosNode{{
+		Name: "cp-01", Role: config.RoleControlPlane, PVENode: "pve-01", VMID: 200,
+		Interfaces: []config.NetworkInterface{
+			{Name: "net0", MAC: "02:50:99:a2:00:01", Bridge: "vmbr0", DHCP: &dhcp, Primary: &primary},
+		},
+	}}
+	if diags := single.ResolveInterfaces(); diags.HasErrors() {
+		t.Fatalf("resolve: %s", diags.Error())
+	}
+	got, err := talos.RoleTemplates(bundle, single)
+	if err != nil {
+		t.Fatalf("RoleTemplates (single NIC): %v", err)
+	}
+
+	if !bytes.Equal(bare.ControlPlane, got.ControlPlane) {
+		t.Error("single-interface controlplane template differs from the v0.2.0 shape")
+	}
+	if !bytes.Equal(bare.Worker, got.Worker) {
+		t.Error("single-interface worker template differs from the v0.2.0 shape")
+	}
+	if bytes.Contains(got.ControlPlane, []byte("deviceSelector")) {
+		t.Error("single-interface template declares interfaces; OQ-2 says it must not")
+	}
+}
+
+// TestRoleTemplatesShapeDivergenceErrors pins the one-template-per-
+// role constraint: two nodes of a role with different interface
+// shapes cannot share a template, and the error names both sides
+// rather than emitting a template that silently fits only one.
+func TestRoleTemplatesShapeDivergenceErrors(t *testing.T) {
+	c := multiNICCluster(t)
+	dhcp, primary := true, true
+	c.Talos.Nodes = append(c.Talos.Nodes, config.TalosNode{
+		Name: "work02", Role: config.RoleWorker, PVENode: "pve-01", VMID: 302,
+		Interfaces: []config.NetworkInterface{
+			{Name: "net0", MAC: "02:50:99:a2:00:2e", Bridge: "vmbr1", DHCP: &dhcp, Primary: &primary},
+		},
+	})
+	if diags := c.ResolveInterfaces(); diags.HasErrors() {
+		t.Fatalf("resolve: %s", diags.Error())
+	}
+
+	_, err := talos.RoleTemplates(testBundle(t), c)
+	if err == nil {
+		t.Fatal("RoleTemplates accepted divergent shapes within a role")
+	}
+	for _, want := range []string{"work02", "work01", "shape"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("divergence error %q is missing %q", err, want)
+		}
+	}
+}
+
+// TestRoleTemplatesMultiNICRoundTrip renders the multi-interface
+// template the way booty would — real values for every expression —
+// and re-validates the result with machinery's own loader in metal
+// mode. The rendered interfaces block is the shape the live fleet
+// carries (IMPL-0003 Phase 2), by construction.
+func TestRoleTemplatesMultiNICRoundTrip(t *testing.T) {
+	cluster := multiNICCluster(t)
+	tmpl, err := talos.RoleTemplates(testBundle(t), cluster)
+	if err != nil {
+		t.Fatalf("RoleTemplates: %v", err)
+	}
+	image := talos.InstallImage("", talosVersion)
+
+	rendered := string(tmpl.Worker)
+	for expr, value := range map[string]string{
+		talos.HostnameVar:                  "work01",
+		talos.InstallImageVar:              image,
+		`{{ index .Vars "net0_mac" }}`:     "02:50:99:a2:00:2d",
+		`{{ index .Vars "net1_mac" }}`:     "02:50:99:a2:14:2d",
+		`{{ index .Vars "net1_address" }}`: "192.0.2.61/24",
+	} {
+		if !strings.Contains(rendered, expr) {
+			t.Fatalf("worker template is missing expression %q", expr)
+		}
+		rendered = strings.ReplaceAll(rendered, expr, value)
+	}
+
+	provider, err := configloader.NewFromBytes([]byte(rendered))
+	if err != nil {
+		t.Fatalf("machinery load of rendered config: %v", err)
+	}
+	warnings, err := provider.Validate(metalMode{})
+	if err != nil {
+		t.Errorf("rendered multi-NIC config invalid in metal mode: %v", err)
+	}
+	if len(warnings) != 0 {
+		t.Errorf("rendered multi-NIC config warnings: %q", warnings)
+	}
+	for _, want := range []string{
+		"hardwareAddr: 02:50:99:a2:00:2d",
+		"hardwareAddr: 02:50:99:a2:14:2d",
+		"- 192.0.2.61/24",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Errorf("rendered config is missing %q", want)
+		}
+	}
+}
+
 // TestRoleTemplatesDeterministic pins the emit stage's byte-stable
 // invariant at its source: the same secrets bundle must always yield
 // byte-identical templates, or the emit diff-Check would report

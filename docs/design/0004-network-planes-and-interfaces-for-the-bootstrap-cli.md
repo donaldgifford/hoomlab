@@ -39,8 +39,10 @@ boots), and per-node `network_interface` blocks declare each NIC's
 *identity* (MAC, bridge, address). The design is primitives-first —
 inline attributes are the ground truth, planes are the first
 abstraction layered on them, and a strict XOR rule keeps the two
-honest. First consumer: the fartlab storage plane (VLAN 14, iSCSI)
-per INV-0002; the surface itself knows nothing about storage.
+honest. First consumer: the fartlab storage plane per INV-0002 —
+iSCSI over VLAN 14 at the switch, untagged at the guest on the
+dedicated `storbr0` bridges, jumbo end-to-end; the surface itself
+knows nothing about storage.
 
 Status **Approved** on creation: the design was settled in the
 INV-0002 / IMPL-0003 review (2026-08-31) across three shape
@@ -74,10 +76,13 @@ iterations; this document is the authoritative record. It flips to
 - **Purpose-awareness.** The tool renders NICs; that a plane is "the
   storage plane" is operator semantics (comments, doc tables), never
   a tool concept.
-- **MTU / jumbo frames.** Deferred deliberately (INV-0002): a
-  one-sided 9000 is the classic silent iSCSI killer, so jumbo is a
-  future, both-sided change — designed to arrive as a plane attr
-  through the resolver.
+- ~~**MTU / jumbo frames.**~~ *Amended 2026-09-01 — now in scope.*
+  Originally deferred (a one-sided 9000 is the classic silent iSCSI
+  killer). The deliberate both-sided decision then arrived along
+  with the fabric that makes it safe — dedicated `storbr0` bridges
+  over the hosts' `stor0` NICs, storage-only switch port profiles —
+  and `mtu` lands exactly as pre-designed: a plane attr through the
+  resolver. See Detailed Design.
 - **Routes, gateways, or DNS on secondary planes.** Their
   unroutability *is* the access boundary (a stray default route on
   the storage VLAN creates asymmetric-routing misery).
@@ -115,9 +120,9 @@ network "servers" {
 }
 
 network "storage" {
-  vlan = 14
-  dhcp = false
-  cidr = "10.10.13.0/24"   # containment check for member addresses
+  dhcp = false             # no vlan: untagged — the switch port
+  cidr = "10.10.13.0/24"   # profile owns membership
+  mtu  = 9000              # jumbo — the fabric carries it end-to-end
 }
 
 node "ctrl01" {
@@ -130,16 +135,21 @@ node "ctrl01" {
   network_interface "net1" {
     network = "storage"
     mac     = "02:50:99:a2:14:c9"
-    bridge  = "vmbr1"
+    bridge  = "storbr0"             # dedicated storage bridge — untagged
     address = "10.10.13.51/24"      # static — the plane has no DHCP
   }
 }
 ```
 
-A `network` plane owns the shared facts: `vlan`, `dhcp` (required —
+A `network` plane owns the shared facts: `vlan` (optional — omitted
+means **untagged**: the interface's bridge and its switch port's
+native VLAN own membership, as on the dedicated `storbr0` storage
+bridge whose ports block all tagged frames), `dhcp` (required —
 every plane states its mode), `primary` (at most one plane; its
-member interface is the boot path), and `cidr` (required iff
-`dhcp = false`). A `network_interface` owns identity: the label is
+member interface is the boot path), `cidr` (required iff
+`dhcp = false`), and `mtu` (optional — omitted renders no override
+anywhere, leaving the fabric default of 1500 in charge). A
+`network_interface` owns identity: the label is
 the PVE slot (`net0`, `net1`, …), `mac` and `bridge` are per-NIC,
 `address` (CIDR form) is required on static planes and forbidden on
 DHCP planes. The `network` attribute references a plane by name —
@@ -166,7 +176,7 @@ network_interface "net1" {
 An interface takes exactly one of the two forms:
 
 - **Referenced**: sets `network = "<plane>"` and *none* of the
-  plane-owned attrs (`vlan`, `dhcp`, `primary`, `cidr`).
+  plane-owned attrs (`vlan`, `dhcp`, `primary`, `cidr`, `mtu`).
 - **Inline**: sets no reference and *all* the mode facts itself.
 
 Setting both is an **error, never an override** — there is no
@@ -198,9 +208,12 @@ zero consumer churn, no refactor.
 Everything downstream reads the resolved interfaces:
 
 - **PVE VM spec**: one `netN` entry per interface, in slot order —
-  `virtio,bridge=<bridge>,macaddr=<mac>,firewall=0[,tag=<vlan>]`
-  (the tag on the PVE side of the bridge, stripped before the guest,
-  exactly as net0 works today).
+  `virtio,bridge=<bridge>,macaddr=<mac>,firewall=0[,tag=<vlan>][,mtu=<mtu>]`.
+  `tag=` appears only when a `vlan` is declared (tagged into a
+  trunk, stripped before the guest, exactly as net0 works today);
+  an untagged plane rides its bridge's native membership. `mtu=` is
+  rendered explicitly when set — never PVE's `mtu=1`
+  inherit-the-bridge magic.
 - **Boot order**: `order=scsi0;<primary slot>` — only the
   primary-plane interface ever appears in boot order. booty serves
   one VLAN; a VM PXE-booting from a secondary NIC hangs in silence.
@@ -222,6 +235,7 @@ Everything downstream reads the resolved interfaces:
         - deviceSelector:
             hardwareAddr: "<static mac>"
           dhcp: false
+          mtu: 9000            # only when the plane sets one
           addresses:
             - "<address>"
   ```
@@ -245,6 +259,14 @@ Flat rules over the resolved form, each with its own test:
    exists.
 7. MACs globally unique across every interface of every node.
 8. Interface labels match `net\d+`, unique per node.
+9. `mtu`, when set, within virtio's 576–65520. The fabric ceiling
+   (aggregator jumbo, host bridge MTUs, the portal end) is the
+   operator's to verify — the tool cannot see the wire.
+10. Every declared plane is referenced by at least one interface
+    (added at implementation, Phase 3): an unreferenced plane
+    governs nothing, which is near-certainly a config that added
+    the block and forgot the interfaces — the same silently-inert
+    failure the unreferenced-profile rule already catches.
 
 Deliberately absent: any uniformity rule across nodes (a node with
 only its primary interface is valid — the fleet table in IMPL-0003
@@ -282,6 +304,7 @@ type Network struct {
     DHCP    bool   `hcl:"dhcp"`
     Primary bool   `hcl:"primary,optional"`
     CIDR    string `hcl:"cidr,optional"`
+    MTU     int    `hcl:"mtu,optional"`
 }
 
 type NetworkInterface struct {
@@ -294,6 +317,7 @@ type NetworkInterface struct {
     Primary *bool   `hcl:"primary,optional"`
     Address string  `hcl:"address,optional"`
     CIDR    string  `hcl:"cidr,optional"`
+    MTU     *int    `hcl:"mtu,optional"`
 }
 
 // Resolved — what validation, VMSpec, and emit consume.
@@ -306,6 +330,7 @@ type ResolvedInterface struct {
     Primary bool
     Address string // empty iff DHCP
     CIDR    string // empty when ungoverned
+    MTU     int    // 0 = no override rendered
 }
 ```
 
@@ -336,8 +361,11 @@ live nodes, and the served artifacts agree.
 ## Open Questions
 
 None blocking — all five IMPL-0003 OQs were decided 2026-08-31.
-Doors deliberately left, pre-designed to arrive through the
-resolver: plane-level `mtu` (the jumbo day, both sides at once), and
+The first deliberately-left door was exercised 2026-09-01, one day
+after Approval: plane-level `mtu` arrived for the storage plane
+(jumbo, both sides at once — see the amended non-goal) as a plane
+attr + a resolver line + a resolved field, zero consumer churn. The
+extension path working exactly as designed. Doors still open:
 whatever plane capability the second Talos cluster's topology
 eventually wants.
 

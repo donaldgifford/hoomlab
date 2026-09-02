@@ -7,6 +7,7 @@ require (
 	github.com/donaldgifford/hclkit v0.2.0
 	github.com/donaldgifford/proxmox-go-sdk v0.12.0
 	github.com/hashicorp/hcl/v2 v2.24.0
+	github.com/siderolabs/go-pointer v1.0.1
 	github.com/siderolabs/talos/pkg/machinery v1.13.9
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
@@ -59,7 +60,6 @@ require (
 	github.com/siderolabs/crypto v0.6.5 // indirect
 	github.com/siderolabs/gen v0.8.7 // indirect
 	github.com/siderolabs/go-api-signature v0.3.12 // indirect
-	github.com/siderolabs/go-pointer v1.0.1 // indirect
 	github.com/siderolabs/net v0.4.0 // indirect
 	github.com/siderolabs/protoenc v0.2.4 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect

@@ -21,6 +21,15 @@ import (
 	"github.com/donaldgifford/proxmox-go-sdk/proxmox/version"
 )
 
+// bootNIC is a single inline-form boot NIC; vmsCluster resolves after
+// construction, the same way Load resolves a real config.
+func bootNIC(mac, bridge string) []config.NetworkInterface {
+	dhcp, primary := true, true
+	return []config.NetworkInterface{{
+		Name: "net0", MAC: mac, Bridge: bridge, DHCP: &dhcp, Primary: &primary,
+	}}
+}
+
 // vmsCluster is the three-PVE-node cluster with four Talos VMs spread
 // across it — two roles, three hosts, so placement is actually
 // exercised rather than assumed.
@@ -33,25 +42,32 @@ func vmsCluster() *config.Cluster {
 		Nodes: []config.TalosNode{
 			{
 				Name: "cp-01", Role: config.RoleControlPlane, PVENode: "pve-01",
-				VMID: 200, MAC: "02:50:99:a2:00:01", Cores: 4, Memory: 8192,
-				DiskGB: 64, Storage: "local-zfs", Bridge: "vmbr0",
+				VMID: 200, Cores: 4, Memory: 8192,
+				DiskGB: 64, Storage: "local-zfs",
+				Interfaces: bootNIC("02:50:99:a2:00:01", "vmbr0"),
 			},
 			{
 				Name: "cp-02", Role: config.RoleControlPlane, PVENode: "pve-02",
-				VMID: 201, MAC: "02:50:99:a2:00:02", Cores: 4, Memory: 8192,
-				DiskGB: 64, Storage: "local-zfs", Bridge: "vmbr0",
+				VMID: 201, Cores: 4, Memory: 8192,
+				DiskGB: 64, Storage: "local-zfs",
+				Interfaces: bootNIC("02:50:99:a2:00:02", "vmbr0"),
 			},
 			{
 				Name: "cp-03", Role: config.RoleControlPlane, PVENode: "pve-03",
-				VMID: 202, MAC: "02:50:99:a2:00:03", Cores: 4, Memory: 8192,
-				DiskGB: 64, Storage: "local-zfs", Bridge: "vmbr0",
+				VMID: 202, Cores: 4, Memory: 8192,
+				DiskGB: 64, Storage: "local-zfs",
+				Interfaces: bootNIC("02:50:99:a2:00:03", "vmbr0"),
 			},
 			{
 				Name: "worker-01", Role: config.RoleWorker, PVENode: "pve-01",
-				VMID: 300, MAC: "02:50:99:a2:01:01", Cores: 8, Memory: 16384,
-				DiskGB: 128, Storage: "local-lvm", Bridge: "vmbr1",
+				VMID: 300, Cores: 8, Memory: 16384,
+				DiskGB: 128, Storage: "local-lvm",
+				Interfaces: bootNIC("02:50:99:a2:01:01", "vmbr1"),
 			},
 		},
+	}
+	if diags := c.ResolveInterfaces(); diags.HasErrors() {
+		panic("vmsCluster does not resolve: " + diags.Error())
 	}
 	return c
 }
@@ -84,6 +100,17 @@ func newProvisioner(t *testing.T, cfg *config.Cluster) (*pve.Provisioner, func(n
 		Tasks:   tasks.NewService(client),
 		Log:     slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})),
 	}, svc
+}
+
+// mustVMSpec builds the spec for a resolved node, failing the test on
+// the unresolved-cluster error path (covered by its own test below).
+func mustVMSpec(t *testing.T, node *config.TalosNode) *qemu.CreateSpec {
+	t.Helper()
+	spec, err := pve.VMSpec(node)
+	if err != nil {
+		t.Fatalf("VMSpec(%s): %v", node.Name, err)
+	}
+	return spec
 }
 
 func runVMs(t *testing.T, p *pve.Provisioner) steps.Result {
@@ -258,20 +285,94 @@ func TestVMSpecWireFields(t *testing.T) {
 }
 
 // TestVMSpecVLANTag pins the net0 tag behavior (IMPL-0002 OQ-5): a
-// configured VLAN lands as a PVE-side tag on the NIC — the lab's
+// declared VLAN lands as a PVE-side tag on the NIC — the lab's
 // vm-trunk bridge has no native VLAN, so an untagged VM is on no
-// network at all — and an unset VLAN adds no tag parameter.
+// network at all — and an undeclared VLAN adds no tag parameter.
 func TestVMSpecVLANTag(t *testing.T) {
 	cfg := vmsCluster()
 	node := &cfg.Talos.Nodes[0]
 
-	if got := pve.VMSpec(node).Net0; strings.Contains(got, "tag=") {
+	if got := mustVMSpec(t, node).Net0; strings.Contains(got, "tag=") {
 		t.Errorf("net0 = %q carries a tag with no vlan configured", got)
 	}
 
-	node.VLAN = 11
-	if got, want := pve.VMSpec(node).Net0, ",tag=11"; !strings.HasSuffix(got, want) {
+	vlan := 11
+	node.Interfaces[0].VLAN = &vlan
+	if diags := cfg.ResolveInterfaces(); diags.HasErrors() {
+		t.Fatalf("re-resolve with the vlan set: %s", diags.Error())
+	}
+	if got, want := mustVMSpec(t, node).Net0, ",tag=11"; !strings.HasSuffix(got, want) {
 		t.Errorf("net0 = %q, want suffix %q", got, want)
+	}
+}
+
+// TestVMSpecUnresolvedNodeErrors pins the failure mode for a node
+// whose cluster never ran ResolveInterfaces: an error, not a spec
+// with an empty NIC that would create a VM on no network at all.
+func TestVMSpecUnresolvedNodeErrors(t *testing.T) {
+	node := &config.TalosNode{Name: "orphan", VMID: 999}
+	if spec, err := pve.VMSpec(node); err == nil {
+		t.Fatalf("VMSpec on an unresolved node = %+v, want an error", spec)
+	}
+}
+
+// addStorageNIC appends a static jumbo second NIC to a node — the
+// storage-plane shape from IMPL-0003 — and re-resolves the cluster.
+func addStorageNIC(t *testing.T, cfg *config.Cluster, node *config.TalosNode, mac, address string) {
+	t.Helper()
+	dhcp, mtu := false, 9000
+	node.Interfaces = append(node.Interfaces, config.NetworkInterface{
+		Name: "net1", MAC: mac, Bridge: "storbr0",
+		DHCP: &dhcp, Address: address, MTU: &mtu,
+	})
+	if diags := cfg.ResolveInterfaces(); diags.HasErrors() {
+		t.Fatalf("re-resolve with the storage NIC: %s", diags.Error())
+	}
+}
+
+// TestVMSpecRendersAllInterfaces pins the multi-NIC derivations
+// (DESIGN-0004): every declared interface lands in its slot — the
+// secondary untagged on its own bridge with an explicit mtu, never
+// PVE's mtu=1 magic — and the boot order still carries ONLY the
+// primary slot. A second NIC in boot order is the silent PXE hang
+// this rule exists to prevent.
+func TestVMSpecRendersAllInterfaces(t *testing.T) {
+	cfg := vmsCluster()
+	node := &cfg.Talos.Nodes[3] // worker-01
+	addStorageNIC(t, cfg, node, "02:50:99:a2:14:2f", "192.0.2.63/24")
+
+	spec := mustVMSpec(t, node)
+	if want := "virtio,bridge=vmbr1,macaddr=02:50:99:a2:01:01,firewall=0"; spec.Net0 != want {
+		t.Errorf("net0 = %q, want %q", spec.Net0, want)
+	}
+	if want := "virtio,bridge=storbr0,macaddr=02:50:99:a2:14:2f,firewall=0,mtu=9000"; spec.Extra["net1"] != want {
+		t.Errorf("net1 = %q, want %q", spec.Extra["net1"], want)
+	}
+	if want := "order=scsi0;net0"; spec.Boot != want {
+		t.Errorf("boot = %q, want %q — only the primary slot may boot", spec.Boot, want)
+	}
+}
+
+// TestVMsMultiNICWireFields drives the multi-NIC spec through a real
+// create and reads it back: the secondary NIC and the pinned boot
+// order must survive the wire, not just the struct.
+func TestVMsMultiNICWireFields(t *testing.T) {
+	cfg := vmsCluster()
+	node := &cfg.Talos.Nodes[3] // worker-01
+	addStorageNIC(t, cfg, node, "02:50:99:a2:14:2f", "192.0.2.63/24")
+
+	p, qsvc := newProvisioner(t, cfg)
+	runVMs(t, p)
+
+	got, err := qsvc(node.PVENode).Config(context.Background(), node.VMID)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	if want := "virtio,bridge=storbr0,macaddr=02:50:99:a2:14:2f,firewall=0,mtu=9000"; got.Net1 != want {
+		t.Errorf("net1 = %q, want %q", got.Net1, want)
+	}
+	if want := "order=scsi0;net0"; got.Boot != want {
+		t.Errorf("boot = %q, want %q", got.Boot, want)
 	}
 }
 
@@ -283,9 +384,13 @@ func TestVMSpecMACMatchesConfig(t *testing.T) {
 	cfg := vmsCluster()
 	for i := range cfg.Talos.Nodes {
 		node := &cfg.Talos.Nodes[i]
-		spec := pve.VMSpec(node)
-		if !strings.Contains(spec.Net0, "macaddr="+node.MAC) {
-			t.Errorf("%s: net0 %q does not carry the config MAC %s", node.Name, spec.Net0, node.MAC)
+		spec := mustVMSpec(t, node)
+		nic, ok := node.PrimaryInterface()
+		if !ok {
+			t.Fatalf("%s: no resolved primary interface", node.Name)
+		}
+		if !strings.Contains(spec.Net0, "macaddr="+nic.MAC) {
+			t.Errorf("%s: net0 %q does not carry the config MAC %s", node.Name, spec.Net0, nic.MAC)
 		}
 		if spec.VMID != types.VMID(node.VMID) {
 			t.Errorf("%s: vmid = %d, want %d", node.Name, spec.VMID, node.VMID)
@@ -302,7 +407,7 @@ func TestVMSpecMACMatchesConfig(t *testing.T) {
 // forever while every host-side check reports a healthy VM.
 func TestVMSpecPinsVirtIOSCSI(t *testing.T) {
 	cfg := vmsCluster()
-	spec := pve.VMSpec(&cfg.Talos.Nodes[0])
+	spec := mustVMSpec(t, &cfg.Talos.Nodes[0])
 	if got := spec.Extra["scsihw"]; got != "virtio-scsi-single" {
 		t.Fatalf("scsihw = %q, want %q (PVE's API default is LSI 53C895A, invisible to Talos)",
 			got, "virtio-scsi-single")
@@ -318,7 +423,7 @@ func TestVMSpecPinsVirtIOSCSI(t *testing.T) {
 // boot-sequence phase against an otherwise healthy cluster.
 func TestVMSpecEnablesGuestAgent(t *testing.T) {
 	cfg := vmsCluster()
-	spec := pve.VMSpec(&cfg.Talos.Nodes[0])
+	spec := mustVMSpec(t, &cfg.Talos.Nodes[0])
 	if got := spec.Extra["agent"]; got != "enabled=1" {
 		t.Fatalf("agent = %q, want %q (the guest-agent extension needs its virtio channel)",
 			got, "enabled=1")

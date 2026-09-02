@@ -11,7 +11,11 @@ import (
 
 // validHCL is the minimal valid config the mutation table below edits.
 // Every mutable token is unique within the string so a single
-// strings.Replace hits exactly the intended spot.
+// strings.Replace hits exactly the intended spot; where alignment
+// makes two lines identical, the mutation anchors carry their leading
+// indentation (interface attrs sit two spaces deeper than plane
+// attrs). cp-01's interface takes the referenced form and worker-01's
+// the inline form, so the base fixture exercises both (DESIGN-0004).
 const validHCL = `
 cluster "test" {
   pve {
@@ -40,6 +44,11 @@ cluster "test" {
     version  = "v1.13.8"
     endpoint = "https://10.0.20.10:6443"
 
+    network "servers" {
+      dhcp    = true
+      primary = true
+    }
+
     booty {
       url = "http://10.0.10.5:8080"
     }
@@ -48,23 +57,32 @@ cluster "test" {
       role     = "controlplane"
       pve_node = "pve-01"
       vmid     = 200
-      mac      = "02:50:99:a2:00:01"
       cores    = 4
       memory   = 8192
       disk_gb  = 64
       storage  = "local-zfs"
-      bridge   = "vmbr0"
+
+      network_interface "net0" {
+        network = "servers"
+        mac     = "02:50:99:a2:00:01"
+        bridge  = "vmbr0"
+      }
     }
     node "worker-01" {
       role     = "worker"
       pve_node = "pve-02"
       vmid     = 300
-      mac      = "02:50:99:a2:01:01"
       cores    = 4
       memory   = 8192
       disk_gb  = 64
       storage  = "local-zfs"
-      bridge   = "vmbr0"
+
+      network_interface "net0" {
+        mac     = "02:50:99:a2:01:01"
+        bridge  = "vmbr1"
+        dhcp    = true
+        primary = true
+      }
     }
   }
 }
@@ -111,6 +129,28 @@ func TestLoad(t *testing.T) {
 		}
 	}
 
+	// addStorageNIC layers the storage-plane shape onto the fixture: a
+	// static jumbo plane plus a referenced net1 on cp-01 carrying the
+	// given address line ("" drops the attribute entirely).
+	addStorageNIC := func(addressLine string) func(string) string {
+		return func(s string) string {
+			s = replace(`booty {`, `network "storage" {
+      dhcp = false
+      cidr = "192.0.2.0/24"
+      mtu  = 9000
+    }
+    booty {`)(s)
+			return replace(`        bridge  = "vmbr0"
+      }`, `        bridge  = "vmbr0"
+      }
+      network_interface "net1" {
+        network = "storage"
+        mac     = "02:50:99:a2:14:c9"
+        bridge  = "storbr0"`+addressLine+`
+      }`)(s)
+		}
+	}
+
 	tests := []struct {
 		name   string
 		mutate func(string) string
@@ -123,7 +163,7 @@ func TestLoad(t *testing.T) {
 		},
 		{
 			name:   "mac normalized from dash notation",
-			mutate: replace(`mac      = "02:50:99:a2:00:01"`, `mac      = "02-50-99-A2-00-01"`),
+			mutate: replace(`mac     = "02:50:99:a2:00:01"`, `mac     = "02-50-99-A2-00-01"`),
 		},
 		{
 			name:     "missing env var",
@@ -147,12 +187,12 @@ func TestLoad(t *testing.T) {
 		},
 		{
 			name:     "duplicate mac literal",
-			mutate:   replace(`mac      = "02:50:99:a2:01:01"`, `mac      = "02:50:99:a2:00:01"`),
-			wantErrs: []string{"Duplicate node mac"},
+			mutate:   replace(`mac     = "02:50:99:a2:01:01"`, `mac     = "02:50:99:a2:00:01"`),
+			wantErrs: []string{"Duplicate network_interface mac"},
 		},
 		{
 			name:     "duplicate mac case variant",
-			mutate:   replace(`mac      = "02:50:99:a2:01:01"`, `mac      = "02:50:99:A2:00:01"`),
+			mutate:   replace(`mac     = "02:50:99:a2:01:01"`, `mac     = "02:50:99:A2:00:01"`),
 			wantErrs: []string{`mac "02:50:99:a2:00:01" is already used by node "cp-01"`},
 		},
 		{
@@ -184,8 +224,8 @@ func TestLoad(t *testing.T) {
 		},
 		{
 			name:     "invalid mac",
-			mutate:   replace(`mac      = "02:50:99:a2:00:01"`, `mac      = "not-a-mac"`),
-			wantErrs: []string{"Invalid talos node mac", "not-a-mac"},
+			mutate:   replace(`mac     = "02:50:99:a2:00:01"`, `mac     = "not-a-mac"`),
+			wantErrs: []string{"Invalid network_interface mac", "not-a-mac"},
 		},
 		{
 			name:     "vmid below pve floor",
@@ -193,9 +233,12 @@ func TestLoad(t *testing.T) {
 			wantErrs: []string{"vmid 42 is below 100"},
 		},
 		{
-			name: "vlan tag accepted",
-			mutate: replace(`bridge   = "vmbr0"`, `bridge   = "vmbr0"
-      vlan     = 11`),
+			// The inline-form anchors carry their 8-space indentation:
+			// worker-01's interface attrs would otherwise collide with
+			// the identically aligned plane attrs at 6 spaces.
+			name: "inline vlan tag accepted",
+			mutate: replace(`        primary = true`, `        primary = true
+        vlan    = 11`),
 		},
 		{
 			name: "storage block accepted",
@@ -255,16 +298,222 @@ func TestLoad(t *testing.T) {
 			wantErrs: []string{"Undeclared talos node storage", `storage "local-zfs" matches no declared`},
 		},
 		{
-			name: "vlan above 802.1q range",
-			mutate: replace(`bridge   = "vmbr0"`, `bridge   = "vmbr0"
-      vlan     = 4095`),
-			wantErrs: []string{"Invalid talos node vlan", "vlan 4095 is outside the 802.1Q range 1-4094"},
+			name: "inline vlan above 802.1q range",
+			mutate: replace(`        primary = true`, `        primary = true
+        vlan    = 4095`),
+			wantErrs: []string{"Invalid network_interface vlan", "vlan 4095 is outside the 802.1Q range 1-4094"},
 		},
 		{
-			name: "negative vlan",
-			mutate: replace(`bridge   = "vmbr0"`, `bridge   = "vmbr0"
-      vlan     = -1`),
-			wantErrs: []string{"Invalid talos node vlan"},
+			name: "negative inline vlan",
+			mutate: replace(`        primary = true`, `        primary = true
+        vlan    = -1`),
+			wantErrs: []string{"Invalid network_interface vlan"},
+		},
+		{
+			// The fartlab shape end to end: a static jumbo plane and a
+			// referenced second NIC with its address inside the cidr.
+			name:   "storage plane accepted",
+			mutate: addStorageNIC("\n        address = \"192.0.2.51/24\""),
+		},
+		{
+			name:     "address outside the governing cidr",
+			mutate:   addStorageNIC("\n        address = \"198.51.100.51/24\""),
+			wantErrs: []string{"Address outside the governing cidr", `cidr "192.0.2.0/24"`},
+		},
+		{
+			name:     "referenced static interface missing address",
+			mutate:   addStorageNIC(""),
+			wantErrs: []string{"Missing static address", `"net1"`},
+		},
+		{
+			// The XOR rule, conflict direction: a reference plus one
+			// plane-owned attr is an error, never an override.
+			name: "conflicting forms reference plus dhcp",
+			mutate: replace(`        network = "servers"`, `        network = "servers"
+        dhcp    = true`),
+			wantErrs: []string{"Conflicting network_interface forms", "plane-owned dhcp"},
+		},
+		{
+			name: "conflicting forms lists every inline attr",
+			mutate: replace(`        network = "servers"`, `        network = "servers"
+        vlan    = 14
+        mtu     = 9000`),
+			wantErrs: []string{"Conflicting network_interface forms", "plane-owned vlan, mtu"},
+		},
+		{
+			// The XOR rule, incomplete direction: neither a reference
+			// nor the inline mode.
+			name:     "incomplete interface neither form",
+			mutate:   replace("\n        dhcp    = true", ""),
+			wantErrs: []string{"Incomplete network_interface", "sets neither network"},
+		},
+		{
+			name:     "unknown network reference",
+			mutate:   replace(`        network = "servers"`, `        network = "ghost"`),
+			wantErrs: []string{"Unknown network reference", `"ghost"`},
+		},
+		{
+			name: "duplicate network name",
+			mutate: replace(`booty {`, `network "dup" {
+      dhcp = true
+    }
+    network "dup" {
+      dhcp = true
+    }
+    booty {`),
+			wantErrs: []string{"Duplicate network name"},
+		},
+		{
+			name: "multiple primary networks",
+			mutate: replace(`booty {`, `network "extra" {
+      dhcp    = true
+      primary = true
+    }
+    booty {`),
+			wantErrs: []string{"Multiple primary networks"},
+		},
+		{
+			name: "static network without cidr",
+			mutate: replace(`booty {`, `network "nocidr" {
+      dhcp = false
+    }
+    booty {`),
+			wantErrs: []string{"Missing network cidr"},
+		},
+		{
+			name: "cidr on a dhcp network",
+			mutate: replace(`booty {`, `network "leased" {
+      dhcp = true
+      cidr = "10.0.40.0/24"
+    }
+    booty {`),
+			wantErrs: []string{"Cidr on a dhcp network"},
+		},
+		{
+			name: "invalid network cidr",
+			mutate: replace(`booty {`, `network "badcidr" {
+      dhcp = false
+      cidr = "not-a-cidr"
+    }
+    booty {`),
+			wantErrs: []string{"Invalid network cidr", "not-a-cidr"},
+		},
+		{
+			name: "network vlan out of range",
+			mutate: replace(`booty {`, `network "badvlan" {
+      dhcp = true
+      vlan = 4095
+    }
+    booty {`),
+			wantErrs: []string{"Invalid network vlan", "vlan 4095"},
+		},
+		{
+			name: "network mtu out of range",
+			mutate: replace(`booty {`, `network "badmtu" {
+      dhcp = true
+      mtu  = 100
+    }
+    booty {`),
+			wantErrs: []string{"Invalid network mtu", "mtu 100"},
+		},
+		{
+			// The plane doctrine from profiles, applied to networks: a
+			// plane nothing references governs nothing.
+			name: "unreferenced network",
+			mutate: replace(`booty {`, `network "lonely" {
+      dhcp = true
+    }
+    booty {`),
+			wantErrs: []string{"Unreferenced network", `add network = "lonely"`},
+		},
+		{
+			name: "inline mtu out of range",
+			mutate: replace(`        primary = true`, `        primary = true
+        mtu     = 65600`),
+			wantErrs: []string{"Invalid network_interface mtu", "mtu 65600"},
+		},
+		{
+			name: "address on a dhcp interface",
+			mutate: replace(`        primary = true`, `        primary = true
+        address = "10.0.20.9/24"`),
+			wantErrs: []string{"Address on a dhcp interface"},
+		},
+		{
+			name:     "static interface missing address",
+			mutate:   replace(`        dhcp    = true`, `        dhcp    = false`),
+			wantErrs: []string{"Missing static address"},
+		},
+		{
+			name: "static address not cidr form",
+			mutate: func(s string) string {
+				s = replace(`        dhcp    = true`, `        dhcp    = false`)(s)
+				return replace(`        primary = true`, `        primary = true
+        address = "10.0.20.9"`)(s)
+			},
+			wantErrs: []string{"Invalid network_interface address", "must be CIDR form"},
+		},
+		{
+			name:     "zero primary interfaces on a node",
+			mutate:   replace("\n        primary = true", ""),
+			wantErrs: []string{"Exactly one primary interface required", "0 primary"},
+		},
+		{
+			name: "two primary interfaces on a node",
+			mutate: replace(`      network_interface "net0" {
+        mac     = "02:50:99:a2:01:01"
+        bridge  = "vmbr1"
+        dhcp    = true
+        primary = true
+      }`, `      network_interface "net0" {
+        mac     = "02:50:99:a2:01:01"
+        bridge  = "vmbr1"
+        dhcp    = true
+        primary = true
+      }
+      network_interface "net1" {
+        mac     = "02:50:99:a2:14:02"
+        bridge  = "storbr0"
+        dhcp    = true
+        primary = true
+      }`),
+			wantErrs: []string{"Exactly one primary interface required", "2 primary"},
+		},
+		{
+			name: "invalid interface label",
+			mutate: replace(`network_interface "net0" {
+        mac     = "02:50:99:a2:01:01"`, `network_interface "eth0" {
+        mac     = "02:50:99:a2:01:01"`),
+			wantErrs: []string{"Invalid network_interface label", "net<N>"},
+		},
+		{
+			name: "duplicate interface label",
+			mutate: replace(`      network_interface "net0" {
+        mac     = "02:50:99:a2:01:01"
+        bridge  = "vmbr1"
+        dhcp    = true
+        primary = true
+      }`, `      network_interface "net0" {
+        mac     = "02:50:99:a2:01:01"
+        bridge  = "vmbr1"
+        dhcp    = true
+        primary = true
+      }
+      network_interface "net0" {
+        mac     = "02:50:99:a2:14:03"
+        bridge  = "storbr0"
+        dhcp    = true
+      }`),
+			wantErrs: []string{"Duplicate network_interface label"},
+		},
+		{
+			name: "node without interfaces",
+			mutate: replace(`      network_interface "net0" {
+        mac     = "02:50:99:a2:01:01"
+        bridge  = "vmbr1"
+        dhcp    = true
+        primary = true
+      }`, ""),
+			wantErrs: []string{"Missing network interface", `"worker-01"`},
 		},
 		{
 			name: "invalid cluster cni",
@@ -327,7 +576,7 @@ func TestLoad(t *testing.T) {
       extensions = ["siderolabs/qemu-guest-agent", "siderolabs/iscsi-tools"]
     }
     booty {`)(s)
-				return replace(`bridge   = "vmbr0"`, `bridge   = "vmbr0"
+				return replace(`vmid     = 200`, `vmid     = 200
       profiles = ["base"]`)(s)
 			},
 		},
@@ -360,7 +609,7 @@ func TestLoad(t *testing.T) {
 		},
 		{
 			name: "unknown profile reference",
-			mutate: replace(`bridge   = "vmbr0"`, `bridge   = "vmbr0"
+			mutate: replace(`vmid     = 200`, `vmid     = 200
       profiles = ["gpu"]`),
 			wantErrs: []string{"Unknown profile reference", `"gpu"`},
 		},
@@ -426,9 +675,9 @@ func TestLoad(t *testing.T) {
 				second = strings.Replace(second, "vmid     = 200", "vmid     = 400", 1)
 				second = strings.Replace(second, "vmid     = 300", "vmid     = 401", 1)
 				second = strings.Replace(second,
-					`mac      = "02:50:99:a2:00:01"`, `mac      = "02:50:99:a2:02:01"`, 1)
+					`mac     = "02:50:99:a2:00:01"`, `mac     = "02:50:99:a2:02:01"`, 1)
 				second = strings.Replace(second,
-					`mac      = "02:50:99:a2:01:01"`, `mac      = "02:50:99:a2:02:02"`, 1)
+					`mac     = "02:50:99:a2:01:01"`, `mac     = "02:50:99:a2:02:02"`, 1)
 				return s + second
 			},
 			wantErrs: []string{"Exactly one cluster block required"},
@@ -549,7 +798,7 @@ k8sServicePort: 7445
 		{
 			name: "kubeprism host wrong",
 			values: `kubeProxyReplacement: true
-k8sServiceHost: 10.10.11.51
+k8sServiceHost: 192.0.2.51
 k8sServicePort: 7445
 `,
 			wantErrs: []string{"Cilium values miss the KubePrism host"},
@@ -606,7 +855,7 @@ k8sServicePort: 6443
 func TestLoadResolvesAndNormalizes(t *testing.T) {
 	setTestEnv(t)
 	path := writeConfig(t,
-		strings.Replace(validHCL, `mac      = "02:50:99:a2:00:01"`, `mac      = "02-50-99-A2-00-01"`, 1))
+		strings.Replace(validHCL, `mac     = "02:50:99:a2:00:01"`, `mac     = "02-50-99-A2-00-01"`, 1))
 
 	cluster, diags := Load(path)
 	if diags.HasErrors() {
@@ -622,14 +871,33 @@ func TestLoadResolvesAndNormalizes(t *testing.T) {
 	if got, want := cluster.ACME.Token, secretMarker+"-cf-token"; got != want {
 		t.Errorf("ACME.Token = %q, want the resolved env value %q", got, want)
 	}
-	if got, want := cluster.Talos.Nodes[0].MAC, "02:50:99:a2:00:01"; got != want {
-		t.Errorf("Nodes[0].MAC = %q, want canonical %q", got, want)
-	}
 	if got, want := cluster.Talos.Nodes[0].Role, RoleControlPlane; got != want {
 		t.Errorf("Nodes[0].Role = %q, want %q", got, want)
 	}
 	if got, want := cluster.TalosName(), "test"; got != want {
 		t.Errorf("TalosName() without talos name = %q, want the label %q", got, want)
+	}
+
+	// Both layers carry the canonical MAC after load: the raw block
+	// and the resolved interface.
+	cp := &cluster.Talos.Nodes[0]
+	if got, want := cp.Interfaces[0].MAC, "02:50:99:a2:00:01"; got != want {
+		t.Errorf("Interfaces[0].MAC = %q, want canonical %q", got, want)
+	}
+	nics := cp.ResolvedInterfaces()
+	if len(nics) != 1 {
+		t.Fatalf("ResolvedInterfaces() has %d entries, want 1", len(nics))
+	}
+	if got, want := nics[0].MAC, "02:50:99:a2:00:01"; got != want {
+		t.Errorf("resolved MAC = %q, want canonical %q", got, want)
+	}
+	// cp-01 takes the referenced form: the plane's facts arrive whole.
+	if !nics[0].DHCP || !nics[0].Primary {
+		t.Errorf("resolved interface = %+v, want the servers plane's dhcp and primary facts", nics[0])
+	}
+	nic, ok := cp.PrimaryInterface()
+	if !ok || nic.Slot != "net0" {
+		t.Errorf("PrimaryInterface() = %+v, %t; want net0, true", nic, ok)
 	}
 }
 

@@ -137,10 +137,33 @@ type Talos struct {
 	// emitted machineconfigs then carry (topology node labels, kubelet
 	// serving-certificate rotation). Absent means the legacy surface —
 	// machinery defaults, flannel included.
-	Cluster  *TalosCluster  `hcl:"cluster,block"`
+	Cluster *TalosCluster `hcl:"cluster,block"`
+	// Networks declares the named network planes node interfaces
+	// reference (DESIGN-0004): the shared facts stated once and
+	// inherited whole, never overridden.
+	Networks []Network      `hcl:"network,block"`
 	Profiles []TalosProfile `hcl:"profile,block"`
 	Booty    Booty          `hcl:"booty,block"`
 	Nodes    []TalosNode    `hcl:"node,block"`
+}
+
+// Network is a named network plane (DESIGN-0004): the facts every
+// member interface shares, declared once. vlan omitted means untagged
+// — the interface's bridge and its switch port's native VLAN own
+// membership. dhcp is required: every plane states its addressing
+// mode. primary marks the boot plane (at most one); its member
+// interface is each node's PXE path and booty identity. cidr is
+// required exactly when dhcp = false — static member addresses are
+// validated against it. mtu, when set, renders into both the VM NIC
+// and the machineconfig; omitted renders no override anywhere,
+// leaving the fabric default in charge.
+type Network struct {
+	Name    string `hcl:"name,label"`
+	VLAN    int    `hcl:"vlan,optional"`
+	DHCP    bool   `hcl:"dhcp"`
+	Primary bool   `hcl:"primary,optional"`
+	CIDR    string `hcl:"cidr,optional"`
+	MTU     int    `hcl:"mtu,optional"`
 }
 
 // The valid TalosCluster.CNI values. Empty defaults to flannel — the
@@ -212,28 +235,53 @@ const (
 	RoleWorker       Role = "worker"
 )
 
-// TalosNode is one VM, declared in full: identity (VMID, MAC),
-// placement (PVENode), and shape. The MAC pinned here lands both on
-// the VM NIC and in the emitted booty group selector, so the PXE
-// identity binding agrees by construction.
+// TalosNode is one VM, declared in full: identity, placement
+// (PVENode), shape, and its NICs as network_interface blocks. The
+// primary interface's MAC lands both on the VM NIC and in the emitted
+// booty group selector, so the PXE identity binding agrees by
+// construction.
 type TalosNode struct {
 	Name    string `hcl:"name,label"`
 	Role    Role   `hcl:"role"`
 	PVENode string `hcl:"pve_node"`
 	VMID    int    `hcl:"vmid"`
-	MAC     string `hcl:"mac"`
 	Cores   int    `hcl:"cores"`
 	Memory  int    `hcl:"memory"`
 	DiskGB  int    `hcl:"disk_gb"`
 	Storage string `hcl:"storage"`
-	Bridge  string `hcl:"bridge"`
-	// VLAN tags net0 on the PVE side of the bridge (IMPL-0002 OQ-5:
-	// a trunk with no native VLAN drops untagged frames, so the tag
-	// is what puts the VM on its network). PVE strips the tag before
-	// the guest, so the firmware's PXE stack still sees plain
-	// Ethernet. Zero means untagged.
-	VLAN int `hcl:"vlan,optional"`
 	// Profiles names the extension profiles baked into this node's
 	// boot image. Empty means the vanilla no-extensions image.
 	Profiles []string `hcl:"profiles,optional"`
+	// Interfaces declares the node's NICs, one labeled block per PVE
+	// slot (net0, net1, …). At least one; exactly one resolves
+	// primary.
+	Interfaces []NetworkInterface `hcl:"network_interface,block"`
+
+	// resolved is the fully-explicit form of Interfaces, populated by
+	// Cluster.ResolveInterfaces and read via ResolvedInterfaces —
+	// unexported so the resolver is the only write path.
+	resolved []ResolvedInterface
+}
+
+// NetworkInterface is the raw HCL form of one VM NIC — a labeled
+// network_interface block inside a node (DESIGN-0004). The label is
+// the PVE slot (net0, net1, …). Identity (mac, bridge) is always
+// per-interface; the mode facts arrive exactly one of two ways:
+// network references a plane and inherits its facts whole, or the
+// inline attrs state them all here. Setting both is an error, never
+// an override (the XOR rule). Optionality here is data — the pointer
+// types distinguish absent from set, which is what the XOR check
+// reads — so nothing outside the resolver reads these mode fields;
+// consumers use the resolved form (TalosNode.ResolvedInterfaces).
+type NetworkInterface struct {
+	Name    string `hcl:"name,label"` // PVE slot: net0, net1, …
+	Network string `hcl:"network,optional"`
+	MAC     string `hcl:"mac"`
+	Bridge  string `hcl:"bridge"`
+	VLAN    *int   `hcl:"vlan,optional"` // inline form only, as are the rest
+	DHCP    *bool  `hcl:"dhcp,optional"`
+	Primary *bool  `hcl:"primary,optional"`
+	Address string `hcl:"address,optional"`
+	CIDR    string `hcl:"cidr,optional"`
+	MTU     *int   `hcl:"mtu,optional"`
 }

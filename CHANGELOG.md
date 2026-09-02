@@ -5,6 +5,17 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
 ## [unreleased]
 
+### Features
+
+- *(bootstrap)* [**breaking**] Network planes and interfaces replace flat node NICs
+- *(bootstrap/pve)* Render every declared interface in the VM spec
+- *(bootstrap/emit)* Machineconfig interfaces and catalog vars from the planes
+
+### Refactor
+
+- *(bootstrap)* Harden the resolved-interface API per style review
+- *(bootstrap/talos)* Style-review fixes for the template layer
+
 ### Documentation
 
 - *(runbook)* §15 full re-image — verified by the rename rebuild
@@ -15,6 +26,22 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(impl)* Allow fenced blocks in IMPL-0003 (MD046)
 - *(impl)* IMPL-0003 layering addendum — primitives, planes, and the XOR rule
 - *(design)* DESIGN-0004 — network planes and interfaces, promoted from IMPL-0003
+- *(impl-0003)* Record phases 1-2 — storage plane live by hand
+- *(runbook)* Network requirements contract + fleet NIC map
+- *(runbook)* Network surface in §1, multi-NIC vms facts in §10, storage-plane rebirth note in §15
+- *(impl)* Close IMPL-0003 Phase 4 — code complete, live shape-diff deferred to operator
+- *(impl)* Defer IMPL-0003 Phases 5-6 to the operator; record PR #10
+- *(impl)* Record the pre-merge pre-flight in Phase 5
+- *(impl)* Live shape-diff verified — code reproduces the hand patch
+
+### Testing
+
+- *(bootstrap/config)* Drill-style load tests for the network surface
+
+### Miscellaneous Tasks
+
+- *(docs)* Untrack the site-specific network docs
+- *(bootstrap)* Use RFC 5737 documentation ranges in fixtures
 
 ## [tools/bootstrap/v0.2.0] - 2026-08-30
 
