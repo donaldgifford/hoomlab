@@ -427,18 +427,38 @@ Phase 2's end state.
       `TestVMSpecRendersAllInterfaces` pins the struct,
       `TestVMsMultiNICWireFields` pins it through a real create and
       read-back)*
-- [ ] Emit catalog: per-group interface vars (each interface's MAC;
+- [x] Emit catalog: per-group interface vars (each interface's MAC;
       static addresses) beside `hostname`
-- [ ] Machineconfig templates: `machine.network.interfaces` rendered
+      *(`net0_mac`/`net1_mac`/`net1_address` per group, keys derived
+      from `talos.MACVarKey`/`AddressVarKey` — the same source the
+      template expressions come from; single-interface nodes emit no
+      extra vars, keeping their groups byte-identical)*
+- [x] Machineconfig templates: `machine.network.interfaces` rendered
       from the planes — the primary-plane interface by
       deviceSelector with `dhcp: true`, static-plane interfaces by
       deviceSelector with their address (and `mtu` when the plane
       sets one), no routes — emitted only when a node has more than
       its primary interface (OQ-2)
-- [ ] Round-trip test: rendered multi-interface configs re-validate
+      *(implementation decision: one machineconfig template per role
+      is booty's overlay contract, so the section renders from a
+      per-role interface **shape** — slot/dhcp/mtu, identity via
+      group vars — and nodes of a role with divergent shapes are an
+      emit error naming both sides. Placeholder identity is
+      machinery-validated then swapped: marker strings for
+      hardwareAddr, TEST-NET-3 addresses for the CIDR-checked
+      addresses. The deprecated v1alpha1 section is deliberate —
+      machinery v1.13 ships no multi-doc device type and the live
+      fleet carries exactly this shape)*
+- [x] Round-trip test: rendered multi-interface configs re-validate
       in machinery metal mode (the existing round-trip pattern)
-- [ ] Golden files: single-interface fixtures byte-identical (the
+      *(`TestRoleTemplatesMultiNICRoundTrip`)*
+- [x] Golden files: single-interface fixtures byte-identical (the
       back-compat proof); new goldens for a multi-interface fixture
+      *(existing `testdata/golden` untouched through the whole
+      change; `testdata/golden-multinic` pins the vars-bearing
+      groups; `TestRoleTemplatesSingleNICByteIdentical` proves the
+      template layer emits no `machine.network` for primary-only
+      nodes)*
 - [ ] Docs in the same change: runbook §1 (config surface), §10
       (vms expected fields), §15 (note that rebirth now covers the
       storage plane); example config final pass

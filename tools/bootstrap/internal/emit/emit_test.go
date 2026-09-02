@@ -95,7 +95,64 @@ func testEmitter(t *testing.T) *emit.Emitter {
 // and cannot be golden — TestEmittedCatalogLoadsInBooty validates those
 // through booty and machinery instead.
 func TestTreeGolden(t *testing.T) {
-	tree, err := testEmitter(t).Tree(context.Background())
+	treeGolden(t, testEmitter(t), "golden")
+}
+
+// withStorageNIC appends the static jumbo storage NIC to a boot NIC —
+// the fartlab shape from IMPL-0003.
+func withStorageNIC(nics []config.NetworkInterface, mac, address string) []config.NetworkInterface {
+	dhcp, mtu := false, 9000
+	return append(nics, config.NetworkInterface{
+		Name: "net1", MAC: mac, Bridge: "storbr0", DHCP: &dhcp, Address: address, MTU: &mtu,
+	})
+}
+
+// multiNICTestCluster is testCluster with the storage plane on every
+// node, so the catalog groups carry the per-interface vars.
+func multiNICTestCluster() *config.Cluster {
+	c := &config.Cluster{
+		Name: "homelab",
+		Talos: config.Talos{
+			Version:  talosVersion,
+			Endpoint: "https://10.0.20.10:6443",
+			Booty:    config.Booty{URL: bootyURL},
+			Nodes: []config.TalosNode{
+				{
+					Name: "cp-01", Role: config.RoleControlPlane, PVENode: "pve-01", VMID: 200,
+					Interfaces: withStorageNIC(bootNIC(cpMAC), "02:50:99:a2:14:01", "10.10.13.51/24"),
+				},
+				{
+					Name: "cp-02", Role: config.RoleControlPlane, PVENode: "pve-02", VMID: 201,
+					Interfaces: withStorageNIC(bootNIC("02:50:99:a2:00:02"), "02:50:99:a2:14:02", "10.10.13.52/24"),
+				},
+				{
+					Name: "worker-01", Role: config.RoleWorker, PVENode: "pve-01", VMID: 300,
+					Interfaces: withStorageNIC(bootNIC(workerMAC), "02:50:99:a2:14:03", "10.10.13.61/24"),
+				},
+			},
+		},
+	}
+	if diags := c.ResolveInterfaces(); diags.HasErrors() {
+		panic("multiNICTestCluster does not resolve: " + diags.Error())
+	}
+	return c
+}
+
+// TestTreeGoldenMultiNIC pins the multi-interface artifacts: the
+// groups catalog gains each slot's MAC and the static slot's address
+// as per-node vars; everything else is byte-identical to the
+// single-interface goldens by construction.
+func TestTreeGoldenMultiNIC(t *testing.T) {
+	e := testEmitter(t)
+	e.Cluster = multiNICTestCluster()
+	treeGolden(t, e, "golden-multinic")
+}
+
+// treeGolden compares the deterministic tree artifacts against one
+// golden set; -update rewrites the set.
+func treeGolden(t *testing.T, e *emit.Emitter, goldenDir string) {
+	t.Helper()
+	tree, err := e.Tree(context.Background())
 	if err != nil {
 		t.Fatalf("Tree: %v", err)
 	}
@@ -110,7 +167,7 @@ func TestTreeGolden(t *testing.T) {
 		if !ok {
 			t.Fatalf("tree is missing %s", path)
 		}
-		golden := filepath.Join("testdata", "golden", filepath.FromSlash(path))
+		golden := filepath.Join("testdata", goldenDir, filepath.FromSlash(path))
 		if *update {
 			if err := os.MkdirAll(filepath.Dir(golden), 0o755); err != nil {
 				t.Fatalf("create golden dir: %v", err)
