@@ -129,6 +129,28 @@ func TestLoad(t *testing.T) {
 		}
 	}
 
+	// addStorageNIC layers the storage-plane shape onto the fixture: a
+	// static jumbo plane plus a referenced net1 on cp-01 carrying the
+	// given address line ("" drops the attribute entirely).
+	addStorageNIC := func(addressLine string) func(string) string {
+		return func(s string) string {
+			s = replace(`booty {`, `network "storage" {
+      dhcp = false
+      cidr = "10.10.13.0/24"
+      mtu  = 9000
+    }
+    booty {`)(s)
+			return replace(`        bridge  = "vmbr0"
+      }`, `        bridge  = "vmbr0"
+      }
+      network_interface "net1" {
+        network = "storage"
+        mac     = "02:50:99:a2:14:c9"
+        bridge  = "storbr0"`+addressLine+`
+      }`)(s)
+		}
+	}
+
 	tests := []struct {
 		name   string
 		mutate func(string) string
@@ -286,6 +308,212 @@ func TestLoad(t *testing.T) {
 			mutate: replace(`        primary = true`, `        primary = true
         vlan    = -1`),
 			wantErrs: []string{"Invalid network_interface vlan"},
+		},
+		{
+			// The fartlab shape end to end: a static jumbo plane and a
+			// referenced second NIC with its address inside the cidr.
+			name:   "storage plane accepted",
+			mutate: addStorageNIC("\n        address = \"10.10.13.51/24\""),
+		},
+		{
+			name:     "address outside the governing cidr",
+			mutate:   addStorageNIC("\n        address = \"10.10.14.51/24\""),
+			wantErrs: []string{"Address outside the governing cidr", `cidr "10.10.13.0/24"`},
+		},
+		{
+			name:     "referenced static interface missing address",
+			mutate:   addStorageNIC(""),
+			wantErrs: []string{"Missing static address", `"net1"`},
+		},
+		{
+			// The XOR rule, conflict direction: a reference plus one
+			// plane-owned attr is an error, never an override.
+			name: "conflicting forms reference plus dhcp",
+			mutate: replace(`        network = "servers"`, `        network = "servers"
+        dhcp    = true`),
+			wantErrs: []string{"Conflicting network_interface forms", "plane-owned dhcp"},
+		},
+		{
+			name: "conflicting forms lists every inline attr",
+			mutate: replace(`        network = "servers"`, `        network = "servers"
+        vlan    = 14
+        mtu     = 9000`),
+			wantErrs: []string{"Conflicting network_interface forms", "plane-owned vlan, mtu"},
+		},
+		{
+			// The XOR rule, incomplete direction: neither a reference
+			// nor the inline mode.
+			name:     "incomplete interface neither form",
+			mutate:   replace("\n        dhcp    = true", ""),
+			wantErrs: []string{"Incomplete network_interface", "sets neither network"},
+		},
+		{
+			name:     "unknown network reference",
+			mutate:   replace(`        network = "servers"`, `        network = "ghost"`),
+			wantErrs: []string{"Unknown network reference", `"ghost"`},
+		},
+		{
+			name: "duplicate network name",
+			mutate: replace(`booty {`, `network "dup" {
+      dhcp = true
+    }
+    network "dup" {
+      dhcp = true
+    }
+    booty {`),
+			wantErrs: []string{"Duplicate network name"},
+		},
+		{
+			name: "multiple primary networks",
+			mutate: replace(`booty {`, `network "extra" {
+      dhcp    = true
+      primary = true
+    }
+    booty {`),
+			wantErrs: []string{"Multiple primary networks"},
+		},
+		{
+			name: "static network without cidr",
+			mutate: replace(`booty {`, `network "nocidr" {
+      dhcp = false
+    }
+    booty {`),
+			wantErrs: []string{"Missing network cidr"},
+		},
+		{
+			name: "cidr on a dhcp network",
+			mutate: replace(`booty {`, `network "leased" {
+      dhcp = true
+      cidr = "10.0.40.0/24"
+    }
+    booty {`),
+			wantErrs: []string{"Cidr on a dhcp network"},
+		},
+		{
+			name: "invalid network cidr",
+			mutate: replace(`booty {`, `network "badcidr" {
+      dhcp = false
+      cidr = "not-a-cidr"
+    }
+    booty {`),
+			wantErrs: []string{"Invalid network cidr", "not-a-cidr"},
+		},
+		{
+			name: "network vlan out of range",
+			mutate: replace(`booty {`, `network "badvlan" {
+      dhcp = true
+      vlan = 4095
+    }
+    booty {`),
+			wantErrs: []string{"Invalid network vlan", "vlan 4095"},
+		},
+		{
+			name: "network mtu out of range",
+			mutate: replace(`booty {`, `network "badmtu" {
+      dhcp = true
+      mtu  = 100
+    }
+    booty {`),
+			wantErrs: []string{"Invalid network mtu", "mtu 100"},
+		},
+		{
+			// The plane doctrine from profiles, applied to networks: a
+			// plane nothing references governs nothing.
+			name: "unreferenced network",
+			mutate: replace(`booty {`, `network "lonely" {
+      dhcp = true
+    }
+    booty {`),
+			wantErrs: []string{"Unreferenced network", `add network = "lonely"`},
+		},
+		{
+			name: "inline mtu out of range",
+			mutate: replace(`        primary = true`, `        primary = true
+        mtu     = 65600`),
+			wantErrs: []string{"Invalid network_interface mtu", "mtu 65600"},
+		},
+		{
+			name: "address on a dhcp interface",
+			mutate: replace(`        primary = true`, `        primary = true
+        address = "10.0.20.9/24"`),
+			wantErrs: []string{"Address on a dhcp interface"},
+		},
+		{
+			name:     "static interface missing address",
+			mutate:   replace(`        dhcp    = true`, `        dhcp    = false`),
+			wantErrs: []string{"Missing static address"},
+		},
+		{
+			name: "static address not cidr form",
+			mutate: func(s string) string {
+				s = replace(`        dhcp    = true`, `        dhcp    = false`)(s)
+				return replace(`        primary = true`, `        primary = true
+        address = "10.0.20.9"`)(s)
+			},
+			wantErrs: []string{"Invalid network_interface address", "must be CIDR form"},
+		},
+		{
+			name:     "zero primary interfaces on a node",
+			mutate:   replace("\n        primary = true", ""),
+			wantErrs: []string{"Exactly one primary interface required", "0 primary"},
+		},
+		{
+			name: "two primary interfaces on a node",
+			mutate: replace(`      network_interface "net0" {
+        mac     = "02:50:99:a2:01:01"
+        bridge  = "vmbr1"
+        dhcp    = true
+        primary = true
+      }`, `      network_interface "net0" {
+        mac     = "02:50:99:a2:01:01"
+        bridge  = "vmbr1"
+        dhcp    = true
+        primary = true
+      }
+      network_interface "net1" {
+        mac     = "02:50:99:a2:14:02"
+        bridge  = "storbr0"
+        dhcp    = true
+        primary = true
+      }`),
+			wantErrs: []string{"Exactly one primary interface required", "2 primary"},
+		},
+		{
+			name: "invalid interface label",
+			mutate: replace(`network_interface "net0" {
+        mac     = "02:50:99:a2:01:01"`, `network_interface "eth0" {
+        mac     = "02:50:99:a2:01:01"`),
+			wantErrs: []string{"Invalid network_interface label", "net<N>"},
+		},
+		{
+			name: "duplicate interface label",
+			mutate: replace(`      network_interface "net0" {
+        mac     = "02:50:99:a2:01:01"
+        bridge  = "vmbr1"
+        dhcp    = true
+        primary = true
+      }`, `      network_interface "net0" {
+        mac     = "02:50:99:a2:01:01"
+        bridge  = "vmbr1"
+        dhcp    = true
+        primary = true
+      }
+      network_interface "net0" {
+        mac     = "02:50:99:a2:14:03"
+        bridge  = "storbr0"
+        dhcp    = true
+      }`),
+			wantErrs: []string{"Duplicate network_interface label"},
+		},
+		{
+			name: "node without interfaces",
+			mutate: replace(`      network_interface "net0" {
+        mac     = "02:50:99:a2:01:01"
+        bridge  = "vmbr1"
+        dhcp    = true
+        primary = true
+      }`, ""),
+			wantErrs: []string{"Missing network interface", `"worker-01"`},
 		},
 		{
 			name: "invalid cluster cni",

@@ -375,8 +375,13 @@ Phase 2's gate (the OQs are decided).
       profile doctrine: a plane no interface references is an error,
       not silently inert config — recorded as rule 10 in
       DESIGN-0004)*
-- [ ] Load tests: parse + one test per validation error, drill-style,
+- [x] Load tests: parse + one test per validation error, drill-style,
       covering both forms and the XOR conflicts
+      *(24 new mutation-table cases in `load_test.go`: both XOR
+      directions, every plane rule, every interface rule, the
+      fartlab storage-plane shape accepted end to end, and
+      `TestLoadResolvesAndNormalizes` now pins canonical MACs in
+      both the raw and resolved layers)*
 - [x] Migrate `examples/bootstrap.hcl` and test fixtures to the new
       surface, documenting both forms in place
       *(example: `servers` plane + referenced form on the control
