@@ -72,3 +72,9 @@ bootstrap-out/
 # Prior-cluster reference configs (machine configs may carry cluster
 # PKI/join secrets) — local reference only, never history.
 docs/examples/
+
+# Site-specific network docs (real MACs, switch ports, UniFi state) —
+# operator-local reference for the fartlab fleet and the homelab
+# Terraform modules, not part of this public repo's contract.
+docs/runbook/fleet-nic-map.md
+docs/runbook/network-requirements.md
