@@ -17,7 +17,7 @@ group "cp-01" {
     hostname = "cp-01"
     net0_mac = "02:50:99:a2:00:01"
     net1_mac = "02:50:99:a2:14:01"
-    net1_address = "10.10.13.51/24"
+    net1_address = "192.0.2.51/24"
   }
 }
 
@@ -30,7 +30,7 @@ group "cp-02" {
     hostname = "cp-02"
     net0_mac = "02:50:99:a2:00:02"
     net1_mac = "02:50:99:a2:14:02"
-    net1_address = "10.10.13.52/24"
+    net1_address = "192.0.2.52/24"
   }
 }
 
@@ -43,6 +43,6 @@ group "worker-01" {
     hostname = "worker-01"
     net0_mac = "02:50:99:a2:01:01"
     net1_mac = "02:50:99:a2:14:03"
-    net1_address = "10.10.13.61/24"
+    net1_address = "192.0.2.61/24"
   }
 }

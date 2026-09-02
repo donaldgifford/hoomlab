@@ -119,15 +119,15 @@ func multiNICTestCluster() *config.Cluster {
 			Nodes: []config.TalosNode{
 				{
 					Name: "cp-01", Role: config.RoleControlPlane, PVENode: "pve-01", VMID: 200,
-					Interfaces: withStorageNIC(bootNIC(cpMAC), "02:50:99:a2:14:01", "10.10.13.51/24"),
+					Interfaces: withStorageNIC(bootNIC(cpMAC), "02:50:99:a2:14:01", "192.0.2.51/24"),
 				},
 				{
 					Name: "cp-02", Role: config.RoleControlPlane, PVENode: "pve-02", VMID: 201,
-					Interfaces: withStorageNIC(bootNIC("02:50:99:a2:00:02"), "02:50:99:a2:14:02", "10.10.13.52/24"),
+					Interfaces: withStorageNIC(bootNIC("02:50:99:a2:00:02"), "02:50:99:a2:14:02", "192.0.2.52/24"),
 				},
 				{
 					Name: "worker-01", Role: config.RoleWorker, PVENode: "pve-01", VMID: 300,
-					Interfaces: withStorageNIC(bootNIC(workerMAC), "02:50:99:a2:14:03", "10.10.13.61/24"),
+					Interfaces: withStorageNIC(bootNIC(workerMAC), "02:50:99:a2:14:03", "192.0.2.61/24"),
 				},
 			},
 		},

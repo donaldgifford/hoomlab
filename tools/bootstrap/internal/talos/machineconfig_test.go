@@ -182,11 +182,11 @@ func multiNICCluster(t *testing.T) *config.Cluster {
 	c.Talos.Nodes = []config.TalosNode{
 		{
 			Name: "ctrl01", Role: config.RoleControlPlane, PVENode: "pve-01", VMID: 201,
-			Interfaces: multiNIC("02:50:99:a2:00:c9", "02:50:99:a2:14:c9", "10.10.13.51/24"),
+			Interfaces: multiNIC("02:50:99:a2:00:c9", "02:50:99:a2:14:c9", "192.0.2.51/24"),
 		},
 		{
 			Name: "work01", Role: config.RoleWorker, PVENode: "pve-01", VMID: 301,
-			Interfaces: multiNIC("02:50:99:a2:00:2d", "02:50:99:a2:14:2d", "10.10.13.61/24"),
+			Interfaces: multiNIC("02:50:99:a2:00:2d", "02:50:99:a2:14:2d", "192.0.2.61/24"),
 		},
 	}
 	if diags := c.ResolveInterfaces(); diags.HasErrors() {
@@ -319,7 +319,7 @@ func TestRoleTemplatesMultiNICRoundTrip(t *testing.T) {
 		talos.InstallImageVar:              image,
 		`{{ index .Vars "net0_mac" }}`:     "02:50:99:a2:00:2d",
 		`{{ index .Vars "net1_mac" }}`:     "02:50:99:a2:14:2d",
-		`{{ index .Vars "net1_address" }}`: "10.10.13.61/24",
+		`{{ index .Vars "net1_address" }}`: "192.0.2.61/24",
 	} {
 		if !strings.Contains(rendered, expr) {
 			t.Fatalf("worker template is missing expression %q", expr)
@@ -341,7 +341,7 @@ func TestRoleTemplatesMultiNICRoundTrip(t *testing.T) {
 	for _, want := range []string{
 		"hardwareAddr: 02:50:99:a2:00:2d",
 		"hardwareAddr: 02:50:99:a2:14:2d",
-		"- 10.10.13.61/24",
+		"- 192.0.2.61/24",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Errorf("rendered config is missing %q", want)

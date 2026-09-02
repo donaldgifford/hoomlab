@@ -309,7 +309,7 @@ func validateAddress(n *TalosNode, slot string, r *ResolvedInterface) hcl.Diagno
 	}
 	if r.Address == "" {
 		return hcl.Diagnostics{errf("Missing static address",
-			"talos node %q network_interface %q: a static (dhcp = false) interface requires address in CIDR form, e.g. \"10.10.13.51/24\".",
+			"talos node %q network_interface %q: a static (dhcp = false) interface requires address in CIDR form, e.g. \"192.0.2.51/24\".",
 			n.Name, slot)}
 	}
 	addr, err := netip.ParsePrefix(r.Address)

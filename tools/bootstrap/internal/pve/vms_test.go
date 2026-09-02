@@ -339,7 +339,7 @@ func addStorageNIC(t *testing.T, cfg *config.Cluster, node *config.TalosNode, ma
 func TestVMSpecRendersAllInterfaces(t *testing.T) {
 	cfg := vmsCluster()
 	node := &cfg.Talos.Nodes[3] // worker-01
-	addStorageNIC(t, cfg, node, "02:50:99:a2:14:2f", "10.10.13.63/24")
+	addStorageNIC(t, cfg, node, "02:50:99:a2:14:2f", "192.0.2.63/24")
 
 	spec := mustVMSpec(t, node)
 	if want := "virtio,bridge=vmbr1,macaddr=02:50:99:a2:01:01,firewall=0"; spec.Net0 != want {
@@ -359,7 +359,7 @@ func TestVMSpecRendersAllInterfaces(t *testing.T) {
 func TestVMsMultiNICWireFields(t *testing.T) {
 	cfg := vmsCluster()
 	node := &cfg.Talos.Nodes[3] // worker-01
-	addStorageNIC(t, cfg, node, "02:50:99:a2:14:2f", "10.10.13.63/24")
+	addStorageNIC(t, cfg, node, "02:50:99:a2:14:2f", "192.0.2.63/24")
 
 	p, qsvc := newProvisioner(t, cfg)
 	runVMs(t, p)

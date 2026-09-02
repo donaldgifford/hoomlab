@@ -136,7 +136,7 @@ func TestLoad(t *testing.T) {
 		return func(s string) string {
 			s = replace(`booty {`, `network "storage" {
       dhcp = false
-      cidr = "10.10.13.0/24"
+      cidr = "192.0.2.0/24"
       mtu  = 9000
     }
     booty {`)(s)
@@ -313,12 +313,12 @@ func TestLoad(t *testing.T) {
 			// The fartlab shape end to end: a static jumbo plane and a
 			// referenced second NIC with its address inside the cidr.
 			name:   "storage plane accepted",
-			mutate: addStorageNIC("\n        address = \"10.10.13.51/24\""),
+			mutate: addStorageNIC("\n        address = \"192.0.2.51/24\""),
 		},
 		{
 			name:     "address outside the governing cidr",
-			mutate:   addStorageNIC("\n        address = \"10.10.14.51/24\""),
-			wantErrs: []string{"Address outside the governing cidr", `cidr "10.10.13.0/24"`},
+			mutate:   addStorageNIC("\n        address = \"198.51.100.51/24\""),
+			wantErrs: []string{"Address outside the governing cidr", `cidr "192.0.2.0/24"`},
 		},
 		{
 			name:     "referenced static interface missing address",
@@ -798,7 +798,7 @@ k8sServicePort: 7445
 		{
 			name: "kubeprism host wrong",
 			values: `kubeProxyReplacement: true
-k8sServiceHost: 10.10.11.51
+k8sServiceHost: 192.0.2.51
 k8sServicePort: 7445
 `,
 			wantErrs: []string{"Cilium values miss the KubePrism host"},
