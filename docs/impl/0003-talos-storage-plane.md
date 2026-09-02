@@ -506,8 +506,8 @@ change must not break or change the cluster.
 
 - [ ] PR merged with `dont-release`; dispatch `tools-release.yml`
       tool=`bootstrap` version=`v0.3.0`; verify tag + archives
-      *(code side done — PR opened from `feat/network-planes`; merge
-      and dispatch are the operator's)*
+      *(code side done — PR #10 opened from `feat/network-planes`
+      with `dont-release`; merge and dispatch are the operator's)*
 - [ ] Operator: add the storage surface to `~/drill/bootstrap.hcl`
       with the authoritative table's exact values
       *(the verified draft already exists as
