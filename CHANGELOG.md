@@ -32,6 +32,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(impl)* Close IMPL-0003 Phase 4 — code complete, live shape-diff deferred to operator
 - *(impl)* Defer IMPL-0003 Phases 5-6 to the operator; record PR #10
 - *(impl)* Record the pre-merge pre-flight in Phase 5
+- *(impl)* Live shape-diff verified — code reproduces the hand patch
 
 ### Testing
 
