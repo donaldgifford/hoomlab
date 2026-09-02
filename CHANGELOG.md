@@ -30,10 +30,16 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(runbook)* Network requirements contract + fleet NIC map
 - *(runbook)* Network surface in §1, multi-NIC vms facts in §10, storage-plane rebirth note in §15
 - *(impl)* Close IMPL-0003 Phase 4 — code complete, live shape-diff deferred to operator
+- *(impl)* Defer IMPL-0003 Phases 5-6 to the operator; record PR #10
 
 ### Testing
 
 - *(bootstrap/config)* Drill-style load tests for the network surface
+
+### Miscellaneous Tasks
+
+- *(docs)* Untrack the site-specific network docs
+- *(bootstrap)* Use RFC 5737 documentation ranges in fixtures
 
 ## [tools/bootstrap/v0.2.0] - 2026-08-30
 
