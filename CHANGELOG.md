@@ -31,6 +31,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(runbook)* Network surface in §1, multi-NIC vms facts in §10, storage-plane rebirth note in §15
 - *(impl)* Close IMPL-0003 Phase 4 — code complete, live shape-diff deferred to operator
 - *(impl)* Defer IMPL-0003 Phases 5-6 to the operator; record PR #10
+- *(impl)* Record the pre-merge pre-flight in Phase 5
 
 ### Testing
 
