@@ -5,6 +5,17 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
 ## [unreleased]
 
+### Features
+
+- *(bootstrap)* [**breaking**] Network planes and interfaces replace flat node NICs
+- *(bootstrap/pve)* Render every declared interface in the VM spec
+- *(bootstrap/emit)* Machineconfig interfaces and catalog vars from the planes
+
+### Refactor
+
+- *(bootstrap)* Harden the resolved-interface API per style review
+- *(bootstrap/talos)* Style-review fixes for the template layer
+
 ### Documentation
 
 - *(runbook)* §15 full re-image — verified by the rename rebuild
@@ -15,6 +26,14 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(impl)* Allow fenced blocks in IMPL-0003 (MD046)
 - *(impl)* IMPL-0003 layering addendum — primitives, planes, and the XOR rule
 - *(design)* DESIGN-0004 — network planes and interfaces, promoted from IMPL-0003
+- *(impl-0003)* Record phases 1-2 — storage plane live by hand
+- *(runbook)* Network requirements contract + fleet NIC map
+- *(runbook)* Network surface in §1, multi-NIC vms facts in §10, storage-plane rebirth note in §15
+- *(impl)* Close IMPL-0003 Phase 4 — code complete, live shape-diff deferred to operator
+
+### Testing
+
+- *(bootstrap/config)* Drill-style load tests for the network surface
 
 ## [tools/bootstrap/v0.2.0] - 2026-08-30
 

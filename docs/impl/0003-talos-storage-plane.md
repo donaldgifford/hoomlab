@@ -506,8 +506,14 @@ change must not break or change the cluster.
 
 - [ ] PR merged with `dont-release`; dispatch `tools-release.yml`
       tool=`bootstrap` version=`v0.3.0`; verify tag + archives
+      *(code side done — PR opened from `feat/network-planes`; merge
+      and dispatch are the operator's)*
 - [ ] Operator: add the storage surface to `~/drill/bootstrap.hcl`
       with the authoritative table's exact values
+      *(the verified draft already exists as
+      `~/drill/bootstrap.hcl.next` — servers plane `vlan = 11`,
+      storage plane with **no vlan** + `mtu = 9000` +
+      `cidr = "10.10.13.0/24"`, per-node net0/net1 blocks)*
 - [ ] Operator: full stage loop from the released v0.3.0 binary —
       expected shape: `emit` applies once (artifact drift only:
       machine-configs gain the interfaces block, catalog gains the
@@ -516,6 +522,11 @@ change must not break or change the cluster.
 - [ ] rsync + restart booty; re-run the loop — zero everywhere
 - [ ] Confirm live cluster state untouched (nodes, workloads, ArgoCD
       apps — nothing restarted, nothing changed)
+
+**Phase 5 status (2026-09-02): `deferred - human required`.** All
+code-side work is complete and committed; every remaining step
+needs the release train or the live cluster, which the operator
+drives (IMPL-0002 operating rule).
 
 #### Success Criteria
 
@@ -541,8 +552,15 @@ answered the rebuild's.
 - [ ] Any deviation found → recorded here and folded back
       (INV-0001 discipline; a substantial one opens its own INV)
 - [ ] Runbook markers updated where this IMPL touched sections
+      *(§1/§10/§15 already describe the new surface; the §15
+      storage-plane note carries a not-yet-executed-live marker that
+      flips when the rebirth runs)*
 - [ ] DESIGN-0004 status → **Implemented**
 - [ ] This doc: all boxes checked, status → **Completed**
+
+**Phase 6 status (2026-09-02): `deferred - human required`.** The
+rebirth is a live-cluster window; the two status flips are gated on
+its outcome, so nothing here can move until the operator runs it.
 
 #### Success Criteria
 
@@ -562,19 +580,21 @@ answered the rebuild's.
 | `internal/pve/vms_test.go` | Modify | multi-NIC + boot-order regression tests |
 | `internal/emit/catalog.go` | Modify | per-interface group vars |
 | `internal/talos/machineconfig.go` | Modify | interfaces section in role templates |
-| `internal/emit/testdata/golden/**` | Modify | storage fixture goldens; legacy untouched |
+| `internal/config/resolve.go` | Add | the resolver: raw → `ResolvedInterface`, XOR + per-interface rules |
+| `internal/emit/testdata/golden-multinic/**` | Add | multi-interface goldens; the legacy `golden/**` set untouched |
 | `examples/bootstrap.hcl` | Modify | document the surface |
 | `docs/runbook/bootstrap-cluster.md` | Modify | §1, §10, §15 notes |
 
 ## Testing Plan
 
-- [ ] Load tests per validation rule (drill-style, one failing input
+- [x] Load tests per validation rule (drill-style, one failing input
       each)
-- [ ] `VMSpec` regression tests: net1 fields, boot order unchanged
-- [ ] Template round-trip in machinery metal mode with storage vars
-      substituted
-- [ ] Golden byte-identity for storage-less fixtures — the
-      back-compat contract as a test
+- [x] `VMSpec` regression tests: net1 fields, boot order unchanged
+- [x] Template round-trip in machinery metal mode with storage vars
+      substituted (`TestRoleTemplatesMultiNICRoundTrip`)
+- [x] Golden byte-identity for storage-less fixtures — the
+      back-compat contract as a test (`testdata/golden/**` unchanged
+      through the whole change; `TestRoleTemplatesSingleNICByteIdentical`)
 - [ ] The two live proofs (Phases 5–6) stay out of CI, recorded here
       (IMPL-0001's decision: the e2e drill is not a merge gate)
 
