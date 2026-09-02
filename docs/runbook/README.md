@@ -32,3 +32,5 @@ say so inline rather than implying a confidence nobody has earned.
 | Runbook | What it covers |
 | --- | --- |
 | [Bare Proxmox nodes → healthy Talos cluster](bootstrap-cluster.md) | The `bootstrap` CLI end to end: config, PVE formation, certificates, Talos secrets, booty artifacts, VM creation, etcd bootstrap, health |
+| [Network requirements — cluster planes](network-requirements.md) | The assertable network contract (Servers + Storage planes): UniFi settings, port profiles, jumbo chain, validation sweeps, fault signatures — feed for the homelab Terraform modules |
+| [Fleet NIC map](fleet-nic-map.md) | Per-host NICs, MACs, switch ports, bridges, and addresses as they are live |
