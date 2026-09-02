@@ -474,6 +474,27 @@ Phase 2's end state.
   against `talosctl -n <ip> get machineconfig` output for one node).
 - Single-interface emit output is byte-identical to v0.2.0's.
 
+**Phase 4 code complete (2026-09-02).** Battery green (race tests,
+lint 0 issues, goldens, build); single-interface output
+byte-identical (the golden set never changed;
+`TestRoleTemplatesSingleNICByteIdentical` proves the template
+layer). The live shape-diff criterion is
+`deferred - human required`: run, from a machine with the
+talosconfig, e.g.
+
+```sh
+talosctl -n 10.10.11.63 get machineconfig -o yaml | rg -A 14 'interfaces:'
+```
+
+and compare against the fields the round-trip test renders
+(deviceSelector/hardwareAddr per NIC; `dhcp: true` on net0;
+`dhcp: false`, `mtu: 9000`, `addresses: [<addr>/24]` on net1 — no
+routes). `TestRoleTemplatesMultiNICRoundTrip` pins exactly this
+shape in CI; the live diff is the operator's confirmation on real
+metal. Style review pass produced three fixes (error wrapping,
+named substitution fields, doc repair). Commits `4f8e5c5`,
+`6547181`, `c9c0ad0`, `c8f0768`.
+
 ---
 
 ### Phase 5: Release and convergence acceptance
