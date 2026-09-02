@@ -478,20 +478,25 @@ Phase 2's end state.
 lint 0 issues, goldens, build); single-interface output
 byte-identical (the golden set never changed;
 `TestRoleTemplatesSingleNICByteIdentical` proves the template
-layer). The live shape-diff criterion is
-`deferred - human required`: run, from a machine with the
-talosconfig, e.g.
+layer). The live shape-diff criterion is **verified (2026-09-02)**: the
+operator ran
 
 ```sh
 talosctl -n 10.10.11.63 get machineconfig -o yaml | rg -A 14 'interfaces:'
 ```
 
-and compare against the fields the round-trip test renders
-(deviceSelector/hardwareAddr per NIC; `dhcp: true` on net0;
-`dhcp: false`, `mtu: 9000`, `addresses: [<addr>/24]` on net1 — no
-routes). `TestRoleTemplatesMultiNICRoundTrip` pins exactly this
-shape in CI; the live diff is the operator's confirmation on real
-metal. Style review pass produced three fixes (error wrapping,
+and work03's hand-patched live block matches the generated template
+block **field-for-field after var substitution** — same
+deviceSelector/hardwareAddr style, same field order, `dhcp: true`
+on net0, `addresses`/`mtu: 9000`/`dhcp: false` on net1, no routes,
+no tag. The manual Phase 2 patch went to the nodes only (the served
+tree's templates were never hand-edited — the emit diff is pure
+addition), so the code reproduces the verified end state exactly.
+One expected leftover: the live machineconfig's `install.image`
+still names the pre-split schematic (`dc7b152c…`) — `talosctl
+upgrade --image` doesn't rewrite the stored config; the Phase 6
+rebirth aligns it. `TestRoleTemplatesMultiNICRoundTrip` pins the
+same shape in CI. Style review pass produced three fixes (error wrapping,
 named substitution fields, doc repair). Commits `4f8e5c5`,
 `6547181`, `c9c0ad0`, `c8f0768`.
 
@@ -539,8 +544,14 @@ Phase 1). `emit` drift matched the predicted shape exactly —
 `.next`'s booty url with the live tree's (a drafted future url had
 crept in, reproducing the same input-drift trio of `booty-run.sh` /
 `00-variables.hcl` / `embed.ipxe` that IMPL-0002 recorded on
-08-27). The apply itself stays with the released v0.3.0 binary per
-the tasks above.
+08-27). Content verified via a scratch render (`--output
+/tmp/preflight`) diffed against the live tree: the template hunks
+are pure addition of the interfaces block, the catalog hunks add
+exactly the authoritative table's MACs and addresses for all six
+nodes, and substituting work03's vars into the generated block
+reproduces the live node's hand-patched machineconfig section
+byte-for-byte (see the Phase 4 live shape-diff result). The apply
+itself stays with the released v0.3.0 binary per the tasks above.
 
 #### Success Criteria
 
