@@ -597,22 +597,31 @@ Their values extend the authoritative table's schemes:
 
 #### Tasks
 
-- [ ] Operator: UniFi DHCP reservations for the two net0 MACs
+- [x] Operator: UniFi DHCP reservations for the two net0 MACs
       (`.64`/`.65`); work04/05 blocks added to `~/drill/bootstrap.hcl`
       (same `profiles` and interface shape as work01–03, larger
       `cores`/`memory`/`disk_gb`)
-- [ ] Dry run: `emit` differs on `catalog/20-groups.hcl` only,
+- [x] Dry run: `emit` differs on `catalog/20-groups.hcl` only,
       `boot-assets` done, `vms` 4 of 16 pending
-- [ ] Apply: `emit`, copy the tree to ns1 + restart booty, `vms`;
+- [x] Apply: `emit`, copy the tree to ns1 + restart booty, `vms`;
       both nodes PXE boot, install, and join — with their storage
       NIC, table address, MTU 9000, and iscsid, from config alone,
       indistinguishable from the hand-patched workers
-- [ ] Verify on each new node: `talosctl get machineconfig` shows the
+      *(2026-09-28: both Ready at `.64`/`.65` within two minutes)*
+- [x] Verify on each new node: `talosctl get machineconfig` shows the
       interfaces block; `talosctl get addresses` shows the storage
-      address on the second NIC; a jumbo ping to the portal
-      (`10.10.13.20`) succeeds unfragmented
+      address on the second NIC
+      *(2026-09-28, both nodes: machineconfig interfaces block
+      identical in shape to the hand-patched workers with their own
+      MACs and `10.10.13.64`/`.65`; `ens19` up at MTU 9000 carrying
+      the storage address, `ens18` at 1500; iscsi-tools and
+      util-linux-tools present, `ext-iscsid` running; `install.image`
+      on the current `88d1f7a5…` schematic)*
+- [ ] Jumbo ping from a new node to the portal (`10.10.13.20`)
+      succeeds unfragmented
 - [ ] Convergence loop after the join: zero; `health` green with 8
-      nodes
+      nodes *(health green with 8 nodes, 2026-09-28; the zero loop
+      is still to run)*
 - [ ] Any deviation found → recorded here and folded back
       (INV-0001 discipline; a substantial one opens its own INV)
 - [ ] Runbook markers updated where this IMPL touched sections
@@ -622,9 +631,10 @@ Their values extend the authoritative table's schemes:
 - [ ] DESIGN-0004 status → **Implemented**
 - [ ] This doc: all boxes checked, status → **Completed**
 
-**Phase 6 status (2026-09-28): `deferred - human required`.** The
-join is a live-cluster window; the two status flips are gated on
-its outcome.
+**Phase 6 status (2026-09-28): join done, two checks left.** Both
+new workers came up with their storage plane from config alone —
+no hand steps. Remaining before the status flips: the jumbo ping
+and the zero convergence loop.
 
 #### Success Criteria
 
