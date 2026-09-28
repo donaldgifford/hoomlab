@@ -11,6 +11,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(impl)* Phase 6 proves the storage plane with new workers work04/05
 - *(impl)* Phase 6 — work04/05 joined with their storage plane from config alone
 - *(impl)* Phase 6 — jumbo path verified end to end from work04
+- IMPL-0003 Completed, DESIGN-0004 Implemented
 
 ## [tools/bootstrap/v0.3.0] - 2026-09-02
 
