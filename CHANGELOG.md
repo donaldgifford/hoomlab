@@ -8,6 +8,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 ### Documentation
 
 - *(impl)* Phase 5 complete — v0.3.0 converges with zero cluster mutations
+- *(impl)* Phase 6 proves the storage plane with new workers work04/05
 
 ## [tools/bootstrap/v0.3.0] - 2026-09-02
 
