@@ -32,7 +32,7 @@ created: 2026-08-31
   - [Phase 5: Release and convergence acceptance](#phase-5-release-and-convergence-acceptance)
     - [Tasks](#tasks-4)
     - [Success Criteria](#success-criteria-4)
-  - [Phase 6: Rebirth proof and close](#phase-6-rebirth-proof-and-close)
+  - [Phase 6: New-worker proof and close](#phase-6-new-worker-proof-and-close)
     - [Tasks](#tasks-5)
     - [Success Criteria](#success-criteria-5)
 - [File Changes](#file-changes)
@@ -66,7 +66,7 @@ authoritative design record)
   storage NIC in config, `net1` in the VM spec, storage vars and the
   `machine.network.interfaces` section in emit.
 - `tools/bootstrap/v0.3.0` and the two acceptance proofs: the
-  zero-mutation convergence loop and the single-worker rebirth.
+  zero-mutation convergence loop and the new-worker proof (work04/05).
 
 ### Out of Scope
 
@@ -494,8 +494,10 @@ tree's templates were never hand-edited — the emit diff is pure
 addition), so the code reproduces the verified end state exactly.
 One expected leftover: the live machineconfig's `install.image`
 still names the pre-split schematic (`dc7b152c…`) — `talosctl
-upgrade --image` doesn't rewrite the stored config; the Phase 6
-rebirth aligns it. `TestRoleTemplatesMultiNICRoundTrip` pins the
+upgrade --image` doesn't rewrite the stored config. Phase 6 no
+longer rebuilds a node (see there), so the six existing nodes keep
+the stale field until they are next reinstalled or patched; it only
+matters to an upgrade that reads `install.image` from the config. `TestRoleTemplatesMultiNICRoundTrip` pins the
 same shape in CI. Style review pass produced three fixes (error wrapping,
 named substitution fields, doc repair). Commits `4f8e5c5`,
 `6547181`, `c9c0ad0`, `c8f0768`.
@@ -573,35 +575,61 @@ itself stays with the released v0.3.0 binary per the tasks above.
 
 ---
 
-### Phase 6: Rebirth proof and close
+### Phase 6: New-worker proof and close
 
-The real question from INV-0002, answered the way the rename window
-answered the rebuild's.
+The real question from INV-0002 — can a node get its storage plane
+from config alone? — answered by growing the cluster instead of
+destroying a node. **Amended 2026-09-28:** the proof moved from a
+work03 §15 rebirth to joining two new, larger workers, work04 (304)
+and work05 (305). They take exactly the path a reborn worker would:
+VM created with every declared NIC, PXE boot, machineconfig served
+by MAC with the storage block already in it, no hand steps. The
+rebirth-specific parts of §15 (reusing a name, IP, and stale Node
+object) are not re-exercised here; §15 itself was proven in the
+IMPL-0002 rename window.
+
+Their values extend the authoritative table's schemes:
+
+| Node | VMID | Node IP (VLAN 11) | net0 MAC | net1 MAC | Storage address |
+| --- | --- | --- | --- | --- | --- |
+| work04 | 304 | 10.10.11.64 | 02:50:99:a2:01:30 | 02:50:99:a2:14:30 | 10.10.13.64/24 |
+| work05 | 305 | 10.10.11.65 | 02:50:99:a2:01:31 | 02:50:99:a2:14:31 | 10.10.13.65/24 |
 
 #### Tasks
 
-- [ ] §15 spot check on **one worker** (e.g. work03/303): stop,
-      destroy, stage loop — the node must come back with its storage
-      NIC, its table address, and iscsid, from config alone,
-      indistinguishable from its hand-patched siblings
-- [ ] Convergence loop after the rebirth: zero
+- [ ] Operator: UniFi DHCP reservations for the two net0 MACs
+      (`.64`/`.65`); work04/05 blocks added to `~/drill/bootstrap.hcl`
+      (same `profiles` and interface shape as work01–03, larger
+      `cores`/`memory`/`disk_gb`)
+- [ ] Dry run: `emit` differs on `catalog/20-groups.hcl` only,
+      `boot-assets` done, `vms` 4 of 16 pending
+- [ ] Apply: `emit`, copy the tree to ns1 + restart booty, `vms`;
+      both nodes PXE boot, install, and join — with their storage
+      NIC, table address, MTU 9000, and iscsid, from config alone,
+      indistinguishable from the hand-patched workers
+- [ ] Verify on each new node: `talosctl get machineconfig` shows the
+      interfaces block; `talosctl get addresses` shows the storage
+      address on the second NIC; a jumbo ping to the portal
+      (`10.10.13.20`) succeeds unfragmented
+- [ ] Convergence loop after the join: zero; `health` green with 8
+      nodes
 - [ ] Any deviation found → recorded here and folded back
       (INV-0001 discipline; a substantial one opens its own INV)
 - [ ] Runbook markers updated where this IMPL touched sections
       *(§1/§10/§15 already describe the new surface; the §15
-      storage-plane note carries a not-yet-executed-live marker that
-      flips when the rebirth runs)*
+      storage-plane note's not-yet-executed-live marker flips to
+      cite this join)*
 - [ ] DESIGN-0004 status → **Implemented**
 - [ ] This doc: all boxes checked, status → **Completed**
 
-**Phase 6 status (2026-09-02): `deferred - human required`.** The
-rebirth is a live-cluster window; the two status flips are gated on
-its outcome, so nothing here can move until the operator runs it.
+**Phase 6 status (2026-09-28): `deferred - human required`.** The
+join is a live-cluster window; the two status flips are gated on
+its outcome.
 
 #### Success Criteria
 
-- The reborn worker's storage plane needed zero hand steps.
-- `kubectl get nodes` 6/6 Ready; health green; workloads rescheduled.
+- The new workers' storage plane needed zero hand steps.
+- `kubectl get nodes` 8/8 Ready; health green.
 - The doc chain is consistent: INV-0002 Concluded, this doc
   Completed, runbook current.
 

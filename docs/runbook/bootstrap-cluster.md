@@ -759,8 +759,8 @@ With the network surface in the config (DESIGN-0004), the rebuild
 also carries the **storage plane**: recreated VMs come back with
 every declared NIC, and the served machineconfigs already hold the
 static storage addresses by MAC selector — no hand patching on the
-way back up. `[not yet executed live — IMPL-0003 Phase 6 is the
-single-worker proof of exactly this]`
+way back up. `[not yet executed live — IMPL-0003 Phase 6 proves the same
+path by joining two new workers]`
 
 1. Make the config edits the window is for (`talos { name = … }`,
    endpoint changes, …), re-emit, and sync the tree to the booty host
