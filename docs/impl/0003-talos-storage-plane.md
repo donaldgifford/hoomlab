@@ -509,29 +509,40 @@ change must not break or change the cluster.
 
 #### Tasks
 
-- [ ] PR merged with `dont-release`; dispatch `tools-release.yml`
+- [x] PR merged with `dont-release`; dispatch `tools-release.yml`
       tool=`bootstrap` version=`v0.3.0`; verify tag + archives
-      *(code side done — PR #10 opened from `feat/network-planes`
-      with `dont-release`; merge and dispatch are the operator's)*
-- [ ] Operator: add the storage surface to `~/drill/bootstrap.hcl`
+      *(PR #10 merged 2026-09-02; tag `tools/bootstrap/v0.3.0` cut
+      by the workflow)*
+- [x] Operator: add the storage surface to `~/drill/bootstrap.hcl`
       with the authoritative table's exact values
-      *(the verified draft already exists as
-      `~/drill/bootstrap.hcl.next` — servers plane `vlan = 11`,
-      storage plane with **no vlan** + `mtu = 9000` +
-      `cidr = "10.10.13.0/24"`, per-node net0/net1 blocks)*
-- [ ] Operator: full stage loop from the released v0.3.0 binary —
+      *(`bootstrap.hcl.next` promoted 2026-09-27; the v0.2.0 config
+      kept as `bootstrap.hcl.v0.2.0`)*
+- [x] Operator: full stage loop from the released v0.3.0 binary —
       expected shape: `emit` applies once (artifact drift only:
       machine-configs gain the interfaces block, catalog gains the
       vars), `ipxe` 0, `vms` 0 (no retrofit, by design),
       `bootstrap` skips, `health` green
-- [ ] rsync + restart booty; re-run the loop — zero everywhere
-- [ ] Confirm live cluster state untouched (nodes, workloads, ArgoCD
+      *(2026-09-28: exactly this — `emit` 1 applied, `ipxe` 0,
+      `vms` 0 of 12, `bootstrap` 0 of 3, `health` green)*
+- [x] rsync + restart booty; re-run the loop — zero everywhere
+      *(ns1 had no rsync, so the three changed files went over by
+      `scp`; booty's `/machine-config?mac=` responses for work03 and
+      ctrl01 carried the interfaces block with each node's real
+      MACs and address; second loop zero everywhere)*
+- [x] Confirm live cluster state untouched (nodes, workloads, ArgoCD
       apps — nothing restarted, nothing changed)
 
-**Phase 5 status (2026-09-02): `deferred - human required`.** All
-code-side work is complete and committed; every remaining step
-needs the release train or the live cluster, which the operator
-drives (IMPL-0002 operating rule).
+**Phase 5 complete (2026-09-28).** Both loop runs left the cluster
+untouched; the only writes were the three artifact-tree files, and
+booty now serves storage-aware machineconfigs that match the live
+nodes. Two operator notes from the run: the dry run first reported
+every artifact pending because the live tree had been renamed
+(`bootstrap-out-c`), so `--output` pointed at a missing directory —
+running without `--dry-run` there would have written fresh
+credentials into a new `out/`; and `rsync` was missing on ns1 even
+though Phase 1's sync used it on 09-01, so it went missing since —
+worth pinning in the booty Ansible role, since the update contract
+above is `rsync -a` + restart.
 
 **Pre-merge pre-flight (2026-09-02, branch build, read-only):** the
 operator ran the full loop as `--dry-run` from a branch-built binary
