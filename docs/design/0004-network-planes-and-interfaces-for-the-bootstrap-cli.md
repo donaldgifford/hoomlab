@@ -1,7 +1,7 @@
 ---
 id: DESIGN-0004
 title: "Network planes and interfaces for the bootstrap CLI"
-status: Approved
+status: Implemented
 author: Donald Gifford
 created: 2026-08-31
 ---

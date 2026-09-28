@@ -1,7 +1,7 @@
 ---
 id: IMPL-0003
 title: "Talos storage plane"
-status: In Progress
+status: Completed
 author: Donald Gifford
 created: 2026-08-31
 ---
@@ -622,22 +622,28 @@ Their values extend the authoritative table's schemes:
       *(2026-09-28, work04: `ping -M do -s 8972` from a node debug
       pod in `kube-system` — 3/3, 0% loss, ~0.3 ms; `default`
       rejects node debug pods under PodSecurity `baseline`)*
-- [ ] Convergence loop after the join: zero; `health` green with 8
-      nodes *(health green with 8 nodes, 2026-09-28; the zero loop
-      is still to run)*
-- [ ] Any deviation found → recorded here and folded back
+- [x] Convergence loop after the join: zero; `health` green with 8
+      nodes *(2026-09-28: `validate` 3 pve / 8 talos, `emit` 0 of 2,
+      `ipxe` 0 of 1, `vms` 0 of 16; health green with 8 nodes)*
+- [x] Any deviation found → recorded here and folded back
       (INV-0001 discipline; a substantial one opens its own INV)
-- [ ] Runbook markers updated where this IMPL touched sections
+      *(no code deviations; the operator findings — renamed output
+      tree, `rsync` missing on ns1, PodSecurity blocking node debug
+      pods in `default` — are recorded above)*
+- [x] Runbook markers updated where this IMPL touched sections
       *(§1/§10/§15 already describe the new surface; the §15
       storage-plane note's not-yet-executed-live marker flips to
       cite this join)*
-- [ ] DESIGN-0004 status → **Implemented**
-- [ ] This doc: all boxes checked, status → **Completed**
+- [x] DESIGN-0004 status → **Implemented**
+- [x] This doc: all boxes checked, status → **Completed**
 
-**Phase 6 status (2026-09-28): join done, two checks left.** Both
-new workers came up with their storage plane from config alone —
-no hand steps. Remaining before the status flips: the zero
-convergence loop.
+**Phase 6 complete (2026-09-28) — IMPL-0003 Completed.** Both new
+workers came up with their storage plane from config alone — no
+hand steps — the jumbo path holds end to end, and the loop after
+the join is zero everywhere. Known leftover: the six original nodes
+still carry the pre-split `install.image` (`dc7b152c…`) in their
+stored machineconfig; harmless unless an upgrade reads the image
+from config, fixable with a per-node `talosctl patch mc`.
 
 #### Success Criteria
 
@@ -672,7 +678,7 @@ convergence loop.
 - [x] Golden byte-identity for storage-less fixtures — the
       back-compat contract as a test (`testdata/golden/**` unchanged
       through the whole change; `TestRoleTemplatesSingleNICByteIdentical`)
-- [ ] The two live proofs (Phases 5–6) stay out of CI, recorded here
+- [x] The two live proofs (Phases 5–6) stay out of CI, recorded here
       (IMPL-0001's decision: the e2e drill is not a merge gate)
 
 ## Open Questions
