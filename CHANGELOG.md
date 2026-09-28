@@ -10,6 +10,14 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(bootstrap)* Report the module version when ldflags stamp nothing
 - *(bootstrap)* Bump grpc to v1.83.1 for GO-2026-6348
 
+### Documentation
+
+- *(impl)* Phase 5 complete — v0.3.0 converges with zero cluster mutations
+- *(impl)* Phase 6 proves the storage plane with new workers work04/05
+- *(impl)* Phase 6 — work04/05 joined with their storage plane from config alone
+- *(impl)* Phase 6 — jumbo path verified end to end from work04
+- IMPL-0003 Completed, DESIGN-0004 Implemented
+
 ## [tools/bootstrap/v0.3.0] - 2026-09-02
 
 ### Features
