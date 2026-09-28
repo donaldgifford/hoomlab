@@ -8,6 +8,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 ### Bug Fixes
 
 - *(bootstrap)* Report the module version when ldflags stamp nothing
+- *(bootstrap)* Bump grpc to v1.83.1 for GO-2026-6348
 
 ## [tools/bootstrap/v0.3.0] - 2026-09-02
 
