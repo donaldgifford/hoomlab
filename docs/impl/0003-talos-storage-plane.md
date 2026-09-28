@@ -617,8 +617,11 @@ Their values extend the authoritative table's schemes:
       the storage address, `ens18` at 1500; iscsi-tools and
       util-linux-tools present, `ext-iscsid` running; `install.image`
       on the current `88d1f7a5…` schematic)*
-- [ ] Jumbo ping from a new node to the portal (`10.10.13.20`)
+- [x] Jumbo ping from a new node to the portal (`10.10.13.20`)
       succeeds unfragmented
+      *(2026-09-28, work04: `ping -M do -s 8972` from a node debug
+      pod in `kube-system` — 3/3, 0% loss, ~0.3 ms; `default`
+      rejects node debug pods under PodSecurity `baseline`)*
 - [ ] Convergence loop after the join: zero; `health` green with 8
       nodes *(health green with 8 nodes, 2026-09-28; the zero loop
       is still to run)*
@@ -633,8 +636,8 @@ Their values extend the authoritative table's schemes:
 
 **Phase 6 status (2026-09-28): join done, two checks left.** Both
 new workers came up with their storage plane from config alone —
-no hand steps. Remaining before the status flips: the jumbo ping
-and the zero convergence loop.
+no hand steps. Remaining before the status flips: the zero
+convergence loop.
 
 #### Success Criteria
 
