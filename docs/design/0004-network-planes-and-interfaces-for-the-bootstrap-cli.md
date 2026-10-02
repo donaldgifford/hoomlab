@@ -1,7 +1,7 @@
 ---
 id: DESIGN-0004
 title: "Network planes and interfaces for the bootstrap CLI"
-status: Approved
+status: Implemented
 author: Donald Gifford
 created: 2026-08-31
 ---
@@ -346,15 +346,15 @@ type ResolvedInterface struct {
   back-compat contract as a test.
 - Live acceptance stays out of CI (IMPL-0001's decision): IMPL-0003
   Phase 5 (zero-mutation convergence loop against the live cluster)
-  and Phase 6 (single-worker §15 rebirth carrying its storage plane
-  from config alone).
+  and Phase 6 (two new workers joining with their storage plane
+  from config alone — amended from a single-worker §15 rebirth).
 
 ## Migration / Rollout Plan
 
 IMPL-0003 is the rollout, in order: the operator's hand layer first
 (its verified end state is the executable spec), then this surface
 (Phases 3–4), `tools/bootstrap/v0.3.0`, the convergence acceptance,
-and the rebirth proof. The hand-applied NICs and machineconfig
+and the new-worker proof. The hand-applied NICs and machineconfig
 patches become disposable scaffolding the moment the config, the
 live nodes, and the served artifacts agree.
 

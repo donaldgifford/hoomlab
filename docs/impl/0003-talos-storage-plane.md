@@ -1,7 +1,7 @@
 ---
 id: IMPL-0003
 title: "Talos storage plane"
-status: In Progress
+status: Completed
 author: Donald Gifford
 created: 2026-08-31
 ---
@@ -32,7 +32,7 @@ created: 2026-08-31
   - [Phase 5: Release and convergence acceptance](#phase-5-release-and-convergence-acceptance)
     - [Tasks](#tasks-4)
     - [Success Criteria](#success-criteria-4)
-  - [Phase 6: Rebirth proof and close](#phase-6-rebirth-proof-and-close)
+  - [Phase 6: New-worker proof and close](#phase-6-new-worker-proof-and-close)
     - [Tasks](#tasks-5)
     - [Success Criteria](#success-criteria-5)
 - [File Changes](#file-changes)
@@ -66,7 +66,7 @@ authoritative design record)
   storage NIC in config, `net1` in the VM spec, storage vars and the
   `machine.network.interfaces` section in emit.
 - `tools/bootstrap/v0.3.0` and the two acceptance proofs: the
-  zero-mutation convergence loop and the single-worker rebirth.
+  zero-mutation convergence loop and the new-worker proof (work04/05).
 
 ### Out of Scope
 
@@ -494,8 +494,10 @@ tree's templates were never hand-edited — the emit diff is pure
 addition), so the code reproduces the verified end state exactly.
 One expected leftover: the live machineconfig's `install.image`
 still names the pre-split schematic (`dc7b152c…`) — `talosctl
-upgrade --image` doesn't rewrite the stored config; the Phase 6
-rebirth aligns it. `TestRoleTemplatesMultiNICRoundTrip` pins the
+upgrade --image` doesn't rewrite the stored config. Phase 6 no
+longer rebuilds a node (see there), so the six existing nodes keep
+the stale field until they are next reinstalled or patched; it only
+matters to an upgrade that reads `install.image` from the config. `TestRoleTemplatesMultiNICRoundTrip` pins the
 same shape in CI. Style review pass produced three fixes (error wrapping,
 named substitution fields, doc repair). Commits `4f8e5c5`,
 `6547181`, `c9c0ad0`, `c8f0768`.
@@ -509,29 +511,40 @@ change must not break or change the cluster.
 
 #### Tasks
 
-- [ ] PR merged with `dont-release`; dispatch `tools-release.yml`
+- [x] PR merged with `dont-release`; dispatch `tools-release.yml`
       tool=`bootstrap` version=`v0.3.0`; verify tag + archives
-      *(code side done — PR #10 opened from `feat/network-planes`
-      with `dont-release`; merge and dispatch are the operator's)*
-- [ ] Operator: add the storage surface to `~/drill/bootstrap.hcl`
+      *(PR #10 merged 2026-09-02; tag `tools/bootstrap/v0.3.0` cut
+      by the workflow)*
+- [x] Operator: add the storage surface to `~/drill/bootstrap.hcl`
       with the authoritative table's exact values
-      *(the verified draft already exists as
-      `~/drill/bootstrap.hcl.next` — servers plane `vlan = 11`,
-      storage plane with **no vlan** + `mtu = 9000` +
-      `cidr = "10.10.13.0/24"`, per-node net0/net1 blocks)*
-- [ ] Operator: full stage loop from the released v0.3.0 binary —
+      *(`bootstrap.hcl.next` promoted 2026-09-27; the v0.2.0 config
+      kept as `bootstrap.hcl.v0.2.0`)*
+- [x] Operator: full stage loop from the released v0.3.0 binary —
       expected shape: `emit` applies once (artifact drift only:
       machine-configs gain the interfaces block, catalog gains the
       vars), `ipxe` 0, `vms` 0 (no retrofit, by design),
       `bootstrap` skips, `health` green
-- [ ] rsync + restart booty; re-run the loop — zero everywhere
-- [ ] Confirm live cluster state untouched (nodes, workloads, ArgoCD
+      *(2026-09-28: exactly this — `emit` 1 applied, `ipxe` 0,
+      `vms` 0 of 12, `bootstrap` 0 of 3, `health` green)*
+- [x] rsync + restart booty; re-run the loop — zero everywhere
+      *(ns1 had no rsync, so the three changed files went over by
+      `scp`; booty's `/machine-config?mac=` responses for work03 and
+      ctrl01 carried the interfaces block with each node's real
+      MACs and address; second loop zero everywhere)*
+- [x] Confirm live cluster state untouched (nodes, workloads, ArgoCD
       apps — nothing restarted, nothing changed)
 
-**Phase 5 status (2026-09-02): `deferred - human required`.** All
-code-side work is complete and committed; every remaining step
-needs the release train or the live cluster, which the operator
-drives (IMPL-0002 operating rule).
+**Phase 5 complete (2026-09-28).** Both loop runs left the cluster
+untouched; the only writes were the three artifact-tree files, and
+booty now serves storage-aware machineconfigs that match the live
+nodes. Two operator notes from the run: the dry run first reported
+every artifact pending because the live tree had been renamed
+(`bootstrap-out-c`), so `--output` pointed at a missing directory —
+running without `--dry-run` there would have written fresh
+credentials into a new `out/`; and `rsync` was missing on ns1 even
+though Phase 1's sync used it on 09-01, so it went missing since —
+worth pinning in the booty Ansible role, since the update contract
+above is `rsync -a` + restart.
 
 **Pre-merge pre-flight (2026-09-02, branch build, read-only):** the
 operator ran the full loop as `--dry-run` from a branch-built binary
@@ -562,35 +575,80 @@ itself stays with the released v0.3.0 binary per the tasks above.
 
 ---
 
-### Phase 6: Rebirth proof and close
+### Phase 6: New-worker proof and close
 
-The real question from INV-0002, answered the way the rename window
-answered the rebuild's.
+The real question from INV-0002 — can a node get its storage plane
+from config alone? — answered by growing the cluster instead of
+destroying a node. **Amended 2026-09-28:** the proof moved from a
+work03 §15 rebirth to joining two new, larger workers, work04 (304)
+and work05 (305). They take exactly the path a reborn worker would:
+VM created with every declared NIC, PXE boot, machineconfig served
+by MAC with the storage block already in it, no hand steps. The
+rebirth-specific parts of §15 (reusing a name, IP, and stale Node
+object) are not re-exercised here; §15 itself was proven in the
+IMPL-0002 rename window.
+
+Their values extend the authoritative table's schemes:
+
+| Node | VMID | Node IP (VLAN 11) | net0 MAC | net1 MAC | Storage address |
+| --- | --- | --- | --- | --- | --- |
+| work04 | 304 | 10.10.11.64 | 02:50:99:a2:01:30 | 02:50:99:a2:14:30 | 10.10.13.64/24 |
+| work05 | 305 | 10.10.11.65 | 02:50:99:a2:01:31 | 02:50:99:a2:14:31 | 10.10.13.65/24 |
 
 #### Tasks
 
-- [ ] §15 spot check on **one worker** (e.g. work03/303): stop,
-      destroy, stage loop — the node must come back with its storage
-      NIC, its table address, and iscsid, from config alone,
-      indistinguishable from its hand-patched siblings
-- [ ] Convergence loop after the rebirth: zero
-- [ ] Any deviation found → recorded here and folded back
+- [x] Operator: UniFi DHCP reservations for the two net0 MACs
+      (`.64`/`.65`); work04/05 blocks added to `~/drill/bootstrap.hcl`
+      (same `profiles` and interface shape as work01–03, larger
+      `cores`/`memory`/`disk_gb`)
+- [x] Dry run: `emit` differs on `catalog/20-groups.hcl` only,
+      `boot-assets` done, `vms` 4 of 16 pending
+- [x] Apply: `emit`, copy the tree to ns1 + restart booty, `vms`;
+      both nodes PXE boot, install, and join — with their storage
+      NIC, table address, MTU 9000, and iscsid, from config alone,
+      indistinguishable from the hand-patched workers
+      *(2026-09-28: both Ready at `.64`/`.65` within two minutes)*
+- [x] Verify on each new node: `talosctl get machineconfig` shows the
+      interfaces block; `talosctl get addresses` shows the storage
+      address on the second NIC
+      *(2026-09-28, both nodes: machineconfig interfaces block
+      identical in shape to the hand-patched workers with their own
+      MACs and `10.10.13.64`/`.65`; `ens19` up at MTU 9000 carrying
+      the storage address, `ens18` at 1500; iscsi-tools and
+      util-linux-tools present, `ext-iscsid` running; `install.image`
+      on the current `88d1f7a5…` schematic)*
+- [x] Jumbo ping from a new node to the portal (`10.10.13.20`)
+      succeeds unfragmented
+      *(2026-09-28, work04: `ping -M do -s 8972` from a node debug
+      pod in `kube-system` — 3/3, 0% loss, ~0.3 ms; `default`
+      rejects node debug pods under PodSecurity `baseline`)*
+- [x] Convergence loop after the join: zero; `health` green with 8
+      nodes *(2026-09-28: `validate` 3 pve / 8 talos, `emit` 0 of 2,
+      `ipxe` 0 of 1, `vms` 0 of 16; health green with 8 nodes)*
+- [x] Any deviation found → recorded here and folded back
       (INV-0001 discipline; a substantial one opens its own INV)
-- [ ] Runbook markers updated where this IMPL touched sections
+      *(no code deviations; the operator findings — renamed output
+      tree, `rsync` missing on ns1, PodSecurity blocking node debug
+      pods in `default` — are recorded above)*
+- [x] Runbook markers updated where this IMPL touched sections
       *(§1/§10/§15 already describe the new surface; the §15
-      storage-plane note carries a not-yet-executed-live marker that
-      flips when the rebirth runs)*
-- [ ] DESIGN-0004 status → **Implemented**
-- [ ] This doc: all boxes checked, status → **Completed**
+      storage-plane note's not-yet-executed-live marker flips to
+      cite this join)*
+- [x] DESIGN-0004 status → **Implemented**
+- [x] This doc: all boxes checked, status → **Completed**
 
-**Phase 6 status (2026-09-02): `deferred - human required`.** The
-rebirth is a live-cluster window; the two status flips are gated on
-its outcome, so nothing here can move until the operator runs it.
+**Phase 6 complete (2026-09-28) — IMPL-0003 Completed.** Both new
+workers came up with their storage plane from config alone — no
+hand steps — the jumbo path holds end to end, and the loop after
+the join is zero everywhere. Known leftover: the six original nodes
+still carry the pre-split `install.image` (`dc7b152c…`) in their
+stored machineconfig; harmless unless an upgrade reads the image
+from config, fixable with a per-node `talosctl patch mc`.
 
 #### Success Criteria
 
-- The reborn worker's storage plane needed zero hand steps.
-- `kubectl get nodes` 6/6 Ready; health green; workloads rescheduled.
+- The new workers' storage plane needed zero hand steps.
+- `kubectl get nodes` 8/8 Ready; health green.
 - The doc chain is consistent: INV-0002 Concluded, this doc
   Completed, runbook current.
 
@@ -620,7 +678,7 @@ its outcome, so nothing here can move until the operator runs it.
 - [x] Golden byte-identity for storage-less fixtures — the
       back-compat contract as a test (`testdata/golden/**` unchanged
       through the whole change; `TestRoleTemplatesSingleNICByteIdentical`)
-- [ ] The two live proofs (Phases 5–6) stay out of CI, recorded here
+- [x] The two live proofs (Phases 5–6) stay out of CI, recorded here
       (IMPL-0001's decision: the e2e drill is not a merge gate)
 
 ## Open Questions
