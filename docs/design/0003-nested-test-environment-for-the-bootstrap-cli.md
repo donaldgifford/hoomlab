@@ -29,6 +29,14 @@ created: 2026-08-28
 - [References](#references)
 <!--toc:end-->
 
+> **Status note (2026-10-10):** still **Draft**, deliberately. A
+> doc-vs-code review found nothing from this design built yet, and
+> that's expected: the environment has a chicken-and-egg problem — it
+> needs a working cluster to host the nested one — which is why the
+> first cluster came up through the operator's earlier Ansible test
+> bootstrap instead. That Ansible tooling is prior art for the nested
+> provisioning described here; the intent to build this remains.
+
 ## Overview
 
 The isolated nested test environment IMPL-0002 deliberately deferred:

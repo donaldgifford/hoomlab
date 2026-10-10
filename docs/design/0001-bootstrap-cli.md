@@ -73,6 +73,17 @@ Also undocumented here and worth knowing: `talos health --wait`, the
 ACME account re-registration when the CA directory flips, and that
 every PVE connection skips TLS verification.
 
+**PVE TLS verification — decided 2026-10-10: no change yet.** The skip
+is deliberate for now: config endpoints are IP addresses, and the
+certificates `pve certs` installs cover `<node>.<domain>` hostnames,
+so verification would fail even on a fully certified cluster. The
+planned path, once DNS for the nodes exists: endpoints move to
+hostnames and connections verify against those ACME certificates —
+the CLI's own Stage 2 output. Ordering constraint for that change:
+`pve form`, `pve storage`, and `pve certs` run against PVE's
+self-signed certificates on a bare cluster, so a first run cannot
+verify; only stages after `pve certs` (and re-runs) can.
+
 ## Overview
 
 The bootstrap CLI (ADR-0001) takes bare Proxmox nodes to a formed Proxmox

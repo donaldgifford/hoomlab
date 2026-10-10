@@ -225,9 +225,9 @@ port. There is no allowlist of the chart's value surface: that would
 pin a chart version's keys into the binary.
 
 When the config selects `flannel` (the Talos default) or `none`
-(operator brings their own CNI), none of the above renders; with
-`none`, `talos health`'s node-Ready gate is relaxed to the checks
-that don't require a CNI (OQ-F).
+(operator brings their own CNI), none of the above renders. `talos
+health` is unchanged under `none` — its node-Ready check fails until
+the operator's CNI is running (OQ-F).
 
 ### Extensions and schematics
 
@@ -427,6 +427,11 @@ source of truth.
 - **OQ-F — health semantics under `cni = "none"`.** Which
   `talos health` checks remain meaningful without a CNI, and does
   T2 still claim "Ready"? Only matters for the escape-hatch path.
+  *Closed 2026-10-10, unbuilt by decision*: the cluster runs Cilium
+  and is expected to stay on it, so the relaxed gate isn't worth
+  building. Under `none`, health runs the full check and T2's Ready
+  claim is the operator's to satisfy. Revisit only if a non-Cilium
+  CNI is ever on the table.
 
 ## References
 
