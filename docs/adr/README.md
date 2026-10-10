@@ -31,5 +31,5 @@ docz create adr "Your ADR Title"
 
 | ID | Title | Status | Date | Author | Link |
 |----|-------|--------|------|--------|------|
-| ADR-0001 | Bootstrap CLI | Proposed | 2026-08-17 | Donald Gifford | [0001-bootstrap-cli-and-service.md](0001-bootstrap-cli-and-service.md) |
+| ADR-0001 | Bootstrap CLI | Accepted | 2026-08-17 | Donald Gifford | [0001-bootstrap-cli-and-service.md](0001-bootstrap-cli-and-service.md) |
 <!-- END DOCZ AUTO-GENERATED -->

@@ -119,8 +119,9 @@ Observed on ns1 (10.10.11.190, Servers VLAN 11) across drill Phases
 
 Per guest, the VM-config contract the drill proved load-bearing — now
 pinned and regression-tested in `tools/bootstrap/internal/pve/vms.go`
-(INV-0001 deviations 11/12/14; every item produces a VM that "looks
-fine and never boots" when dropped):
+(INV-0001 deviations 12/14) and, for the iPXE embed's `dhcp`,
+`tools/bootstrap/internal/emit/artifacts.go` (deviation 11); every item
+produces a VM that "looks fine and never boots" when dropped:
 
 - q35 + OVMF, EFI vars disk without pre-enrolled Secure Boot keys
 - `virtio-scsi-single` (the API-default LSI controller has no Talos

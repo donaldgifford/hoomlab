@@ -181,10 +181,12 @@ An interface takes exactly one of the two forms:
 
 Setting both is an **error, never an override** — there is no
 precedence engine and there never will be one. Setting neither is an
-error naming exactly what's missing. Both error paths point at the
-offending `network_interface` block (labeled blocks carry per-block
-source ranges; this is why the surface is blocks, not an attribute
-list).
+error naming exactly what's missing. Both error paths name the node
+and slot of the offending `network_interface` block. *(Amended
+2026-10-10: the diagnostics name the block in text, not by source
+position — validation runs after decode, where gohcl keeps no ranges.
+Labeled blocks still earn their place: one block per PVE slot, with
+the slot as its label.)*
 
 ### The resolution model
 
@@ -196,8 +198,11 @@ The structural decision that keeps every future door open:
 2. One **resolver** turns each raw interface into a **resolved
    interface**: every fact explicit — slot, MAC, bridge, VLAN, mode,
    primary, address, cidr — with no optionality left.
-3. Validation, `VMSpec`, and emit consume **only the resolved form**.
-   They never know whether a fact arrived inline or via a plane.
+3. Cross-node validation, `VMSpec`, and emit consume **only the
+   resolved form**. They never know whether a fact arrived inline or
+   via a plane. (Plane-block rules — names, ranges, dhcp/cidr — check
+   the planes themselves, once; the resolver checks inline values.
+   One error per mistake, whichever way the fact arrived.)
 
 A future plane capability (MTU on the jumbo day, a new addressing
 mode) is a plane attr plus a resolver line plus a resolved field —
@@ -244,6 +249,14 @@ Everything downstream reads the resolved interfaces:
   names — virtio PCI enumeration order is not a contract. No routes,
   no gateway, no DNS on secondary planes.
 
+  *As built (IMPL-0003 Phase 4):* booty serves **one template per
+  role**, so the per-node MACs and addresses above are not literals in
+  the template. The template carries `{{ index .Vars "netN_mac" }}` /
+  `{{ index .Vars "netN_address" }}`, and each node's catalog group
+  supplies them as `vars`. That is why emit requires every node of a
+  role to share one interface **shape** — the same slots, modes, and
+  MTUs (rule 11).
+
 ### Validation
 
 Flat rules over the resolved form, each with its own test:
@@ -256,7 +269,9 @@ Flat rules over the resolved form, each with its own test:
 5. Every node resolves to exactly one primary interface.
 6. DHCP mode → `address` forbidden; static mode → `address`
    required, CIDR form, contained in the governing `cidr` when one
-   exists.
+   exists, with the cidr's prefix length (amended 2026-10-10:
+   containment alone accepted `/16` or `/32` under a `/24`, silently
+   changing the node's connected route).
 7. MACs globally unique across every interface of every node.
 8. Interface labels match `net\d+`, unique per node.
 9. `mtu`, when set, within virtio's 576–65520. The fabric ceiling
@@ -267,12 +282,27 @@ Flat rules over the resolved form, each with its own test:
     governs nothing, which is near-certainly a config that added
     the block and forgot the interfaces — the same silently-inert
     failure the unreferenced-profile rule already catches.
+11. Every node of a role shares one interface shape — slots, modes,
+    and MTUs (added at implementation, Phase 4; enforced by `talos
+    emit`, not `validate`, because it is a property of the one
+    template per role — see Derivations).
+12. The primary interface is dhcp, whether set on the plane or inline
+    (added 2026-10-10): the PXE boot path needs a lease, and a
+    primary-only node renders no interfaces block, so a static primary
+    would validate and then silently DHCP.
+13. `cidr` on a dhcp interface is an error inline as on a plane
+    (added 2026-10-10 for symmetry with rule 2).
 
-Deliberately absent: any uniformity rule across nodes (a node with
-only its primary interface is valid — the fleet table in IMPL-0003
-is the operator's uniformity check), and any MAC scheme enforcement
-(the fifth-octet-as-VLAN convention lives in docs; validation wants
-only well-formed, unique MACs).
+Also enforced and not numbered above: `vlan` within 1–4094 on planes
+and inline, and MACs canonicalized to lowercase colon form in both the
+raw and resolved layers (so uniqueness survives `02-50-99-A2…`).
+
+Deliberately absent: any uniformity rule *across roles* (a primary-only
+control plane beside two-NIC workers is valid), and any MAC scheme
+enforcement (the fifth-octet-as-VLAN convention lives in docs;
+validation wants only well-formed, unique MACs). *(Amended 2026-10-10:
+this originally said "any uniformity rule across nodes"; rule 11 makes
+it per role.)*
 
 ## API / Interface Changes
 
@@ -290,7 +320,10 @@ node "ctrl01" {                   node "ctrl01" {
                                   }
 ```
 
-Validation errors guide the migration. No CLI flag or stage surface
+A v0.2.0 config fails validation with gohcl's "Unsupported argument"
+on each removed attr plus "Missing network interface" per node — no
+dedicated migration diagnostic was built; the before/after above is
+the migration guide. No CLI flag or stage surface
 changes; `validate`, `talos emit`, and `pve|talos` stage behavior is
 identical for single-interface configs.
 

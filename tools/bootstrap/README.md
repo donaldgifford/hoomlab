@@ -65,7 +65,7 @@ Global flags (CLI concerns, deliberately not config): `--config`
 Run the stages in order. Each prints the next one when it finishes.
 
 ```text
-validate → pve form → pve certs → talos secrets → talos emit
+validate → pve form → pve storage → pve certs → talos secrets → talos emit
         → talos ipxe → [start booty] → talos vms
         → talos bootstrap → talos health
 ```
@@ -82,7 +82,17 @@ at a time (each join waits for corosync membership and quorum), and
 verifies the formed cluster is quorate. Interruption-safe: re-run and
 it picks up at the first unjoined node.
 
-### 3. `bootstrap pve certs`
+### 3. `bootstrap pve storage`
+
+Converges the config's `storage` blocks into PVE cluster storage
+entries: missing entries are created, and drifted declared fields
+(pool, content, nodes, sparse, disable) are updated in place. Fields a
+block doesn't declare are never touched. An entry whose type or path
+disagrees with the config is an error, never a delete-and-recreate —
+deletion could orphan VM disks. With no storage blocks declared the
+stage does nothing.
+
+### 4. `bootstrap pve certs`
 
 ACME account, Cloudflare DNS-01 plugin, per-node certificate domains
 (`<node>.<domain>`), and certificate orders. Renewal is the same
@@ -90,14 +100,14 @@ command re-run — a certificate under 30 days of validity goes pending
 again. While drilling, set the commented `acme.directory` to Let's
 Encrypt staging so failed orders don't burn production rate limits.
 
-### 4. `bootstrap talos secrets`
+### 5. `bootstrap talos secrets`
 
 Generates the Talos secrets bundle — **the cluster identity** — at
 `--secrets`. Runs once; an existing file is never overwritten, because
 regenerating it orphans every node holding the old identity. Back this
 file up and treat it like a private key.
 
-### 5. `bootstrap talos emit`
+### 6. `bootstrap talos emit`
 
 Renders everything booty serves, under `<output>/booty/`:
 
@@ -114,14 +124,14 @@ Re-run any time; the check is a byte-diff. **When anything changed,
 restart the booty container** — booty loads the catalog and templates
 once at startup, and a re-emit nobody restarts serves stale configs.
 
-### 6. `bootstrap talos ipxe`
+### 7. `bootstrap talos ipxe`
 
 Builds `<output>/booty/boot/ipxe.efi` in a container (pinned iPXE
 source, the emitted `embed.ipxe` baked in). Takes a few minutes the
 first time; afterwards it only rebuilds when `talos.booty.url`
 changes.
 
-### 7. Start booty (operator step)
+### 8. Start booty (operator step)
 
 Copy `<output>/booty/` to the booty host and run `./booty-run.sh`
 there. The script encodes the operational sharp edges (`--net=host`,
@@ -133,7 +143,7 @@ curl http://<booty-host>:8080/boot.ipxe
 curl "http://<booty-host>:8080/machine-config?mac=<a-configured-mac>"
 ```
 
-### 8. `bootstrap talos vms`
+### 9. `bootstrap talos vms`
 
 Creates and starts every configured VM on its Proxmox node. The
 settings are deliberate — UEFI without pre-enrolled Secure Boot keys,
@@ -145,14 +155,14 @@ the booty logs or `qm terminal <vmid>`.
 Re-imaging a node later is: wipe its disk, reboot — the firmware falls
 back to PXE and the cycle repeats.
 
-### 9. `bootstrap talos bootstrap`
+### 10. `bootstrap talos bootstrap`
 
 One-time etcd bootstrap against the endpoint host, then credentials
 under `<output>/out/`: `talosconfig` (from the secrets bundle) and
 `kubeconfig` (fetched from the live cluster). "Already bootstrapped"
 is success; existing credential files are never overwritten.
 
-### 10. `bootstrap talos health`
+### 11. `bootstrap talos health`
 
 Blocks until the cluster's own health check passes (`--wait`, default
 10m). This is also the standalone verification command. When it

@@ -9,11 +9,12 @@ created: 2026-08-17
 
 # DESIGN 0001: Bootstrap CLI
 
-**Status:** In Review
+**Status:** Implemented (amended 2026-10-10 — see [As built](#as-built-amended-2026-10-10))
 **Author:** Donald Gifford
 **Date:** 2026-08-17
 
 <!--toc:start-->
+- [As built (amended 2026-10-10)](#as-built-amended-2026-10-10)
 - [Overview](#overview)
 - [Goals and Non-Goals](#goals-and-non-goals)
   - [Goals](#goals)
@@ -40,6 +41,37 @@ created: 2026-08-17
 - [Open Questions](#open-questions)
 - [References](#references)
 <!--toc:end-->
+
+## As built (amended 2026-10-10)
+
+The stage set, command tree, step engine, and convergence model shipped
+as designed. A doc-vs-code review on 2026-10-10 found passages that had
+gone stale as later work landed; they are corrected in place, and this
+list records what changed and why:
+
+- **Config schema** — flat node `mac`/`bridge` replaced by network
+  planes and `network_interface` blocks (DESIGN-0004); new blocks from
+  DESIGN-0002 and INV-0002 listed under [Configuration
+  schema](#configuration-schema).
+- **`pve storage`** — a stage between `pve form` and `pve certs`
+  (IMPL-0003), converging PVE storage declarations.
+- **Formation credentials** — cluster creation runs as `root@pam`, as
+  the secrets table already said; corosync link0 comes from the node's
+  `address`.
+- **VM existence check** — the node's VM list, not `qemu.Get` (real PVE
+  returns 500 for a missing VMID).
+- **Emission** — boot assets live under a per-schematic path; profiles
+  split per role × schematic; the one network call is schematic
+  resolution; machineconfig templates are asserted structurally, not by
+  golden file.
+- **OQ-6 / OQ-9** — implementation notes added to both decisions
+  (trust-on-first-use asset digests; the CLI's own pinned iPXE build
+  with a build stamp).
+- **Release train** — tools release on dispatch (`tools-release.yml`).
+
+Also undocumented here and worth knowing: `talos health --wait`, the
+ACME account re-registration when the CA directory flips, and that
+every PVE connection skips TLS verification.
 
 ## Overview
 
@@ -78,8 +110,9 @@ Go libraries — grounded in what those libraries actually export today.
   config directory and the world are the only truths.
 - **No unattended end-to-end run.** Stages are separate commands by design;
   the operator drives, inspects, and re-runs.
-- **No release-train integration yet** — built and run locally
-  (`just bootstrap-build`); tools release path is a planned ADR.
+- ~~**No release-train integration yet**~~ — *superseded at
+  implementation:* `tools-release.yml` cuts `tools/bootstrap/vX.Y.Z`
+  on dispatch and publishes binary archives (first release v0.1.0).
 - **No day-2 management.** Scaling, upgrades, and node lifecycle beyond
   bring-up belong to the Hoomlab service (RFC-0001 Phase 2).
 
@@ -204,7 +237,7 @@ the HCL file; anything CLI-only (output paths, verbosity) is a flag.
 The expected operator flow, start to finish:
 
 ```text
-validate → pve form → pve certs → talos secrets → talos emit → talos ipxe
+validate → pve form → pve storage → pve certs → talos secrets → talos emit → talos ipxe
         → [operator starts booty container] → talos vms
         → talos bootstrap → talos health
 ```
@@ -244,7 +277,7 @@ between runs. Concretely:
 | node certificate | `GetNodeCertificates` shows an ACME cert covering the node FQDN, not near expiry |
 | secrets bundle | the file at `--secrets` exists (the one filesystem check — see OQ-2) |
 | emit artifacts | emitted tree matches a fresh render (byte-compare; always safe to re-emit — but booty loads the catalog/templates once at startup, so a changed emit ends with "restart the booty container" in the step output) |
-| VM for node X | a VM with the configured VMID exists on the target PVE node (`qemu.Get`); started if config says so |
+| VM for node X | a VM with the configured VMID exists on the target PVE node (the node's VM `List` index — real PVE answers a by-ID `Get` for a missing VMID with HTTP 500, not 404); started if config says so |
 | etcd bootstrap | Talos API reports etcd healthy / bootstrap already done (treat "already bootstrapped" errors as done) |
 
 Interruption anywhere → re-run the stage; completed steps check as done
@@ -256,8 +289,8 @@ and are skipped. PVE writes go through `tasks.Ref` waits so a step is not
 Direct translation of pvelab's `FormCluster` (copied and adapted, not
 imported — pvelab is functional documentation):
 
-1. Client to node 1 (`api.TokenCredentials` resolved through the
-   config's `env()` references — OQ-4).
+1. Client to node 1 as `root@pam` (the `root_password` `env()`
+   reference — OQ-4; PVE refuses cluster creation through a token).
    `CreateCluster(&ClusterCreateSpec{Name})`; poll
    `ListConfigNodes` until the node appears (fire-and-poll per the SDK
    docs; formation restarts pmxcfs under the call).
@@ -266,7 +299,7 @@ imported — pvelab is functional documentation):
    `JoinCluster(&JoinSpec{Hostname: node1, Password: <root@pam>,
    Fingerprint})`, wait for membership, then wait for quorum before the
    next join. Corosync `link0`/ring addresses go through `JoinSpec.Extra`
-   from the node's `corosync_link` config when set.
+   from the node's `address` config when set.
 
 Joins require the root@pam password of an existing member — the one
 credential the token cannot substitute for. Like every secret, the
@@ -296,14 +329,14 @@ CLI concern, not config, per OQ-8):
 ```text
 <output>/booty/
 ├── catalog/
-│   ├── 00-variables.hcl      # cluster name, talos version, endpoint, boot_base
-│   ├── 10-profiles.hcl       # talos-control / talos-worker profiles
+│   ├── 00-variables.hcl      # talos version, booty url, boot_base, common cmdline
+│   ├── 10-profiles.hcl       # talos-control / talos-worker (+ -<schematic> when a role splits)
 │   └── 20-groups.hcl         # one group per node, pinned by MAC
 ├── templates/                # --templates-dir overlay (see OQ-1)
 │   └── talos/{controlplane,worker}.yaml.tmpl   # family subdir is mandatory
 ├── boot/
 │   ├── ipxe.efi              # embedded-chain iPXE build (OQ-9)
-│   └── talos/<version>/{vmlinuz,initramfs.xz}  # fetch: see OQ-6
+│   └── talos/<version>/<schematic>/{vmlinuz,initramfs.xz}  # fetch: see OQ-6
 └── booty-run.sh              # ready-to-run `docker run … booty serve …`
 ```
 
@@ -323,8 +356,11 @@ CLI concern, not config, per OQ-8):
   the recommended path bakes machinery-generated, secret-bearing
   per-role templates into the `templates/` overlay so booty serves full
   configs with zero booty changes.
-- Emission is pure rendering: no API calls, deterministic output,
-  golden-file tested. Re-emit is always safe; a diff against the existing
+- Emission is deterministic rendering, golden-file tested (the catalog;
+  the secret-bearing templates are asserted structurally). Its one
+  network call: with `profile` blocks declared, resolving each unique
+  extension set to an Image Factory schematic ID (a `POST
+  /schematics`, cached per set). Re-emit is always safe; a diff against the existing
   tree is the `Check`.
 - Starting the booty container remains an operator step by design
   (ADR-0001 prerequisite); `booty-run.sh` makes it copy-paste — and
@@ -344,8 +380,9 @@ qemu.NewService(client, pveNode, caps).Create(ctx, &qemu.CreateSpec{
     Name:   node.Hostname,
     Memory: node.Memory, Cores: node.Cores,
     SCSI0:  fmt.Sprintf("%s:%d", node.Storage, node.DiskGB),
-    Net0:   fmt.Sprintf("virtio,bridge=%s,macaddr=%s,firewall=0", node.Bridge, node.MAC),
-    Boot:   "order=scsi0;net0",   // disk first, PXE fallback — see below
+    Net0:   netN(primary),        // virtio,bridge=…,macaddr=…,firewall=0[,tag=…][,mtu=…]
+    // net1…: Extra[slot] = netN(nic) for every further interface (DESIGN-0004)
+    Boot:   "order=scsi0;" + primary.Slot,   // disk first, PXE fallback — see below
     Extra:  map[string]string{ /* bios/efidisk0/machine/cpu/rng0/serial0 */ },
 })
 ```
@@ -468,22 +505,42 @@ cluster "homelab" {
       url = "http://10.0.10.5:8080"        # where the operator runs the container
     }
 
+    # Amended (DESIGN-0004, v0.3.0): NICs are network_interface blocks
+    # referencing network planes, replacing the flat mac/bridge/vlan.
+    network "servers" {
+      dhcp    = true
+      primary = true                       # the PXE boot path
+    }
+
     node "cp-01" {
       role     = "controlplane"
       pve_node = "pve-01"
       vmid     = 200
-      mac      = "02:50:99:a2:00:01"
       cores    = 4
       memory   = 8192
       disk_gb  = 64
       storage  = "local-zfs"
-      bridge   = "vmbr0"
+
+      network_interface "net0" {
+        network = "servers"
+        mac     = "02:50:99:a2:00:01"
+        bridge  = "vmbr0"
+      }
     }
-    node "cp-02" { role = "controlplane" pve_node = "pve-02" vmid = 201 mac = "02:50:99:a2:00:02" /* … */ }
-    node "worker-01" { role = "worker" pve_node = "pve-03" vmid = 300 mac = "02:50:99:a2:01:01" /* … */ }
+    node "cp-02" { role = "controlplane" pve_node = "pve-02" vmid = 201 /* … net0 … */ }
+    node "worker-01" { role = "worker" pve_node = "pve-03" vmid = 300 /* … net0 … */ }
   }
 }
 ```
+
+Blocks added after this design, each owned elsewhere: `pve.storage`
+(storage declarations, INV-0002/IMPL-0003), `talos.cluster` (CNI and
+Cilium completion, DESIGN-0002), `talos.profile` (extension sets →
+factory schematics, DESIGN-0002), `talos.network` + per-node
+`network_interface` (DESIGN-0004), and the optional `talos.name`,
+`kubernetes_version`, `schematic_id`, `acme.directory`, and
+`booty.version`. The example config (`tools/bootstrap/examples/
+bootstrap.hcl`) is the complete, test-loaded reference.
 
 Config-continuity constraint (RFC-0001, OQ-8): this file is what the
 Hoomlab service later consumes to take ownership — deployed on the
@@ -652,6 +709,11 @@ the config's `talos` settings instead of drifting from a manual step.
 
 - ~~b: operator stages them manually~~
 
+*Amended at implementation:* "checksum-verified" is trust-on-first-use.
+The Image Factory publishes no checksum, so emit records a SHA-256
+sidecar on first download (authenticity rests on TLS to the factory)
+and checks Content-Length; later runs verify against the sidecar.
+
 **OQ-7 — Is there a meta-command that chains stages?**
 
 **Decided: a** (2026-08-19). No meta-command. The documented flow is the
@@ -688,6 +750,14 @@ diffs the script and triggers the rebuild.
 
 - ~~b: operator builds manually via booty's `just ipxe-embed`~~
 - ~~c: download a stock `ipxe.efi`~~
+
+*Amended at implementation (IMPL-0001):* the decision stands — the CLI
+builds the binary in docker — but the mechanism differs. `talos ipxe`
+runs its own pinned build (`debian:bookworm-slim`, iPXE `v1.21.1`), not
+booty's recipe, and convergence compares a build-time stamp
+(`boot/ipxe.efi.embed.sha256`, the digest of the `embed.ipxe` the
+binary was compiled with) against a fresh render; a stale on-disk
+`embed.ipxe` is refused rather than silently rebuilt around.
 
 ## References
 
