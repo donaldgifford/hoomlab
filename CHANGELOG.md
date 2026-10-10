@@ -7,6 +7,13 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Bug Fixes
 
+- Go 1.26.9 for the service module and image
+- *(bootstrap)* Grpc v1.83.2 and cel-go v0.29.0 for Dependabot alerts
+
+## [tools/bootstrap/v0.3.1] - 2026-10-10
+
+### Bug Fixes
+
 - *(bootstrap)* Report the module version when ldflags stamp nothing
 - *(bootstrap)* Bump grpc to v1.83.1 for GO-2026-6348
 - *(bootstrap/config)* Close three network-interface validation gaps
