@@ -151,6 +151,19 @@ func TestLoad(t *testing.T) {
 		}
 	}
 
+	// addInlineNIC gives worker-01 a non-primary inline net1 carrying
+	// the given mode lines — the address rules' subject, kept off the
+	// primary so the static-primary rule stays out of their way.
+	addInlineNIC := func(modeLines string) func(string) string {
+		return replace(`        primary = true
+      }`, `        primary = true
+      }
+      network_interface "net1" {
+        mac     = "02:50:99:a2:14:01"
+        bridge  = "storbr0"`+modeLines+`
+      }`)
+	}
+
 	tests := []struct {
 		name   string
 		mutate func(string) string
@@ -321,6 +334,45 @@ func TestLoad(t *testing.T) {
 			wantErrs: []string{"Address outside the governing cidr", `cidr "192.0.2.0/24"`},
 		},
 		{
+			name:     "address prefix wider than the governing cidr",
+			mutate:   addStorageNIC("\n        address = \"192.0.2.51/16\""),
+			wantErrs: []string{"Address prefix differs from the governing cidr", "prefix /16", "use 192.0.2.51/24"},
+		},
+		{
+			name:     "host-route address under a subnet cidr",
+			mutate:   addStorageNIC("\n        address = \"192.0.2.51/32\""),
+			wantErrs: []string{"Address prefix differs from the governing cidr", "prefix /32"},
+		},
+		{
+			// The PXE chain needs a lease on the boot NIC, and a
+			// single-NIC node renders no interfaces block at all — a
+			// static primary would validate and then silently DHCP.
+			name: "static primary plane",
+			mutate: replace(`      dhcp    = true
+      primary = true
+    }`, `      dhcp    = false
+      primary = true
+      cidr    = "192.0.2.0/24"
+    }`),
+			wantErrs: []string{"Static primary network", `"servers"`, "set dhcp = true"},
+		},
+		{
+			name: "static primary inline interface",
+			mutate: replace(`        bridge  = "vmbr1"
+        dhcp    = true`, `        bridge  = "vmbr1"
+        dhcp    = false
+        address = "192.0.2.61/24"`),
+			wantErrs: []string{"Static primary network_interface", `"worker-01"`, `"net0"`},
+		},
+		{
+			name: "inline cidr on a dhcp interface",
+			mutate: replace(`        bridge  = "vmbr1"
+        dhcp    = true`, `        bridge  = "vmbr1"
+        dhcp    = true
+        cidr    = "192.0.2.0/24"`),
+			wantErrs: []string{"Cidr on a dhcp network_interface", `cidr "192.0.2.0/24"`},
+		},
+		{
 			name:     "referenced static interface missing address",
 			mutate:   addStorageNIC(""),
 			wantErrs: []string{"Missing static address", `"net1"`},
@@ -440,17 +492,24 @@ func TestLoad(t *testing.T) {
 		},
 		{
 			name:     "static interface missing address",
-			mutate:   replace(`        dhcp    = true`, `        dhcp    = false`),
-			wantErrs: []string{"Missing static address"},
+			mutate:   addInlineNIC("\n        dhcp    = false"),
+			wantErrs: []string{"Missing static address", `"net1"`},
 		},
 		{
 			name: "static address not cidr form",
-			mutate: func(s string) string {
-				s = replace(`        dhcp    = true`, `        dhcp    = false`)(s)
-				return replace(`        primary = true`, `        primary = true
-        address = "10.0.20.9"`)(s)
-			},
+			mutate: addInlineNIC(`
+        dhcp    = false
+        address = "192.0.2.9"`),
 			wantErrs: []string{"Invalid network_interface address", "must be CIDR form"},
+		},
+		{
+			// The positive control for the helper: an inline static
+			// non-primary NIC with a governing cidr loads clean.
+			name: "inline static secondary accepted",
+			mutate: addInlineNIC(`
+        dhcp    = false
+        cidr    = "192.0.2.0/24"
+        address = "192.0.2.9/24"`),
 		},
 		{
 			name:     "zero primary interfaces on a node",

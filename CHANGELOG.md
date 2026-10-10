@@ -9,6 +9,8 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 - *(bootstrap)* Report the module version when ldflags stamp nothing
 - *(bootstrap)* Bump grpc to v1.83.1 for GO-2026-6348
+- *(bootstrap/config)* Close three network-interface validation gaps
+- *(bootstrap)* Go 1.26.9 and x/net v0.60.0 for new advisories
 
 ### Documentation
 
@@ -17,6 +19,8 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(impl)* Phase 6 — work04/05 joined with their storage plane from config alone
 - *(impl)* Phase 6 — jumbo path verified end to end from work04
 - IMPL-0003 Completed, DESIGN-0004 Implemented
+- Fold the 2026-10-10 doc-vs-code review into the design chain
+- Record the review's three operator decisions
 
 ## [tools/bootstrap/v0.3.0] - 2026-09-02
 

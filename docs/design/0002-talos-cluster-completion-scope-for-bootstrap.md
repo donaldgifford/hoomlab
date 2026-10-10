@@ -1,7 +1,7 @@
 ---
 id: DESIGN-0002
 title: "Talos cluster completion scope for bootstrap"
-status: Draft
+status: Implemented
 author: Donald Gifford
 created: 2026-08-26
 ---
@@ -43,8 +43,11 @@ so part of it is bootstrap's job and part of it must never be.
 This doc draws that line, informed by a survey of how the previous
 cluster (`~/code/homelab-archive`) built the same thing twice.
 
-Status **Draft** by intent: IMPL-0002's drill exercises these
-decisions and this doc is amended as the drill teaches.
+Status **Implemented** (2026-10-10). This doc stayed Draft by intent
+while IMPL-0002's drill exercised it; the drill built and proved it
+(emit work 2026-08-27, T2 — 6/6 Ready on Cilium with kube-proxy
+replaced — 2026-08-28, the T2→T3 handoff 2026-08-29), and a doc-vs-code
+review on 2026-10-10 folded in what it taught.
 
 ## Goals and Non-Goals
 
@@ -66,7 +69,11 @@ decisions and this doc is amended as the drill teaches.
 - **Cilium configuration**: BGP peering (`CiliumBGPClusterConfig` and
   friends), LB IP pools, Gateway/HTTPRoute objects, L2 announcements
   — k8s API objects, owned by the k8s IaC (ArgoCD/Kargo) and the
-  UniFi IaC beside it. Bootstrap never knows the ASN.
+  UniFi IaC beside it. Bootstrap never knows the ASN. *Interim
+  (2026-10-10):* until that gitops repo exists, the BGP objects and
+  the router's `frr.conf` live as a reference copy in
+  `tools/bootstrap/examples/bgp/`, applied by hand (runbook §14) —
+  read by no code path.
 - **GPU passthrough** (srv01's RTX 4060, `hostpci` in the VM spec,
   nvidia extensions and labels) — deferred; needs its own VM-spec +
   SDK work and is not on the drill's critical path.
@@ -211,14 +218,16 @@ with:
 
 Values come from an operator-supplied file referenced by the config
 (the archive's proven values as the starting example), structurally
-validated at emit: YAML-parse, and reject keys at the top level that
-are not in the chart's value surface — the maglev lesson (OQ-B
-considers embedding a default).
+validated at load: YAML-parse, reject top-level keys whose value is
+null — the maglev lesson, where a mis-indented child left its parent
+empty — and require kube-proxy replacement and the KubePrism host and
+port. There is no allowlist of the chart's value surface: that would
+pin a chart version's keys into the binary.
 
 When the config selects `flannel` (the Talos default) or `none`
-(operator brings their own CNI), none of the above renders; with
-`none`, `talos health`'s node-Ready gate is relaxed to the checks
-that don't require a CNI (OQ-F).
+(operator brings their own CNI), none of the above renders. `talos
+health` is unchanged under `none` — its node-Ready check fails until
+the operator's CNI is running (OQ-F).
 
 ### Extensions and schematics
 
@@ -245,7 +254,9 @@ bootstrap adopts the packer generation's **profile model**:
 
 Emitted machine configs set `machine.nodeLabels`:
 
-- Universal: `topology.kubernetes.io/region: <cluster>` and
+- Universal: `topology.kubernetes.io/region: <cluster>` (the PVE
+  cluster name — the site — not `talos.name`, so two Talos clusters on
+  the same hardware share a region) and
   `topology.kubernetes.io/zone: <node>` (zone-per-node makes
   topology spread constraints meaningful on a small cluster).
 - Control planes:
@@ -350,14 +361,15 @@ source of truth.
 
 ## Testing Strategy
 
-- **Unit (emit)**: golden-file tests on rendered machine configs —
+- **Unit (emit)**: structural tests on rendered machine configs (they
+  carry fresh secrets, so no golden files; the catalog is golden) —
   CNI none + proxy disabled present iff `cni = "cilium"`; manifest
   lists exactly as pinned; labels correct per role. The KubePrism
   invariant has a named test.
 - **Unit (validate)**: values-file rejection cases, including a
   regression seeded with the archive's actual maglev indentation bug.
-- **Schematic**: profile flattening is pure logic — table tests;
-  factory interaction behind an interface with a fake.
+- **Schematic**: profile flattening and factory interaction tested
+  end to end against a fake factory behind an interface.
 - **e2e**: the drill itself (IMPL-0002 Phases 4–5) — nodes Ready is
   the Cilium delivery proof; convergence re-run applies nothing.
 
@@ -386,7 +398,11 @@ source of truth.
   `tools/bootstrap/examples/cilium-values.yaml` (the archive's proven
   values, maglev indentation restored, l2announcements dropped as
   vestigial). Whether it becomes an embedded default stays open until
-  the drill proves it.
+  the drill proves it. *Resolved 2026-10-10, as built*: the drill
+  ran on the operator file and the example baseline unchanged, so the
+  file stays required — no embedded default. The values are the
+  operator's network policy; a default compiled into the binary would
+  hide them.
 - **OQ-C — version pin cadence.** *Resolved 2026-08-27* for where
   the statement lives: Cilium's own docs are the authority — the
   tested-Kubernetes row in `Documentation/network/kubernetes/
@@ -411,6 +427,11 @@ source of truth.
 - **OQ-F — health semantics under `cni = "none"`.** Which
   `talos health` checks remain meaningful without a CNI, and does
   T2 still claim "Ready"? Only matters for the escape-hatch path.
+  *Closed 2026-10-10, unbuilt by decision*: the cluster runs Cilium
+  and is expected to stay on it, so the relaxed gate isn't worth
+  building. Under `none`, health runs the full check and T2's Ready
+  claim is the operator's to satisfy. Revisit only if a non-Cilium
+  CNI is ever on the table.
 
 ## References
 

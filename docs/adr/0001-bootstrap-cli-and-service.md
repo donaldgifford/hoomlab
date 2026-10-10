@@ -1,7 +1,7 @@
 ---
 id: ADR-0001
 title: "Bootstrap CLI"
-status: Proposed
+status: Accepted
 author: Donald Gifford
 created: 2026-08-17
 ---
@@ -24,7 +24,10 @@ created: 2026-08-17
 
 ## Status
 
-Proposed
+Accepted (2026-10-10). Every decision below is built and released as
+`tools/bootstrap` (DESIGN-0001, IMPL-0001) and proven on hardware
+(IMPL-0002). One line has since changed: the CLI is published — see
+the release note under Decision.
 
 ## Context
 
@@ -63,7 +66,10 @@ files, the schema is pulled out then. The first version is deliberately
 self-contained for ease of work and test — reusable pieces are extracted for
 the service later, not designed for reuse up front. Built and run locally for
 now: releases use the `dont-release` label and the release train does not
-publish it. Bootstrap runs outside the cluster it builds, permanently.
+publish it. *(Amended 2026-10-10: tools now have their own on-demand
+train, `tools-release.yml`, which cuts `tools/bootstrap/vX.Y.Z` and
+publishes binary archives; tools PRs still merge `dont-release` so the
+service train stays inert.)* Bootstrap runs outside the cluster it builds, permanently.
 
 **Re-runs must converge.** With no database and no state file, the
 configuration files and the world are the only two truths: every step reads

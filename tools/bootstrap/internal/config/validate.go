@@ -90,10 +90,16 @@ func (c *Cluster) validateNetworks() hcl.Diagnostics {
 	return append(diags, c.validateUnreferencedNetworks()...)
 }
 
-// validateNetwork checks one plane's own facts: the vlan/mtu ranges
-// and the dhcp/cidr relation in both directions.
+// validateNetwork checks one plane's own facts: the vlan/mtu ranges,
+// a primary plane being dhcp, and the dhcp/cidr relation in both
+// directions.
 func validateNetwork(p *Network) hcl.Diagnostics {
 	var diags hcl.Diagnostics
+	if p.Primary && !p.DHCP {
+		diags = append(diags, errf("Static primary network",
+			"talos network %q: the primary plane is the PXE boot path, which needs a dhcp lease — set dhcp = true.",
+			p.Name))
+	}
 	if p.VLAN != 0 && (p.VLAN < vlanMin || p.VLAN > vlanMax) {
 		diags = append(diags, errf("Invalid network vlan",
 			"talos network %q: vlan %d is outside the 802.1Q range %d-%d (omit the attribute for untagged).",

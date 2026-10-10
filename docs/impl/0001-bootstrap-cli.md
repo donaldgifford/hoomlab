@@ -89,10 +89,9 @@ tracks the remaining work and holds the drill results.
 
 The procedure the drill follows is
 [`docs/runbook/bootstrap-cluster.md`](../runbook/bootstrap-cluster.md);
-`tools/bootstrap/README.md` remains the CLI's operator reference. Until
-the drill runs, this document stays **In Progress** and DESIGN-0001
-stays **Approved** rather than Implemented — the criteria they gate on
-are empirical, not code review.
+`tools/bootstrap/README.md` remains the CLI's operator reference. The drill
+ran in IMPL-0002 (Completed); this document is **Completed** and
+DESIGN-0001 **Implemented** on that empirical evidence, as planned.
 
 ## Scope
 
