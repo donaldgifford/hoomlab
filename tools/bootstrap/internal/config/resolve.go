@@ -277,11 +277,29 @@ func resolveInline(n *TalosNode, iface *NetworkInterface, r *ResolvedInterface) 
 			"talos node %q network_interface %q: mtu %d is outside virtio's %d-%d (omit the attribute for the fabric default).",
 			n.Name, iface.Name, r.MTU, mtuMin, mtuMax))
 	}
-	if r.CIDR != "" {
+	return append(diags, validateInlineMode(n.Name, iface.Name, r)...)
+}
+
+// validateInlineMode is validateNetwork's primary and dhcp/cidr rules
+// for an inline-sourced mode, so the same mistake reads the same
+// whichever form declared it.
+func validateInlineMode(node, slot string, r *ResolvedInterface) hcl.Diagnostics {
+	var diags hcl.Diagnostics
+	if r.Primary && !r.DHCP {
+		diags = append(diags, errf("Static primary network_interface",
+			"talos node %q network_interface %q: the primary interface is the PXE boot path, which needs a dhcp lease — set dhcp = true.",
+			node, slot))
+	}
+	switch {
+	case r.DHCP && r.CIDR != "":
+		diags = append(diags, errf("Cidr on a dhcp network_interface",
+			"talos node %q network_interface %q: cidr %q is declared but the mode is dhcp — the lease owns addressing; drop the cidr.",
+			node, slot, r.CIDR))
+	case r.CIDR != "":
 		if _, err := netip.ParsePrefix(r.CIDR); err != nil {
 			diags = append(diags, errf("Invalid network_interface cidr",
 				"talos node %q network_interface %q: cidr %q is not CIDR form (network/prefix): %v.",
-				n.Name, iface.Name, r.CIDR, err))
+				node, slot, r.CIDR, err))
 		}
 	}
 	return diags
@@ -321,10 +339,24 @@ func validateAddress(n *TalosNode, slot string, r *ResolvedInterface) hcl.Diagno
 	// A malformed governing cidr already has its own diagnostic (on
 	// the plane or the inline attr), so containment only runs against
 	// one that parses.
-	if cidr, err := netip.ParsePrefix(r.CIDR); err == nil && r.CIDR != "" && !cidr.Contains(addr.Addr()) {
+	if r.CIDR == "" {
+		return nil
+	}
+	cidr, cidrErr := netip.ParsePrefix(r.CIDR)
+	if cidrErr != nil {
+		return nil //nolint:nilerr // the malformed cidr is reported where it was declared
+	}
+	if !cidr.Contains(addr.Addr()) {
 		return hcl.Diagnostics{errf("Address outside the governing cidr",
 			"talos node %q network_interface %q: address %q is not inside cidr %q.",
 			n.Name, slot, r.Address, r.CIDR)}
+	}
+	// The address's prefix length becomes the link's connected route,
+	// so a mismatch silently widens or narrows the subnet on the node.
+	if addr.Bits() != cidr.Bits() {
+		return hcl.Diagnostics{errf("Address prefix differs from the governing cidr",
+			"talos node %q network_interface %q: address %q has prefix /%d but cidr %q is /%d — use %s/%d.",
+			n.Name, slot, r.Address, addr.Bits(), r.CIDR, cidr.Bits(), addr.Addr(), cidr.Bits())}
 	}
 	return nil
 }
