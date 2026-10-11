@@ -20,6 +20,7 @@ created: 2026-10-11
   - [Facts that shape the design](#facts-that-shape-the-design)
 - [Detailed Design](#detailed-design)
   - [How the pieces fit](#how-the-pieces-fit)
+  - [Two stages](#two-stages)
   - [Phase 0 — correct the setInterfaces record](#phase-0--correct-the-setinterfaces-record)
   - [Phase 1 — Talos 1.13.11](#phase-1--talos-11311)
   - [Phase 2 — day-2 apply stage](#phase-2--day-2-apply-stage)
@@ -59,15 +60,26 @@ enables them itself after its first bootstrap. The 1.14 move is
 DESIGN-0006's job. Everything here is built so that only the renderer
 changes when it lands.
 
+The work runs in **two stages** (decided 2026-10-11):
+
+- **Stage 1** is the upgrade and image work. Talos 1.13.11 goes on with
+  Kata baked into the worker image, plus a hand-applied Kata test. It
+  is config lines, not code, done on its own chore branch as Phase 0
+  of the IMPL.
+- **Stage 2** is everything else: the apply stage, labels and taints,
+  the runtime label, the Cilium rule, the options, and the add-ons.
+  It is designed here, but **revisited against Stage 1's findings**
+  before any of it is built.
+
 ## Goals and Non-Goals
 
 ### Goals
 
-- **G1** — Phase 0 chore PR: fix the `setInterfaces` comment and the
-  IMPL-0003 Phase 2 note (the network documents *do* exist in 1.13
-  machinery).
-- **G2** — Talos v1.13.11 and machinery v1.13.11, with a runbook for
-  the in-place node upgrades.
+- **G1** — Stage 1: fix the `setInterfaces` comment and the IMPL-0003
+  Phase 2 note (the network documents *do* exist in 1.13 machinery).
+- **G2** — Stage 1: Talos v1.13.11 with Kata in the worker image,
+  machinery v1.13.11, a runbook for the in-place node upgrades, and a
+  hand-applied Kata test whose findings shape Stage 2.
 - **G3** — a delivery path for day-2 options to **live** nodes. Today
   the CLI only feeds booty templates, which a node reads once, at
   install.
@@ -221,9 +233,23 @@ Cilium's ongoing values. The contract between the two is a set of
 **label and taint keys** and **a Cilium value**, written down below so
 both sides can be checked.
 
+### Two stages
+
+| Stage | Design phases | IMPL | What it proves |
+| ----- | ------------- | ---- | -------------- |
+| **1 — upgrade + image** | Phase 0 (record fix), Phase 1 (1.13.11 + Kata in the worker image + test kit) | Phase 0, one chore branch | 1.13.11 is healthy; Kata runs on these nested hosts, with real numbers for memory, storage, networking, and DinD |
+| *between* | Kubernetes 1.36.3 → 1.36.5 (`talosctl upgrade-k8s`) | own step | the Kubernetes patch on a settled Talos |
+| **2 — scheduling + extras** | Phases 2–6 | later phases | built on Stage 1's findings; this document is amended first |
+
+Stage 1 deliberately leaves the hand-applied test objects (a
+RuntimeClass, one node's label and taint) outside GitOps. They use the
+final keys (OQ-6), so Stage 2's declared config adopts them and its
+first drift check finds them already correct.
+
 ### Phase 0 — correct the setInterfaces record
 
-This is a separate chore PR with no behaviour change.
+No behaviour change. It rides the Stage 1 chore branch as its own
+commit (OQ-1).
 
 - `tools/bootstrap/internal/talos/machineconfig.go`. Rewrite the
   `setInterfaces` doc comment and its `nolint:staticcheck` reason. The
@@ -244,10 +270,15 @@ This is a separate chore PR with no behaviour change.
 ### Phase 1 — Talos 1.13.11
 
 - **CLI:** bump `github.com/siderolabs/talos/pkg/machinery` to
-  v1.13.11 (the tag exists). Update `emit_test.go`'s `talosVersion`,
-  the example `talos.version`, and the README/runbook references.
-  Machinery's default Kubernetes is still 1.36.3, so leaving
-  `kubernetes_version` unset changes nothing.
+  v1.13.11 (the tag exists), and update `emit_test.go`'s
+  `talosVersion`, the example `talos.version`, and the README/runbook
+  references.
+  - This is hygiene, not a prerequisite. The contract is derived from
+    `talos.version` and is 1.13 either way, so the current binary
+    already renders 1.13.11 configs. The live upgrade can go ahead on
+    HCL edits alone.
+  - Machinery's default Kubernetes is still 1.36.3, so leaving
+    `kubernetes_version` unset changes nothing.
 - **What 1.13.9–1.13.11 change that we touch:**
   - stricter hostname validation (1.13.11) — node names like `work01`
     are plain DNS labels, but add a load-time test case;
@@ -256,27 +287,51 @@ This is a separate chore PR with no behaviour change.
   - `talosctl time --check` removed from `os:reader` — no impact.
 - **Operator runbook.** These are hands-on steps the operator runs;
   the CLI only renders the new version.
-  1. Set `talos.version = "v1.13.11"` and run `talos emit --dry-run`.
-     It should show the template and catalog changes plus new boot
-     assets, and nothing else.
+  1. In `bootstrap.hcl`, set `talos.version = "v1.13.11"`, add a
+     `profile "kata"` with `siderolabs/kata-containers`, and add it to
+     every **worker's** `profiles`. Run `talos emit --dry-run`. It
+     should show the template and catalog changes, a new worker
+     schematic (with its installer image and boot assets), and
+     nothing else.
   2. Run `talos emit` and `talos ipxe`, then restart booty. This only
      affects future installs.
   3. For each node — workers first, then control planes one at a
      time — run `talosctl upgrade --nodes <ip> --image
      factory.talos.dev/installer/<schematic>:v1.13.11`, then
-     `talosctl health`.
+     `talosctl health`. Workers take the **new worker schematic**;
+     control planes keep theirs at the new version. Confirm with
+     `talosctl get extensions` (workers list `kata-containers`).
   4. After each reboot, check for cilium#48420:
      `bpftool cgroup show /sys/fs/cgroup effective` from a host-netns
      debug pod, plus a ClusterIP curl from host-network.
-  5. Optional: `talosctl upgrade-k8s --to 1.36.5` (OQ-2).
-- **Kata rides this re-image (OQ-20).** Every node is re-imaged for
+- **Kata rides this re-image** (decided 2026-10-11). Every node is re-imaged for
   1.13.11 anyway. Adding `siderolabs/kata-containers` to the
   **worker** profile first means step 3 installs it on every worker at
   no extra operation. The workers' installer image becomes the new
   worker schematic and the control planes keep theirs. The catalog
   already splits classes by (role, schematic), so nothing new is
-  needed in emit for this. Until Phase 4's RuntimeClasses exist,
-  nothing can use Kata: installed is not enabled.
+  needed in emit for this. Until a RuntimeClass exists, nothing can
+  use Kata: installed is not enabled.
+- **Stage 1 Kata test kit** (hand-applied with `kubectl`; not GitOps).
+  This is what turns "installed" into evidence:
+  1. Apply a `kata` RuntimeClass (`handler: kata`, the 130Mi / 250m
+     overhead, `nodeSelector` on the Talos extension label for now).
+     It is a test object, replaced in Stage 2.
+  2. Label and taint **one** CI worker with the final keys (OQ-6), e.g.
+     `kubectl label node work04 hoomlab.io/workload=ci` and `kubectl
+     taint node work04 hoomlab.io/workload=ci:NoSchedule`.
+  3. Run the acceptance checks under [Testing Strategy](#testing-strategy)
+     (Live Kata acceptance) with throwaway pods.
+  4. **Record the findings in the IMPL:**
+     - actual per-pod memory on the host, against the 2048 MiB guest
+       default;
+     - whether a democratic-csi PVC mounts in a Kata pod;
+     - whether privileged DinD and BuildKit work, and with which
+       `/var/lib/docker` layout;
+     - whether kube-dns and ClusterIPs work under the current Cilium;
+     - cold-start time;
+     - anything that contradicts this design.
+  5. Stage 2 starts by amending this document with those findings.
 - `talosctl upgrade --image` rewrites the stored `install.image`, so
   this upgrade also retires the drift class the install-image patch
   fixed by hand.
@@ -335,7 +390,9 @@ sequenceDiagram
   investigated before anything is applied.
 
 This is OQ-12; the options in Phases 5 and 6 are only useful live if
-it lands.
+it lands. **Phases 2–6 are Stage 2.** Their detail here is the
+starting point, revisited against Stage 1's findings before they are
+built.
 
 ### Phase 3 — node labels and taints
 
@@ -824,26 +881,40 @@ No new persisted state. `secrets.yaml`, `talosconfig`, and
 
 ```mermaid
 flowchart LR
-    P0["Phase 0<br/>chore PR:<br/>comment + IMPL note"] --> P1["Phase 1<br/>machinery + version 1.13.11<br/>operator upgrades nodes"]
-    P1 --> P2["Phase 2<br/>talos apply stage<br/>(prove 0 drift)"]
-    P2 --> P3["Phase 3<br/>labels + taints<br/>template classes"]
-    P1 -. "kata in worker image" .-> P4
-    P3 --> P4["Phase 4<br/>runtime label · Cilium value<br/>GitOps: RuntimeClasses, CI pods"]
-    P2 --> P5["Phase 5<br/>Talos options<br/>(one at a time)"]
-    P2 --> P6["Phase 6<br/>add-on stage<br/>metrics-server, KEDA"]
+    subgraph S1["Stage 1 — IMPL Phase 0, one chore branch"]
+        P0["record fix<br/>(setInterfaces + IMPL-0003)"] --> P1["HCL: v1.13.11 +<br/>kata in worker profile<br/>operator re-images nodes"]
+        P1 --> T["Kata test kit<br/>(hand-applied)<br/>record findings"]
+    end
+    T --> K["Kubernetes 1.36.5<br/>upgrade-k8s"]
+    K --> A["amend DESIGN-0005<br/>with Stage 1 findings"]
+    subgraph S2["Stage 2"]
+        P2["Phase 2<br/>talos apply stage<br/>(prove 0 drift)"] --> P3["Phase 3<br/>labels + taints<br/>template classes"]
+        P3 --> P4["Phase 4<br/>runtime label · Cilium rule<br/>GitOps: RuntimeClasses, CI pods"]
+        P2 --> P5["Phase 5<br/>Talos options<br/>(one at a time)"]
+        P2 --> P6["Phase 6<br/>add-on stage<br/>metrics-server, KEDA"]
+    end
+    A --> P2
 ```
 
-- Each phase is its own PR, labelled `dont-release` until the tools
-  release is wanted. Phases 5 and 6 are independent of 3 and 4 once
-  Phase 2 exists.
+- **Stage 1** is one chore branch: the record fix, the machinery bump,
+  and the example/test version bumps, plus the operator's HCL edits
+  and node upgrades. The drill config isn't in the repo.
+- **Kubernetes 1.36.5** follows Stage 1 as its own step, once every
+  node is on 1.13.11 and the Kata test is done. Pin
+  `kubernetes_version = "1.36.5"` in HCL so new installs match.
+- **Stage 2** phases are each their own PR, labelled `dont-release`
+  until the tools release is wanted. Phases 5 and 6 are independent of
+  3 and 4 once Phase 2 exists.
 - **Phase 4 live order:**
   1. Add `socketLB.hostNamespaceOnly: true` explicitly to the Cilium
      values in **both** the drill values file and GitOps. It is
      already in effect, so this is a no-op restart.
-  2. Kata is already on every worker (Phase 1). Set `workload_class =
-     "ci"` on the two CI workers and run `talos apply` (labels go live).
-     The operator runs the printed `kubectl taint` once per node.
-  3. GitOps adds the `kata` and `kata-ci` RuntimeClasses.
+  2. Kata is already on every worker (Stage 1). Set `workload_class =
+     "ci"` on the two CI workers and run `talos apply`; the labels go
+     live. The Stage 1 test worker already matches. The operator runs
+     the printed `kubectl taint` for the second worker.
+  3. GitOps adds the `kata` and `kata-ci` RuntimeClasses, replacing the
+     Stage 1 test class.
   4. Run the acceptance checks above.
   5. Move one CI workload (one ARC scale set) to `kata-ci`, then the
      rest.
@@ -859,15 +930,18 @@ Each question offers lettered options: **a** is the recommendation
 and the others are alternatives. Answer with a letter or write your
 own.
 
-1. **Phase 0 scope.**
-   - a. Comment and IMPL-0003 note only, as a standalone chore PR.
+**Before Stage 1:** OQ-1 and OQ-6. Everything else is Stage 2 and waits
+for Stage 1's findings; some answers may change because of them.
+
+1. **Record-fix scope (Phase 0).**
+   - a. Comment and IMPL-0003 note only, as its own commit on the
+     Stage 1 chore branch.
    - b. Also migrate `setInterfaces` to `LinkAliasConfig` / `LinkConfig`
      / `DHCPv4Config` now, on 1.13.
-   - c. Fold it into the Phase 1 PR.
-2. **Kubernetes patch with the 1.13.11 upgrade.**
-   - a. Yes: `upgrade-k8s` to 1.36.5 after all nodes are on 1.13.11,
-     and pin `kubernetes_version = "1.36.5"` in HCL.
-   - b. Talos only; stay on 1.36.3 (machinery's default).
+   - c. A standalone chore PR ahead of Stage 1.
+2. **Kubernetes patch.** *Resolved 2026-10-11*: 1.36.5 after Stage 1
+   (Talos 1.13.11 and the Kata test), as its own step, and
+   `kubernetes_version = "1.36.5"` pinned in HCL.
 3. **Which runtimes are supported now.** *Resolved 2026-10-11*: Kata
    only. gVisor, crun, and NVIDIA are deferred and not installed. Each
    returns later as one runtime-table row (NVIDIA as a per-node
@@ -973,12 +1047,8 @@ own.
       Deployment, using the pattern documented here.
     - b. An HCL block that renders `ScaledObject`s from bootstrap.
 
-20. **When Kata enters the worker image.**
-    - a. In the Phase 1 re-image: add the extension to the worker
-      profile before running the 1.13.11 upgrades, so there is one
-      re-image per worker.
-    - b. A separate re-image after 1.13.11 settles, so the patch
-      upgrade and the new extension are isolated.
+20. **When Kata enters the worker image.** *Resolved 2026-10-11*: in
+    the 1.13.11 re-image (Stage 1), so there is one re-image per worker.
 21. **Which RuntimeClasses to publish.**
     - a. Both `kata` (any Kata worker) and `kata-ci` (CI pool only).
     - b. `kata-ci` only until a non-CI workload asks for isolation.
