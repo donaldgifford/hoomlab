@@ -236,9 +236,10 @@ renders 1.13.11 configs, because the contract derives from
 - [x] Verify that `/ipxe?mac=<worker MAC>` renders the worker
       schematic at v1.13.11, and that a control-plane MAC renders
       `88d1f7a5…` at v1.13.11.
-      *(Verified 2026-10-11 on work01 and ctrl01. An immediate repeat
-      of the worker query returned an empty body once; still being
-      looked into.)*
+      *(Verified 2026-10-11 on work01 and ctrl01: HTTP 200, and work01
+      matches profile `talos-worker`, still one worker class since all
+      five workers share the schematic. An empty repeat earlier was an
+      interrupted curl, not booty.)*
 
 **0.4 Rolling re-image (operator)**
 
