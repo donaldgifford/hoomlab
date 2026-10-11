@@ -248,8 +248,8 @@ first drift check finds them already correct.
 
 ### Phase 0 — correct the setInterfaces record
 
-No behaviour change. It rides the Stage 1 chore branch as its own
-commit (OQ-1).
+No behaviour change. It is the **first** piece of Stage 1, done before
+any upgrade or config work (OQ-1).
 
 - `tools/bootstrap/internal/talos/machineconfig.go`. Rewrite the
   `setInterfaces` doc comment and its `nolint:staticcheck` reason. The
@@ -930,15 +930,13 @@ Each question offers lettered options: **a** is the recommendation
 and the others are alternatives. Answer with a letter or write your
 own.
 
-**Before Stage 1:** OQ-1 and OQ-6. Everything else is Stage 2 and waits
-for Stage 1's findings; some answers may change because of them.
+**Before Stage 1:** OQ-1 and OQ-6, both resolved 2026-10-11. Everything
+else is Stage 2 and waits for Stage 1's findings; some answers may
+change because of them.
 
-1. **Record-fix scope (Phase 0).**
-   - a. Comment and IMPL-0003 note only, as its own commit on the
-     Stage 1 chore branch.
-   - b. Also migrate `setInterfaces` to `LinkAliasConfig` / `LinkConfig`
-     / `DHCPv4Config` now, on 1.13.
-   - c. A standalone chore PR ahead of Stage 1.
+1. **Record-fix scope (Phase 0).** *Resolved 2026-10-11*: comment and
+   IMPL-0003 note only, done **first** in Phase 0, before any upgrade
+   or config work. The `setInterfaces` migration stays with DESIGN-0006.
 2. **Kubernetes patch.** *Resolved 2026-10-11*: 1.36.5 after Stage 1
    (Talos 1.13.11 and the Kata test), as its own step, and
    `kubernetes_version = "1.36.5"` pinned in HCL.
@@ -961,12 +959,12 @@ for Stage 1's findings; some answers may change because of them.
    - b. No sugar; always write `labels` + `taint` explicitly.
    - c. A named `node_class "ci"` block (labels + taints) that nodes
      reference, instead of a per-node attribute.
-6. **Label and taint key prefix.**
-   - a. `hoomlab.io/`. Kubernetes only requires DNS-subdomain form,
-     and it names the project.
-   - b. A domain you own.
-   - c. Unprefixed keys (`workload`), which collide more easily with
-     third-party labels.
+6. **Label and taint key prefix.** *Resolved 2026-10-11*: `hoomlab.io/`
+   for now, changeable. The prefix lives in one constant in code and in
+   the GitOps RuntimeClasses. Changing it later costs a relabel and
+   retaint of the live nodes (via the apply stage's drift output) plus
+   a RuntimeClass edit, so pick the final one before Stage 2's CI move
+   if it's going to change.
 7. **Derived runtime label.**
    - a. The Kata extension in a node's profiles derives
      `runtime.hoomlab.io/kata=true`, a stable key for RuntimeClass
