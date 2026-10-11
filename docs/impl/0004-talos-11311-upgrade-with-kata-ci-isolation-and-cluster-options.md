@@ -266,6 +266,30 @@ renders 1.13.11 configs, because the contract derives from
         `bpftool cgroup show /sys/fs/cgroup effective` from a
         `kube-system` host-netns debug pod, plus a ClusterIP curl
         from host network.
+
+      *(2026-10-11, finding — drain blockers: every CNPG cluster is
+      `instances: 1` (primary PDB `minAvailable: 1`) and OpenBao is one
+      replica (PDB `maxUnavailable: 0`), so no eviction ever succeeds
+      and the upgrade's drain loops. In 1.13 the installer writes the
+      new UKI first and the client drains and reboots after, so a loop
+      that is abandoned leaves the new version staged for the next
+      boot. The working per-node procedure is to empty the node before
+      the upgrade: `kubectl cordon`, then `kubectl delete pod` each
+      `*-db-1` / `*-postgres-1` / `openbao-0` on it (never `--force`;
+      data stays on the iSCSI PVCs and the pods reattach elsewhere),
+      wait until only DaemonSets remain, then upgrade. CNPG pods take
+      minutes to go: a 1800s grace period and a smart shutdown that
+      waits on client connections. OpenBao auto-unseals after the move.
+      Follow-ups, outside this IMPL: no CNPG cluster has backups
+      configured, and iSCSI-backed ext4 volumes log `Aborting journal`
+      on detach, on work01 since 2026-09-27.)*
+
+      *(2026-10-11, work01 done: v1.13.11, kernel 6.18.54, containerd
+      2.2.9; extensions kata-containers 3.32.0, iscsi-tools,
+      qemu-guest-agent, util-linux-tools under schematic `95025911…`;
+      `/dev/kvm`, `vhost-net`, `vhost-vsock` present; every pod in the
+      cluster Running; OpenBao unsealed; democratic-csi node pods Ready.
+      cilium#48420 check: pending.)*
 - [ ] Control planes, one at a time:
 
       ```sh
