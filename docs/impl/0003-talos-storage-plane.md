@@ -449,6 +449,14 @@ Phase 2's end state.
       addresses. The deprecated v1alpha1 section is deliberate —
       machinery v1.13 ships no multi-doc device type and the live
       fleet carries exactly this shape)*
+      *(correction 2026-10-11: the "no multi-doc device type" half
+      was wrong — `LinkAliasConfig`, `LinkConfig`, and
+      `DHCPv4Config` exist in machinery since Talos 1.12
+      ([INV-0004](../investigation/0004-talos-114-and-kubernetes-137-upgrade-with-workload-isolation.md)
+      F5). The decision stands on its other half: the live fleet
+      carries this shape, and a deprecated field and its
+      replacement document are mutually exclusive, so moving is a
+      whole-config replacement per node — DESIGN-0006's job)*
 - [x] Round-trip test: rendered multi-interface configs re-validate
       in machinery metal mode (the existing round-trip pattern)
       *(`TestRoleTemplatesMultiNICRoundTrip`)*

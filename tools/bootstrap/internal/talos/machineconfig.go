@@ -270,13 +270,15 @@ func roleTemplate(
 // and mtu but no routes, gateway, or DNS — a secondary plane must
 // never attract the default route.
 //
-// The deprecated v1alpha1 section is deliberate: machinery v1.13
-// ships no multi-doc network device type (the deprecation notice
-// points at documents that don't exist yet at this version), and the
-// legacy section is the exact shape the live fleet carries
-// (IMPL-0003 Phase 2).
+// The deprecated v1alpha1 section is deliberate. Its replacements
+// (LinkAliasConfig selecting by MAC, LinkConfig, DHCPv4Config) exist
+// in machinery since Talos 1.12, but the legacy section is the exact
+// shape the live fleet carries (IMPL-0003 Phase 2), and a deprecated
+// field and its replacement document are mutually exclusive — moving
+// is a whole-config replacement on every node, not an edit here. That
+// migration is DESIGN-0006's (INV-0004 F5).
 //
-//nolint:staticcheck // v1.13 machinery has no multi-doc replacement; see above.
+//nolint:staticcheck // legacy shape the live fleet carries; the multi-doc move is DESIGN-0006.
 func setInterfaces(cfg *v1alpha1.Config, shape []slotShape) {
 	devices := make([]*v1alpha1.Device, 0, len(shape))
 	for i, s := range shape {
