@@ -5,6 +5,12 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
 ## [unreleased]
 
+### Documentation
+
+- *(inv)* INV-0003 platform reuse for hoomlab
+
+## [tools/bootstrap/v0.3.2] - 2026-10-10
+
 ### Bug Fixes
 
 - Go 1.26.9 for the service module and image
