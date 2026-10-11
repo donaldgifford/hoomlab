@@ -27,7 +27,7 @@ const digestSuffix = ".sha256"
 // bootAsset is one file staged under the boot dir for booty to serve.
 type bootAsset struct {
 	// Path is the tree-relative destination, e.g.
-	// boot/talos/v1.13.8/vmlinuz.
+	// boot/talos/v1.13.11/vmlinuz.
 	Path string
 	// URL is where it is fetched from.
 	URL string

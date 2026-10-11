@@ -24,7 +24,7 @@ import (
 var update = flag.Bool("update", false, "rewrite the golden files under testdata")
 
 const (
-	talosVersion = "v1.13.8"
+	talosVersion = "v1.13.11"
 	bootyURL     = "http://10.0.10.5:8080"
 	cpMAC        = "02:50:99:a2:00:01"
 	workerMAC    = "02:50:99:a2:01:01"

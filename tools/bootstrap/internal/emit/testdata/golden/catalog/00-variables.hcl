@@ -7,7 +7,7 @@
 
 variable "talos_version" {
   description = "Talos release these machines boot"
-  default     = "v1.13.8"
+  default     = "v1.13.11"
 }
 
 variable "booty_url" {

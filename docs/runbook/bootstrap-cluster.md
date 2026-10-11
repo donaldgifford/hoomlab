@@ -507,7 +507,7 @@ config:
 curl -s http://<booty-host>:8080/boot.ipxe
 curl -s "http://<booty-host>:8080/ipxe?mac=02:50:99:a2:00:01"
 curl -s "http://<booty-host>:8080/machine-config?mac=02:50:99:a2:00:01" | head
-curl -sI "http://<booty-host>:8080/boot/talos/v1.13.8/vmlinuz"
+curl -sI "http://<booty-host>:8080/boot/talos/v1.13.11/vmlinuz"
 ```
 
 What to check in the responses:
