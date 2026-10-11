@@ -213,22 +213,32 @@ renders 1.13.11 configs, because the contract derives from
 
 - [ ] Back up `~/drill/bootstrap.hcl` alongside the existing
       `bootstrap.hcl.v0.2.0` copy.
-- [ ] Set `talos.version = "v1.13.11"`.
-- [ ] Add `profile "kata" { extensions = ["siderolabs/kata-containers"] }`.
+- [x] Set `talos.version = "v1.13.11"`.
+- [x] Add `profile "kata" { extensions = ["siderolabs/kata-containers"] }`.
       Append `"kata"` to the `profiles` of the **five workers only**;
       control planes stay `["base", "iscsi"]`.
-- [ ] `bootstrap validate` is clean.
-- [ ] `bootstrap talos emit --dry-run`: expect template and catalog
+- [x] `bootstrap validate` is clean.
+      *(The secrets are `env()` references, so every stage, even
+      talos-only ones, needs them exported. The working form is
+      `op run --env-file ~/code/hoomlab/.env -- bootstrap … --config
+      ~/drill/bootstrap.hcl`.)*
+- [x] `bootstrap talos emit --dry-run`: expect template and catalog
       changes, a second schematic (workers) with new boot assets, the
       control-plane schematic unchanged at the new version, and
       nothing else.
-- [ ] `bootstrap talos emit`, then `bootstrap talos ipxe`. Record the
+      *(It resolved `88d1f7a5…` for the control planes and `95025911…`
+      for the workers. Both `emit-artifacts` and `boot-assets` were
+      pending.)*
+- [x] `bootstrap talos emit`, then `bootstrap talos ipxe`. Record the
       worker schematic ID in the record table.
-- [ ] Sync the booty tree to the booty host and restart booty
+- [x] Sync the booty tree to the booty host and restart booty
       (the sync-and-restart update contract from IMPL-0003 Phase 1).
-- [ ] Verify that `/ipxe?mac=<worker MAC>` renders the worker
+- [x] Verify that `/ipxe?mac=<worker MAC>` renders the worker
       schematic at v1.13.11, and that a control-plane MAC renders
       `88d1f7a5…` at v1.13.11.
+      *(Verified 2026-10-11 on work01 and ctrl01. An immediate repeat
+      of the worker query returned an empty body once; still being
+      looked into.)*
 
 **0.4 Rolling re-image (operator)**
 
