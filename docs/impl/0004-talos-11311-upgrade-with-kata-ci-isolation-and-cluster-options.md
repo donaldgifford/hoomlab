@@ -211,8 +211,8 @@ renders 1.13.11 configs, because the contract derives from
 
 **0.3 HCL and emit (operator)**
 
-- [ ] Back up `~/drill/bootstrap.hcl` alongside the existing
-      `bootstrap.hcl.v0.2.0` copy.
+- [x] Back up `~/drill/bootstrap.hcl` alongside the existing
+      `bootstrap.hcl.v0.2.0` copy. *(`bootstrap.hcl.pre-1.13.11`)*
 - [x] Set `talos.version = "v1.13.11"`.
 - [x] Add `profile "kata" { extensions = ["siderolabs/kata-containers"] }`.
       Append `"kata"` to the `profiles` of the **five workers only**;
