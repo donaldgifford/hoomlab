@@ -289,7 +289,11 @@ renders 1.13.11 configs, because the contract derives from
       qemu-guest-agent, util-linux-tools under schematic `95025911…`;
       `/dev/kvm`, `vhost-net`, `vhost-vsock` present; every pod in the
       cluster Running; OpenBao unsealed; democratic-csi node pods Ready.
-      cilium#48420 check: pending.)*
+      cilium#48420 check passes: all 11 socket-LB
+      hooks (`cil_sock4/6_connect`, `sendmsg`, `recvmsg`, `getpeername`,
+      `post_bind`, `cil_sock_release`) attached at the root cgroup, and
+      a host-network curl to the `kubernetes` ClusterIP got the API
+      server's 401.)*
 - [ ] Control planes, one at a time:
 
       ```sh
