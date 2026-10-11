@@ -23,6 +23,7 @@ created: 2026-10-11
   - [Observation 4: "upgraded" is a per-role checklist, not a version string](#observation-4-upgraded-is-a-per-role-checklist-not-a-version-string)
   - [Observation 5: the bootstrap step model already fits a node upgrade](#observation-5-the-bootstrap-step-model-already-fits-a-node-upgrade)
   - [Observation 6: the upgrade exposed data-safety gaps the tool should gate on](#observation-6-the-upgrade-exposed-data-safety-gaps-the-tool-should-gate-on)
+  - [Observation 7: the blockers are defaults, and the workloads can fix them](#observation-7-the-blockers-are-defaults-and-the-workloads-can-fix-them)
 - [Conclusion](#conclusion)
 - [Recommendation](#recommendation)
 - [References](#references)
@@ -96,10 +97,14 @@ at a larger scale).
    disruption:
    - delete gracefully (today's script);
    - CNPG `nodeMaintenanceWindow`;
-   - fix the workloads (more instances);
+   - fix the workloads (Observation 7);
    - refuse and report.
 
-   Consider whether the policy belongs in config.
+   Consider whether the policy belongs in config. The working
+   direction, after Observation 7: fix the workloads so a plain,
+   PDB-respecting drain succeeds, and have the tool refuse and report
+   any PDB that can never allow a disruption. Deleting stays an
+   explicit, opt-in operator action, never a silent default.
 4. Evaluate the existing tools against the hypothesis: `talosctl`
    alone, Sidero Omni, the community Talos upgrade controller (tuppr),
    and Rancher's system-upgrade-controller with a Talos plan. Record
@@ -247,9 +252,43 @@ owner should refuse to move a database that has no recent backup, or
 at least say so loudly. These gaps belong to their own work, but the
 upgrade path is where they bite.
 
+### Observation 7: the blockers are defaults, and the workloads can fix them
+
+The workloads can be changed so that a plain drain succeeds, and
+neither blocker was a deliberate choice:
+
+- **CNPG.** All nine clusters run with `enablePDB: true`, the
+  operator's default. The CRD's own description of the field says to
+  set it to `false` on single-instance clusters, so that node drains
+  can proceed. A single-instance cluster gains nothing from the PDB:
+  the outage on a move is the same, and the PDB only turns a short
+  restart into a stuck drain.
+- **OpenBao.** The PDB's `maxUnavailable: 0` comes from the chart's
+  quorum formula `(replicas − 1) / 2`, which is 0 for one replica. It
+  makes sense for a three-node Raft cluster and none for one.
+
+The changes, all in the GitOps repo rather than hoomlab, from cheapest
+up:
+
+| Change | Effect on upgrades | Cost |
+| ------ | ------------------ | ---- |
+| `enablePDB: false` on single-instance CNPG clusters | drain evicts them; no delete step | none; same outage as today |
+| OpenBao chart: disable its disruption budget at 1 replica | drain evicts it; auto-unseal covers the restart | none |
+| Lower CNPG `smartShutdownTimeout` (180s default) | a node empties in seconds, not minutes | clients cut sooner on shutdown |
+| CNPG backups via the installed barman-cloud plugin (`ObjectStore` + per-cluster plugin config) | makes moving a database recoverable; the Observation 6 gate can pass | an S3-compatible target |
+| `instances: 2` on the clusters that matter (identity, workflow state) | drain of the primary's node triggers a switchover; outage drops to seconds; the default PDBs then work as intended | 2× storage and memory per cluster |
+| OpenBao at 3 Raft replicas | no secrets outage during upgrades | three pods, Raft operations |
+| A policy check in the GitOps repo's CI that flags any PDB allowing 0 disruptions at steady state | stops new apps from reintroducing the blocker | one rule |
+
+With the first two rows in place, `talosctl upgrade` drains on its own
+and the script's delete step finds nothing to do. That changes the
+tool's job from working around workloads to verifying them: a dry-run
+lists any PDB that can never allow a disruption as a finding to fix,
+not as something to delete.
+
 ## Conclusion
 
-**Answer:** Inconclusive (Open). Observations 1–6 establish the
+**Answer:** Inconclusive (Open). Observations 1–7 establish the
 requirements. Approach steps 2–6 are still to do: the machinery API
 split, the eviction-policy decision, existing tools, the step sketch,
 and the Kubernetes client.
@@ -266,10 +305,14 @@ confirmed:
   work, which it reuses.
 - Kubernetes-version upgrades (`upgrade-k8s`, IMPL-0004 Phase 1) are in
   scope for the same stage or a sibling. The DESIGN decides which.
-- Separate follow-ups, outside this investigation:
+- Workload changes in the GitOps repo (Observation 7), before the next
+  fleet-wide upgrade:
+  - `enablePDB: false` on the single-instance CNPG clusters;
+  - disable OpenBao's disruption budget while it has one replica;
   - CNPG backups through the installed barman-cloud plugin;
   - a second instance for the clusters that matter;
-  - the iSCSI journal aborts.
+  - a CI policy check that flags PDBs allowing no disruptions.
+- A separate follow-up: the iSCSI journal aborts.
 - The `~/drill/upgrade-node.sh` script stays the operator path until
   the stage exists, and serves as its executable specification.
 
