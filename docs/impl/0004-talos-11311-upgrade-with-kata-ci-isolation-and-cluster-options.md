@@ -249,7 +249,7 @@ renders 1.13.11 configs, because the contract derives from
       - every democratic-csi node pod is Ready;
       - take an etcd snapshot (OQ-5): `talosctl etcd snapshot` to
         `~/drill/backups/`.
-- [ ] Workers first, one at a time (OQ-3):
+- [x] Workers first, one at a time (OQ-3):
 
       ```sh
       talosctl -n <worker-ip> upgrade \
@@ -294,6 +294,20 @@ renders 1.13.11 configs, because the contract derives from
       `post_bind`, `cil_sock_release`) attached at the root cgroup, and
       a host-network curl to the `kubernetes` ClusterIP got the API
       server's 401.)*
+
+      *(2026-10-11, workers done: work01–05 all on v1.13.11 (kernel
+      6.18.54, containerd 2.2.9), each labelled
+      `extensions.talos.dev/kata-containers=3.32.0`, each with 11
+      socket-LB hooks at the root cgroup. work02–05 were upgraded after
+      the drain blockers were fixed at the workloads (INV-0005 Observation 7): every CNPG cluster now
+      has `enablePDB: false` and `smartShutdownTimeout: 15`, and
+      OpenBao has no PDB, so plain drains succeed. After the roll,
+      `ts-atlantis` (tailscale) crash-loops: its operator-generated
+      `ts-atlantis-egress` CiliumNetworkPolicy allows only atlantis,
+      DNS and `world`, not the `kube-apiserver` entity, so it can't
+      reach 10.96.0.1. It's a policy gap the restart exposed, not an
+      upgrade regression: `ts-repo-guardian` on the same node has no
+      policy and runs.)*
 - [ ] Control planes, one at a time:
 
       ```sh
