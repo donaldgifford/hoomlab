@@ -8,6 +8,13 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 ### Documentation
 
 - *(inv)* INV-0003 platform reuse for hoomlab
+- *(inv)* INV-0004 Talos 1.14 and Kubernetes 1.37 upgrade with workload isolation
+- *(design)* DESIGN-0005 and DESIGN-0006 from INV-0004
+- *(design)* DESIGN-0005 Kata in the worker image, CI on two tainted workers
+- *(design)* DESIGN-0005 split into two stages
+- *(design)* DESIGN-0005 resolve OQ-1 and OQ-6
+- *(impl)* IMPL-0004 from DESIGN-0005
+- *(impl)* IMPL-0004 resolve OQ-1 to OQ-6
 
 ## [tools/bootstrap/v0.3.2] - 2026-10-10
 
