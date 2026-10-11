@@ -42,9 +42,10 @@ does four things:
 
 - upgrades it to the last 1.13 patch, **v1.13.11**;
 - corrects a wrong rationale in the record;
-- adds the first workload-isolation tier — **Kata Containers on
-  tainted CI worker nodes**, with runc staying the default everywhere
-  else;
+- adds the first workload-isolation tier: **Kata Containers baked into
+  every worker image**. A pod opts in with `runtimeClassName`, and CI
+  jobs are pinned to two tainted workers. runc stays the default
+  everywhere;
 - turns the useful Sidero guides into **opt-in HCL options**.
 
 The options are: image signature verification, Talos log shipping,
@@ -72,8 +73,10 @@ changes when it lands.
   install.
 - **G4** — per-node scheduling primitives: node labels and taints,
   validated at load against what Kubernetes will actually accept.
-- **G5** — per-node runtime declaration, Kata first. Validation ties a
-  runtime to its extension and to the Cilium values it needs.
+- **G5** — Kata available on every worker, through the worker
+  profile's extensions. A stable runtime label is derived from the
+  extension's presence, and validation ties it to the Cilium values it
+  needs.
 - **G6** — opt-in Talos-side options: image verification, logging,
   etcd metrics, registry mirror.
 - **G7** — opt-in cluster add-ons: metrics-server and KEDA, with a
@@ -87,11 +90,15 @@ changes when it lands.
   runtime a node's default would push Cilium, the CSI node plugin,
   and every `hostNetwork` DaemonSet into a VM or netstack they can't
   run in.
-- **gVisor, crun, NVIDIA.** All three are deferred. The runtime
-  surface (Phase 4) is shaped to accept them later as a resolver-only
-  change. gVisor also needs the `user.max_user_namespaces` sysctl. crun
-  is a runc alternative with little isolation value. NVIDIA needs GPU
-  PCI passthrough, which the `pve vms` stage doesn't model.
+- **gVisor, crun, NVIDIA.** All three are deferred and not installed;
+  Kata is the isolation actually needed (decided 2026-10-11).
+  - gVisor would need the `user.max_user_namespaces` sysctl on every
+    node.
+  - crun is a runc alternative with little isolation value.
+  - NVIDIA is hardware-tied: it needs GPU PCI passthrough, which
+    `pve vms` doesn't model, and the GPU host may be repurposed. When it
+    returns it is a per-node profile, not part of the worker image.
+  - The runtime table (Phase 4) takes each of them later as one row.
 - **Talos workload isolation (`sandboxd`).** It is 1.14-only; see
   DESIGN-0006.
 - **RuntimeClass objects, CI runner config, `ScaledObject`s.** These
@@ -111,6 +118,7 @@ changes when it lands.
 | CI | ARC runners, BuildKit, Buildkite. The first two run in `privileged` Pod Security namespaces and Buildkite in `baseline`, all under runc. |
 | Nested virtualisation | Guests see `vmx`, because bootstrap creates VMs with `cpu = host`. `/dev/kvm`, `/dev/vhost-vsock`, and `/dev/vhost-net` already exist on workers. |
 | Cilium | v1.20.1, KPR. `bpf-lb-sock-hostns-only = true` live, **forced by `gatewayAPI.enabled`**, not set in the values file. Bandwidth manager off. |
+| Node scheduling | No worker carries a taint or a custom label today; only the control-plane `NoSchedule` taint exists. Talos auto-labels every node `extensions.talos.dev/<name>=<version>`, and Talos owns those keys. |
 | Bootstrap delivery | `talos emit` renders per-role templates that booty serves at PXE install. Live nodes are changed by hand-run `talosctl patch` (IMPL-0003, the install-image patch). |
 
 ### Facts that shape the design
@@ -144,10 +152,14 @@ follow-up check):
   (open, Talos 1.13.9 + Cilium 1.20.1): after a reboot, socket-LB
   cgroup links can pin to a dying cgroup, breaking host-netns
   ClusterIP access.
-- **RuntimeClass `scheduling`.** `nodeSelector` is intersected with
-  the pod's (a conflict means the pod is rejected) and `tolerations`
-  are unioned. A CI pod then needs only `runtimeClassName: kata`;
-  placement and toleration come from the class.
+- **RuntimeClass `scheduling`.** The class's `nodeSelector` is merged
+  with the pod's: both must hold, and a conflict means the pod is
+  rejected. Its `tolerations` are added to the pod's. A CI pod then
+  needs only `runtimeClassName: kata-ci`; placement and toleration
+  come from the class. `nodeSelector` is an **exact key=value match**.
+  The Talos extension label's value is the extension *version*, so a
+  class that selected on it would break at every upgrade. Hence a
+  stable derived label (Phase 4).
 - **The 1.13 config documents.** `ImageVerificationConfig` (1.13.0+)
   has rules `image` / `skip` / `deny` / `keyless{issuer, subject |
   subjectRegex}` / `publicKey{certificate}`, exactly one action per
@@ -169,8 +181,8 @@ follow-up check):
 ```mermaid
 flowchart TB
     subgraph HCL["bootstrap.hcl"]
-        P["profile kata<br/>extensions = [kata-containers, …]"]
-        N["node ci-01<br/>profiles · runtimes = [kata]<br/>labels · taint blocks"]
+        P["profile worker<br/>extensions = [… , kata-containers]"]
+        N["node work04 / work05<br/>workload_class = ci<br/>(labels · taint blocks)"]
         O["cluster { image_verification · logging ·<br/>etcd_metrics · registry_mirror }"]
         A["addon metrics-server / keda"]
     end
@@ -186,9 +198,9 @@ flowchart TB
         K8S["Kubernetes API"]
     end
     subgraph GitOps["GitOps (private repo)"]
-        RC["RuntimeClass kata<br/>scheduling: nodeSelector + toleration"]
+        RC["RuntimeClasses kata, kata-ci<br/>scheduling: nodeSelector (+ toleration)"]
         CV["Cilium values<br/>socketLB.hostNamespaceOnly: true"]
-        CI["ARC / Buildkite / BuildKit pods<br/>runtimeClassName: kata"]
+        CI["ARC / Buildkite / BuildKit pods<br/>runtimeClassName: kata-ci"]
     end
     P --> R
     N --> R
@@ -257,6 +269,14 @@ This is a separate chore PR with no behaviour change.
      `bpftool cgroup show /sys/fs/cgroup effective` from a host-netns
      debug pod, plus a ClusterIP curl from host-network.
   5. Optional: `talosctl upgrade-k8s --to 1.36.5` (OQ-2).
+- **Kata rides this re-image (OQ-20).** Every node is re-imaged for
+  1.13.11 anyway. Adding `siderolabs/kata-containers` to the
+  **worker** profile first means step 3 installs it on every worker at
+  no extra operation. The workers' installer image becomes the new
+  worker schematic and the control planes keep theirs. The catalog
+  already splits classes by (role, schematic), so nothing new is
+  needed in emit for this. Until Phase 4's RuntimeClasses exist,
+  nothing can use Kata: installed is not enabled.
 - `talosctl upgrade --image` rewrites the stored `install.image`, so
   this upgrade also retires the drift class the install-image patch
   fixed by hand.
@@ -322,7 +342,7 @@ it lands.
 **HCL surface.** Per node, two primitives:
 
 ```hcl
-node "ci-01" {
+node "work04" {
   role     = "worker"
   # …
   labels = {
@@ -339,7 +359,7 @@ node "ci-01" {
 pair in one line:
 
 ```hcl
-node "ci-01" {
+node "work04" {
   workload_class = "ci"   # ⇒ label + taint hoomlab.io/workload=ci:NoSchedule
 }
 ```
@@ -354,11 +374,17 @@ The sugar and an explicit label or taint on the same key is an
 - Taints go to **`machine.kubelet.extraConfig.registerWithTaints`**,
   never `machine.nodeTaints`. On workers, `nodeTaints` fails against
   NodeRestriction; the kubelet's registration taints don't.
-- Consequence: **taints apply when a node registers.** That is right
-  for new nodes, which is how the CI pool is built (OQ-11). Changing
-  taints on an already-registered node needs a Node-object change.
-  The apply stage reports it as drift and prints the exact
-  `kubectl taint` command. The operator runs it (OQ-4).
+- Consequence: **taints apply when a node registers.** The CI pool is
+  two **existing** workers (decided 2026-10-11), which are already
+  registered. So their taint is put on once by the operator with
+  `kubectl taint`. The machine config still carries
+  `registerWithTaints`, so any re-registration (reinstall, Node
+  deletion) reproduces it from config. The apply stage compares
+  declared and live taints and prints the exact `kubectl taint`
+  command for any drift (OQ-4).
+- Labels apply live through `machine.nodeLabels` on workers too, as
+  long as the prefix is allowed (below), so the CI label needs no
+  operator step.
 
 **Validation (new rules, all at load).**
 
@@ -383,7 +409,9 @@ and taints are maps, not scalar vars, so they can't ride the textual
 var substitution.
 
 - Emit therefore keys templates by **(role, scheduling set)**, where
-  the scheduling set is the node's labels, taints, and runtimes.
+  the scheduling set is the node's labels and taints. With the CI
+  pool, the worker role splits into two classes: plain workers and CI
+  workers.
 - Booty profiles already name their template per profile, so the
   catalog supports this unchanged. The profile key becomes (role,
   schematic, scheduling set).
@@ -397,73 +425,106 @@ var substitution.
 
 ### Phase 4 — runtimes: Kata for CI
 
-**HCL surface.** Per node:
+**Model.** Three layers, each owned once:
+
+| Layer | What decides it | Owner |
+| ----- | --------------- | ----- |
+| **Default runtime** | runc, always. Not configurable. | Talos |
+| **Capability** — which runtimes a node *can* run | the extensions in the node's profiles (image-build time) | bootstrap |
+| **Placement** — which pods use a runtime, and where | RuntimeClass `scheduling`, plus node labels and taints | GitOps (classes), bootstrap (labels and taints) |
+
+**HCL surface.** No new runtime attribute is needed. Kata joins the
+worker profile, and the CI workers add the workload class:
 
 ```hcl
-profile "kata" {
+profile "base" {
   extensions = [
     "siderolabs/qemu-guest-agent",
-    "siderolabs/iscsi-tools",        # CSI volumes still mount on these nodes
-    "siderolabs/kata-containers",
+    "siderolabs/iscsi-tools",
+    "siderolabs/util-linux-tools",
   ]
 }
+profile "kata" {
+  extensions = ["siderolabs/kata-containers"]
+}
 
-node "ci-01" {
+node "ctrl01" {
+  role     = "controlplane"
+  profiles = ["base"]             # control planes run no workloads; minimal image
+  # …
+}
+node "work01" {
+  role     = "worker"
+  profiles = ["base", "kata"]     # every worker: Kata installed, opt-in per pod
+  # …
+}
+node "work04" {
   role           = "worker"
-  profiles       = ["kata"]
-  runtimes       = ["kata"]          # declares what this node can run beyond runc
-  workload_class = "ci"
+  profiles       = ["base", "kata"]
+  workload_class = "ci"           # the two CI workers (Phase 3)
   # …
 }
 ```
 
-**Runtime table in code.** A closed set (OQ-3). Adding a runtime is
-one table row plus its rules:
+**Runtime table in code.** It maps an extension to the runtime it
+provides; adding a runtime is one row plus its rules:
 
-| Runtime | Extension | Handler | Node requirements |
-| ------- | --------- | ------- | ----------------- |
-| `kata` | `siderolabs/kata-containers` | `kata` | worker, `/dev/kvm` (guaranteed by `cpu = host` and host nested virt) |
-| `gvisor` *(deferred)* | `siderolabs/gvisor` | `runsc` | sysctl `user.max_user_namespaces` |
-| `crun` *(deferred)* | `siderolabs/crun` | `crun` | — |
-| `nvidia` *(deferred)* | `nvidia-open-gpu-kernel-modules-*` + `nvidia-container-toolkit-*` | `nvidia` | GPU PCI passthrough (no `pve vms` support), kernel modules |
+| Runtime | Extension | Handler | Rules |
+| ------- | --------- | ------- | ----- |
+| `kata` | `siderolabs/kata-containers` | `kata` | worker-only; `/dev/kvm` (guaranteed by `cpu = host` plus host nested virt); Cilium values check |
+| `gvisor`, `crun`, `nvidia` | — | — | deferred (Non-Goals) |
+
+**Derived label (OQ-7).** A node whose flattened extensions include a
+runtime's extension gets the label `runtime.hoomlab.io/kata = "true"`.
+
+- The label is derived from the explicit profile, so the
+  image-build-time fact is stated once. It also can't drift from what
+  is actually installed.
+- It exists because the Talos `extensions.talos.dev/kata-containers`
+  label carries a version, and an exact-match `nodeSelector` on it
+  would break at every upgrade.
+- An explicit label with the same key is an XOR error.
 
 **Validation.**
 
-- A declared runtime's extension must be in the node's flattened
-  profiles. The CLI doesn't add it: the profile is the
-  image-build-time decision and stays explicit.
-- An extension present without the runtime declared is allowed. A
-  node can carry a runtime binary it doesn't advertise.
-- Runtimes are worker-only.
-- **Cilium cross-check:** if any node declares `kata`, the validated
-  Cilium values must set `socketLB.hostNamespaceOnly: true`
+- The Kata extension on a control-plane profile is an error. Control
+  planes stay minimal, and they are tainted against workloads anyway.
+- **Cilium cross-check.** If any node carries the Kata extension, the
+  validated Cilium values must set `socketLB.hostNamespaceOnly: true`
   explicitly. Gateway API forcing it today is an implementation detail
-  of Cilium 1.20, and the requirement must survive a values change. If
-  `bandwidthManager.enabled` is true, emit an error (talos#13745).
-  This sits beside the existing KPR and KubePrism invariants in
-  `ciliumvalues.go`.
+  of Cilium 1.20, and the requirement must survive a values change.
+  `bandwidthManager.enabled: true` alongside Kata is an error
+  (talos#13745). This sits beside the existing KPR and KubePrism
+  invariants in `ciliumvalues.go`.
 
-**Derived label.** OQ-7: `runtimes = ["kata"]` derives the label
-`runtime.hoomlab.io/kata = "true"`. It is the key the RuntimeClass
-selects on, so the RuntimeClass never depends on a hand-maintained
-label. An explicit label with the same key is an XOR error.
-
-**The GitOps contract.** The RuntimeClass is written in the private
-repo (OQ-9), shown here as the contract:
+**The GitOps contract.** Two RuntimeClasses share one handler and
+differ only in placement (OQ-9, OQ-21):
 
 ```yaml
+# kata — isolate this pod, on any Kata-capable worker
 apiVersion: node.k8s.io/v1
 kind: RuntimeClass
 metadata:
   name: kata
 handler: kata
 overhead:
-  podFixed:
-    memory: 130Mi
-    cpu: 250m
+  podFixed: { memory: 130Mi, cpu: 250m }
 scheduling:
   nodeSelector:
     runtime.hoomlab.io/kata: "true"
+---
+# kata-ci — CI jobs, only on the tainted CI workers
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata:
+  name: kata-ci
+handler: kata
+overhead:
+  podFixed: { memory: 130Mi, cpu: 250m }
+scheduling:
+  nodeSelector:
+    runtime.hoomlab.io/kata: "true"
+    hoomlab.io/workload: ci
   tolerations:
     - key: hoomlab.io/workload
       operator: Equal
@@ -471,12 +532,20 @@ scheduling:
       effect: NoSchedule
 ```
 
-A CI pod sets only `runtimeClassName: kata`. It lands on a Kata node
-and tolerates the CI taint. Nothing else can schedule there.
+- A CI pod sets only `runtimeClassName: kata-ci`. It lands on a CI
+  worker, tolerates the taint, and runs in a VM.
+- A Temporal activity that needs isolation sets `runtimeClassName:
+  kata`.
+- Everything else is runc as today, and the taint keeps it off the CI
+  workers.
+- **Capability everywhere doesn't replace the CI pool.** The Kata VM
+  protects the node from the pod; the tainted pool is defence in
+  depth. A CI job that ever escaped its VM would land beside other CI
+  jobs, not beside OpenBao or Postgres.
 
 **CI pod shape** (GitOps, informative):
 
-- ARC runner and Buildkite job pods move to `runtimeClassName: kata`.
+- ARC runner and Buildkite job pods move to `runtimeClassName: kata-ci`.
 - Privileged DinD or BuildKit is fine *inside* the guest, but the
   namespaces stay `privileged` at the Pod Security level, because PSA
   evaluates the pod spec, not the boundary.
@@ -486,11 +555,13 @@ and tolerates the CI taint. Nothing else can schedule there.
 - For Buildkite, enable `prohibit-kubernetes-plugin` so pipelines
   can't strip the RuntimeClass.
 
-**Sizing (operator).** Budget per CI pod: its requests, plus
+**Sizing (operator).** Budget per Kata pod: its requests, plus the
 130Mi / 250m overhead, plus guest-kernel memory. The Cloud Hypervisor
 default guest is 2048 MiB and is touched lazily
-**[unverified actual RSS]**. Kata VMs can't live-migrate with nesting
-active, so pin them out of PVE HA and the 9.2 load balancer.
+**[unverified actual RSS]**. A VM can't live-migrate while nesting is
+active, which means while a Kata pod runs on it. The CI workers should
+therefore sit outside PVE HA and the 9.2 load balancer. Any other
+worker is affected only while it hosts a `kata` pod.
 
 ### Phase 5 — Talos-side options
 
@@ -672,7 +743,8 @@ don't use them:
 
 | Where | Addition | Phase |
 | ----- | -------- | ----- |
-| `node` | `labels` map, `taint "<key>" { value, effect }` blocks, `workload_class` (sugar), `runtimes` list | 3, 4 |
+| `node` | `labels` map, `taint "<key>" { value, effect }` blocks, `workload_class` (sugar) | 3 |
+| `profile` | none: Kata is just `siderolabs/kata-containers` in `extensions`; the runtime label is derived | 1, 4 |
 | `talos.cluster` | `image_verification { rule { … } }`, `logging { destination {…} kernel "<name>" {…} }`, `etcd_metrics { listen_url }`, `registry_mirror "<registry>" { … }` | 5 |
 | top level (`talos`) | `addon "<name>" { version }` | 6 |
 
@@ -693,7 +765,7 @@ TalosNode (raw HCL)                      ResolvedNode (consumers read this)
   Labels        map[string]string   ──►    Labels   map[string]string   (explicit ∪ derived; collisions = error)
   Taints        []Taint             ──►    Taints   []Taint             (explicit ∪ workload_class)
   WorkloadClass string              ──►    (consumed by the resolver)
-  Runtimes      []string            ──►    Runtimes []Runtime           (table rows: handler, extension, rules)
+  Profiles      []string            ──►    Runtimes []Runtime           (derived from flattened extensions via the runtime table)
 TalosCluster
   ImageVerification *ImageVerification   (rules, ordered)
   Logging           *Logging
@@ -705,7 +777,7 @@ Talos
 
 This keeps the DESIGN-0004 pattern: raw input → resolver → a
 fully-explicit resolved form, so renderers never know whether a label
-came from `labels`, `workload_class`, or `runtimes`. That is also what
+came from `labels`, `workload_class`, or a profile's extensions. That is also what
 makes the 1.14 renderer swap (DESIGN-0006) a renderer-only change.
 
 No new persisted state. `secrets.yaml`, `talosconfig`, and
@@ -715,12 +787,14 @@ No new persisted state. `secrets.yaml`, `talosconfig`, and
 
 - **Config:**
   - table tests for every new validation rule (restricted prefixes,
-    XOR collisions, the runtime-extension pairing, the Cilium
+    XOR collisions, the derived runtime label, Kata on a control
+    plane, the Cilium
     `hostNamespaceOnly` and bandwidth-manager checks, terminal `*`
     rule, keyless subject XOR, add-on name set, 1.13.11 hostnames);
   - positive controls for each.
 - **Emit:**
-  - golden templates for a split worker role (base + kata/ci class);
+  - golden templates for a split worker role (plain worker + CI class),
+    and the worker/control-plane schematic split;
   - a test that a config without the new attributes stays
     byte-identical to today's output;
   - machinery `Validate` (metal mode) passes on every class template.
@@ -729,9 +803,12 @@ No new persisted state. `secrets.yaml`, `talosconfig`, and
     `NO_REBOOT`, refusal path, schematic-mismatch message);
   - live: `--dry-run` across the 8 nodes must report 0 to apply
     before any option is enabled.
-- **Live Kata acceptance**, on the first CI node:
-  - `uname -r` in a `runtimeClassName: kata` pod differs from the
+- **Live Kata acceptance**, on the first CI worker and then one plain
+  worker:
+  - `uname -r` in a `runtimeClassName: kata-ci` pod differs from the
     host;
+  - a `kata` pod schedules on a plain worker; a `kata-ci` pod only on
+    a CI worker;
   - kube-dns and a ClusterIP resolve from inside the pod
     (`hostNamespaceOnly`);
   - a democratic-csi PVC mounts in a Kata pod (virtio-fs path);
@@ -750,7 +827,8 @@ flowchart LR
     P0["Phase 0<br/>chore PR:<br/>comment + IMPL note"] --> P1["Phase 1<br/>machinery + version 1.13.11<br/>operator upgrades nodes"]
     P1 --> P2["Phase 2<br/>talos apply stage<br/>(prove 0 drift)"]
     P2 --> P3["Phase 3<br/>labels + taints<br/>template classes"]
-    P3 --> P4["Phase 4<br/>runtimes: kata<br/>Cilium value · CI nodes join<br/>GitOps: RuntimeClass, CI pods"]
+    P1 -. "kata in worker image" .-> P4
+    P3 --> P4["Phase 4<br/>runtime label · Cilium value<br/>GitOps: RuntimeClasses, CI pods"]
     P2 --> P5["Phase 5<br/>Talos options<br/>(one at a time)"]
     P2 --> P6["Phase 6<br/>add-on stage<br/>metrics-server, KEDA"]
 ```
@@ -762,14 +840,17 @@ flowchart LR
   1. Add `socketLB.hostNamespaceOnly: true` explicitly to the Cilium
      values in **both** the drill values file and GitOps. It is
      already in effect, so this is a no-op restart.
-  2. Add the `kata` profile and new CI node blocks; run `pve vms` and
-     PXE install. The nodes register with their taint.
-  3. Run the acceptance checks above.
-  4. GitOps adds the RuntimeClass.
-  5. Move one CI workload (one ARC scale set), then the rest.
+  2. Kata is already on every worker (Phase 1). Set `workload_class =
+     "ci"` on the two CI workers and run `talos apply` (labels go live).
+     The operator runs the printed `kubectl taint` once per node.
+  3. GitOps adds the `kata` and `kata-ci` RuntimeClasses.
+  4. Run the acceptance checks above.
+  5. Move one CI workload (one ARC scale set) to `kata-ci`, then the
+     rest.
 - **Rollback.** Remove `runtimeClassName` from the CI pods and they
-  return to runc on regular workers. The Kata nodes can be drained and
-  destroyed. Options are removed by deleting the block and running
+  return to runc on the same CI workers. Removing the extension from
+  the worker profile is a re-image, so leave it installed: unused, it
+  costs nothing. Options are removed by deleting the block and running
   `talos apply`.
 
 ## Open Questions
@@ -787,18 +868,15 @@ own.
    - a. Yes: `upgrade-k8s` to 1.36.5 after all nodes are on 1.13.11,
      and pin `kubernetes_version = "1.36.5"` in HCL.
    - b. Talos only; stay on 1.36.3 (machinery's default).
-3. **Which runtimes the schema accepts now.**
-   - a. `kata` only; anything else is a load error naming the
-     supported set. gVisor, crun, and NVIDIA are added as table rows
-     when designed.
-   - b. Accept `kata` and `gvisor` (gVisor's extra rule is just the
-     userns sysctl).
-   - c. Reserve all four names; unimplemented ones error as "not yet
-     supported".
+3. **Which runtimes are supported now.** *Resolved 2026-10-11*: Kata
+   only. gVisor, crun, and NVIDIA are deferred and not installed. Each
+   returns later as one runtime-table row (NVIDIA as a per-node
+   profile).
 4. **Taints on already-registered nodes.**
-   - a. `registerWithTaints` for new nodes. The apply stage reports
-     taint drift on existing nodes and prints the `kubectl taint`
-     command for the operator.
+   - a. `registerWithTaints` in config, so re-registration reproduces
+     the taint. The apply stage reports taint drift on registered nodes
+     (including the first rollout to the two existing CI workers) and
+     prints the `kubectl taint` command for the operator.
    - b. The apply stage also patches Node taints itself via
      `kubeconfig`, crossing into the Kubernetes API.
    - c. Taints only at registration; changing one means re-registering
@@ -807,7 +885,8 @@ own.
    - a. `workload_class = "ci"` derives label + taint
      `hoomlab.io/workload=ci:NoSchedule`, XOR with explicit keys.
    - b. No sugar; always write `labels` + `taint` explicitly.
-   - c. The runtime implies the taint (Kata nodes auto-tainted `ci`).
+   - c. A named `node_class "ci"` block (labels + taints) that nodes
+     reference, instead of a per-node attribute.
 6. **Label and taint key prefix.**
    - a. `hoomlab.io/`. Kubernetes only requires DNS-subdomain form,
      and it names the project.
@@ -815,33 +894,33 @@ own.
    - c. Unprefixed keys (`workload`), which collide more easily with
      third-party labels.
 7. **Derived runtime label.**
-   - a. `runtimes = ["kata"]` derives `runtime.hoomlab.io/kata=true`
-     for the RuntimeClass `nodeSelector`.
-   - b. No derivation; the operator writes the label the RuntimeClass
-     selects on.
+   - a. The Kata extension in a node's profiles derives
+     `runtime.hoomlab.io/kata=true`, a stable key for RuntimeClass
+     `nodeSelector`s.
+   - b. No derivation; the operator writes the label by hand on every
+     worker.
+   - c. No label; the `kata` RuntimeClass has no `nodeSelector` and
+     relies on every schedulable node carrying Kata. That breaks the
+     day a worker without Kata (e.g. a GPU node) joins.
 8. **Cilium `socketLB.hostNamespaceOnly` rule.**
-   - a. Required explicitly in the values when any node declares a
-     sandbox runtime; error otherwise. Bandwidth manager with Kata is
+   - a. Required explicitly in the values when any node carries the
+     Kata extension; error otherwise. Bandwidth manager with Kata is
      an error.
    - b. Required always, sandbox or not. It's in effect live anyway
      via Gateway API.
    - c. Warning only.
-9. **Who owns the `kata` RuntimeClass object.**
+9. **Who owns the `kata` / `kata-ci` RuntimeClass objects.**
    - a. GitOps, with the contract above written here.
    - b. Bootstrap, via `extraManifests` / inline manifest at day 0.
    - c. Bootstrap's Phase 6 add-on stage (`addon "runtimeclasses"`).
-10. **Kata VM handler.** Resolved by research: Talos 1.13.11 ships
+10. **Kata VM handler.** *Resolved by research*: Talos 1.13.11 ships
     only `kata` (Cloud Hypervisor). Revisit if `kata-qemu` ever
-    appears. *No decision needed — listed so the numbering stays
-    stable.*
-11. **How Kata CI nodes are provisioned.**
-    - a. New dedicated worker VMs (a CI pool) from bootstrap. They
-      register tainted, so no `kubectl taint` is needed, and are
-      sized for the Kata overhead.
-    - b. Convert existing workers (`talosctl upgrade --image` to the
-      kata schematic, plus a manual taint).
-    - c. Start with one converted worker for the spike, then a new
-      pool.
+    appears.
+11. **How the CI pool is provisioned.** *Resolved 2026-10-11*: Kata on
+    every worker through the worker profile. The CI pool is two
+    existing workers, tainted and labelled `ci`, with the taint put on
+    once via `kubectl taint` and carried in `registerWithTaints` for
+    re-registration.
 12. **Day-2 delivery to live nodes.**
     - a. A new `talos apply` stage (render → diff → `NO_REBOOT`
       apply).
@@ -893,6 +972,18 @@ own.
     - a. A per-workload `ScaledObject` in GitOps, next to the worker
       Deployment, using the pattern documented here.
     - b. An HCL block that renders `ScaledObject`s from bootstrap.
+
+20. **When Kata enters the worker image.**
+    - a. In the Phase 1 re-image: add the extension to the worker
+      profile before running the 1.13.11 upgrades, so there is one
+      re-image per worker.
+    - b. A separate re-image after 1.13.11 settles, so the patch
+      upgrade and the new extension are isolated.
+21. **Which RuntimeClasses to publish.**
+    - a. Both `kata` (any Kata worker) and `kata-ci` (CI pool only).
+    - b. `kata-ci` only until a non-CI workload asks for isolation.
+    - c. A single `kata` class; CI pods add their own `nodeSelector`
+      and toleration.
 
 ## References
 
