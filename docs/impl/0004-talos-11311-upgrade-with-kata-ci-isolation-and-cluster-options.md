@@ -153,8 +153,9 @@ renders 1.13.11 configs, because the contract derives from
 
 **0.1 Record fix (code, first)**
 
-- [ ] Cut the chore branch (OQ-1), e.g. `chore/talos-1.13.11-kata`.
-- [ ] `tools/bootstrap/internal/talos/machineconfig.go`: rewrite the
+- [x] Cut the chore branch (OQ-1), e.g. `chore/talos-1.13.11-kata`.
+      *(cut from `main` at the PR #16 merge, 2026-10-11)*
+- [x] `tools/bootstrap/internal/talos/machineconfig.go`: rewrite the
       `setInterfaces` doc comment and the `nolint:staticcheck`
       reason. Drop the false "machinery v1.13 ships no multi-doc
       network device type". State the real reasons:
@@ -162,31 +163,51 @@ renders 1.13.11 configs, because the contract derives from
       - fields and their documents are mutually exclusive, so a switch
         is a whole-config replacement;
       - the migration is DESIGN-0006's.
-- [ ] `docs/impl/0003-talos-storage-plane.md` Phase 2 note: append a
-      dated correction (2026-10-xx) with the same facts and a link to
+- [x] `docs/impl/0003-talos-storage-plane.md` Phase 2 note: append a
+      dated correction (2026-10-11) with the same facts and a link to
       INV-0004 F5. Amend the record; don't rewrite it.
-- [ ] `just bootstrap-lint` and `just bootstrap-test` pass.
-- [ ] Commit:
+- [x] `just bootstrap-lint` and `just bootstrap-test` pass.
+- [x] Commit:
       `docs(bootstrap): correct the setInterfaces legacy-network rationale`.
+      *(`c6be73f`, first on the branch)*
 
 **0.2 CLI hygiene (code)**
 
-- [ ] `go get github.com/siderolabs/talos/pkg/machinery@v1.13.11` in
+- [x] `go get github.com/siderolabs/talos/pkg/machinery@v1.13.11` in
       `tools/bootstrap`, then `go mod tidy`. Keep the local `go.work` in
       step; it is untracked.
-- [ ] `internal/emit/emit_test.go`: `talosVersion = "v1.13.11"`.
+      *(Transitive updates rode along: testify 1.12.1, cosi runtime
+      1.16.3, grpc-gateway 2.30.0, zap 1.28.0. The local `go.work`
+      needed no change.)*
+- [x] `internal/emit/emit_test.go`: `talosVersion = "v1.13.11"`.
       Regenerate the goldens with `go test ./internal/emit -update` and
       review the diff: only version strings and boot-asset URLs.
-- [ ] `examples/bootstrap.hcl`: set `version = "v1.13.11"`. Add a
+      *(Confirmed: only the catalog `talos_version` default and the
+      `install_image` tags moved. The machineconfig templates are
+      byte-identical under machinery v1.13.11.)*
+- [x] `examples/bootstrap.hcl`: set `version = "v1.13.11"`. Add a
       commented `profile "kata"` example with the worker-only note.
-- [ ] `tools/bootstrap/README.md` and `docs/runbook/bootstrap-cluster.md`:
+- [x] `tools/bootstrap/README.md` and `docs/runbook/bootstrap-cluster.md`:
       update the version references.
-- [ ] Add a load test asserting that example-style node names pass
+      *(The README has none. The runbook's one boot-asset `curl`
+      example moved to v1.13.11. Unit-test fixtures outside emit keep
+      v1.13.8: they test logic, not the pinned release.)*
+- [x] Add a load test asserting that example-style node names pass
       1.13.11's stricter hostname validation (machinery
       `Validate`, metal mode).
-- [ ] `just bootstrap-lint`, `just bootstrap-test`, and govulncheck are
+      *(Deviation: no new test. The existing
+      `TestRoleTemplatesMultiNICRoundTrip` already renders a real
+      hostname (`cp-01`) into each role template and fails on any
+      machinery `Validate` warning in metal mode. Under v1.13.11 that
+      is exactly the stricter check, `ValidateDNSNameChars`, and it
+      passes.)*
+- [x] `just bootstrap-lint`, `just bootstrap-test`, and govulncheck are
       green. Push and open the PR **only when the operator asks**
       (OQ-2).
+      *(lint 0 issues and all packages ok. govulncheck: 0 called
+      vulnerabilities. Two uncalled module findings predate this bump:
+      cel-go GO-2026-6094, fixed in v0.30.0, and x/crypto GO-2026-5932,
+      no fix yet.)*
 
 **0.3 HCL and emit (operator)**
 
