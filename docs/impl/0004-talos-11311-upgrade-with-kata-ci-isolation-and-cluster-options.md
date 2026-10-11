@@ -124,7 +124,7 @@ this IMPL.
 | Fact | Value |
 | ---- | ----- |
 | Control-plane schematic (`base` + `iscsi`) | `88d1f7a5c4f1d3aba7df787c448c1d3d008ed29cfb34af53fa0df4336a56040b` (unchanged: schematic IDs depend on extensions, not version) |
-| Worker schematic (`base` + `iscsi` + `kata`) | *(from Phase 0 emit)* |
+| Worker schematic (`base` + `iscsi` + `kata`) | `95025911f4700432cab85474232840e2e25477bf0c9e0db8f24bd8c396cc8a56` (iscsi-tools, kata-containers, qemu-guest-agent, util-linux-tools; resolved 2026-10-11) |
 | Kata extension version | *(from `talosctl get extensions`; expected 3.32.0)* |
 | Talos | v1.13.8 → *v1.13.11* |
 | Kubernetes | v1.36.3 → *v1.36.5* |
