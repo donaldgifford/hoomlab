@@ -128,7 +128,7 @@ this IMPL.
 | Kata extension version | *(from `talosctl get extensions`; expected 3.32.0)* |
 | Talos | v1.13.8 → *v1.13.11* |
 | Kubernetes | v1.36.3 → *v1.36.5* |
-| CI workers | *(OQ-4)* |
+| CI workers | `work04`, `work05` (OQ-4) |
 | Label and taint key | `hoomlab.io/workload=ci` (DESIGN-0005 OQ-6) |
 | bootstrap release with the apply stage | *(Phase 3)* |
 
@@ -217,7 +217,7 @@ renders 1.13.11 configs, because the contract derives from
       - every democratic-csi node pod is Ready;
       - take an etcd snapshot (OQ-5): `talosctl etcd snapshot` to
         `~/drill/backups/`.
-- [ ] Workers, one at a time (order: OQ-3):
+- [ ] Workers first, one at a time (OQ-3):
 
       ```sh
       talosctl -n <worker-ip> upgrade \
@@ -253,11 +253,11 @@ renders 1.13.11 configs, because the contract derives from
 
 **0.5 Kata test kit (operator; hand-applied, not GitOps)**
 
-- [ ] Label and taint the first CI worker (OQ-4) with the final keys:
+- [ ] Label and taint the first CI worker, `work04` (OQ-4), with the final keys:
 
       ```sh
-      kubectl label node <ci-worker> hoomlab.io/workload=ci
-      kubectl taint node <ci-worker> hoomlab.io/workload=ci:NoSchedule
+      kubectl label node work04 hoomlab.io/workload=ci
+      kubectl taint node work04 hoomlab.io/workload=ci:NoSchedule
       ```
 
 - [ ] Apply a test RuntimeClass `kata`:
@@ -293,7 +293,7 @@ renders 1.13.11 configs, because the contract derives from
       cilium#48420 check passes.
 - [ ] Write the findings into the [record table](#the-record-table)
       and a Phase 0 findings note under this phase. Clean up the test
-      pods. Keep or delete the test RuntimeClass per OQ-6.
+      pods. Keep the test RuntimeClass until Phase 5 (OQ-6).
 
 #### Success Criteria
 
@@ -693,40 +693,26 @@ resolves to "keep in GitOps", this phase reduces to the GitOps tasks.
 Each question offers lettered options: **a** is the recommendation and
 the others are alternatives. Answer with a letter or write your own.
 
-**Before Phase 0:** OQ-1 to OQ-6. OQ-7 to OQ-12 are Stage 2 and are
-re-asked at the Phase 2 gate.
+**Before Phase 0:** OQ-1 to OQ-6, all resolved 2026-10-11. OQ-7 to
+OQ-12 are Stage 2 and are re-asked at the Phase 2 gate.
 
-1. **Branch and merge order.**
-   - a. Merge `inv/0004` first (INV-0004, DESIGN-0005/0006, this
-     IMPL), then cut the Phase 0 chore branch from `main`. IMPL
-     checkboxes are updated on the branch doing the work.
-   - b. Cut the chore branch from `inv/0004` and merge both together.
-   - c. Keep the docs on `inv/0004` unmerged; the chore branch carries
-     only code.
-2. **Phase 0 PR and release.**
-   - a. One chore PR (record-fix commit first, then the machinery
-     bump), labelled `dont-release`. The live upgrade doesn't need a
-     new binary.
-   - b. The same PR, plus cut a tools release (v0.3.3) so the
-     operator's binary matches `main`.
-   - c. Two PRs: the record fix, then the bump.
-3. **Upgrade order in Phase 0.4.**
-   - a. Workers first. Kata only touches the worker image, so the new
-     schematic is proven before the control planes move.
-   - b. Control planes first, as IMPL-0003 Phase 1 did.
-4. **Which two workers are the CI pool.**
-   - a. `work04` and `work05`, the newest and larger VMs, with the most
-     headroom for Kata overhead. The test kit uses `work04`.
-   - b. `work01` and `work02`.
-   - c. Others, which you name.
-5. **etcd snapshot before the re-image.**
-   - a. Yes: `talosctl etcd snapshot` into `~/drill/backups/` before the
-     first control plane.
-   - b. Skip it; rolling upgrades keep quorum.
-6. **The Phase 0 test RuntimeClass after the test kit.**
-   - a. Keep it until Phase 5 replaces it, so ad-hoc Kata experiments
-     stay possible. Nothing in GitOps references it.
-   - b. Delete it once T1–T8 are recorded.
+1. **Branch and merge order.** *Resolved 2026-10-11 (a)*: merge
+   `inv/0004` first, then cut the Phase 0 chore branch from `main`.
+   IMPL checkboxes are updated on the branch doing the work.
+2. **Phase 0 PR and release.** *Resolved 2026-10-11 (a)*: one chore PR,
+   record-fix commit first and then the machinery bump, labelled
+   `dont-release`. No tools release; the live upgrade doesn't need a
+   new binary.
+3. **Upgrade order in Phase 0.4.** *Resolved 2026-10-11 (a)*: workers
+   first, then control planes one at a time.
+4. **Which two workers are the CI pool.** *Resolved 2026-10-11 (a)*:
+   `work04` and `work05`. The test kit uses `work04`.
+5. **etcd snapshot before the re-image.** *Resolved 2026-10-11 (a)*:
+   take it. It is one command (`talosctl etcd snapshot` into
+   `~/drill/backups/`) before the first control plane.
+6. **The Phase 0 test RuntimeClass after the test kit.** *Resolved
+   2026-10-11 (a)*: keep it until Phase 5 replaces it. Nothing in GitOps
+   references it.
 7. **How the apply stage finds node addresses** (Stage 2). The config
    has no per-node IPs.
    - a. Talos discovery: list cluster members through the endpoint and
