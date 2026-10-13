@@ -353,9 +353,14 @@ renders 1.13.11 configs, because the contract derives from
       configuration"). Day-2 hand patches must be strategic-merge, and
       Phase 3's renderer and apply must treat the live config as
       multi-document.)*
-- [ ] Closing loop: `validate`, `talos emit --dry-run`,
+- [x] Closing loop: `validate`, `talos emit --dry-run`,
       `talos ipxe --dry-run`, and `talos vms --dry-run` all report 0
       to apply.
+
+      *(2026-10-13: `validate` clean (3 PVE nodes, 8 Talos nodes);
+      `emit` resolved both schematics (control plane `88d1f7a5…`,
+      worker `95025911…` with kata-containers), 0 of 2 pending; `ipxe`
+      0 of 1; `vms` 0 of 16. 0.4 complete.)*
 
 **0.5 Kata test kit (operator; hand-applied, not GitOps)**
 
