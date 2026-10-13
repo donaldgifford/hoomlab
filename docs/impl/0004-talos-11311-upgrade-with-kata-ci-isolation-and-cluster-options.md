@@ -243,7 +243,7 @@ renders 1.13.11 configs, because the contract derives from
 
 **0.4 Rolling re-image (operator)**
 
-- [ ] Pre-flight:
+- [x] Pre-flight:
       - `talosctl health` is green;
       - etcd shows 3/3 members;
       - every democratic-csi node pod is Ready;
@@ -308,7 +308,7 @@ renders 1.13.11 configs, because the contract derives from
       reach 10.96.0.1. It's a policy gap the restart exposed, not an
       upgrade regression: `ts-repo-guardian` on the same node has no
       policy and runs.)*
-- [ ] Control planes, one at a time:
+- [x] Control planes, one at a time:
 
       ```sh
       talosctl -n <cp-ip> upgrade \
@@ -317,10 +317,31 @@ renders 1.13.11 configs, because the contract derives from
 
       Between each: etcd 3/3 healthy, `talosctl health` green, the
       cilium#48420 check.
+
+      *(2026-10-13, done with `~/drill/upgrade-node.sh` in the order
+      ctrl02, ctrl03, ctrl01. ctrl01 went last because both the
+      kubeconfig and the talosconfig point at it alone, and its run
+      used `TALOS_ENDPOINT` set to ctrl02. Each node: etcd snapshot
+      first (`~/drill/backups/etcd-pre-v1.13.11-<node>-<ts>.db`, on top
+      of the fleet-wide `etcd-pre-1.13.11.db`), drained one ReplicaSet
+      pod, upgraded, back Ready on v1.13.11, etcd 3/3, 11 socket-LB
+      hooks, host-network ClusterIP 401. Leadership moved ctrl03 →
+      ctrl02. All 8 nodes now report v1.13.11, kernel 6.18.54.)*
 - [ ] Verify the stored `install.image` on all 8 nodes by **field
       extraction only**, never a full config dump. Workers carry the
       worker schematic and control planes `88d1f7a5…`, both at
       v1.13.11.
+
+      *(2026-10-13, finding: `talosctl upgrade --image` installs the
+      image but does not write it back to the stored config. All 8
+      nodes still carry `install.image` =
+      `…/88d1f7a5…:v1.13.8`, workers included, since before this IMPL
+      every node shared one schematic. The running OS is correct, and
+      re-PXE gets the right per-class image from booty's emitted
+      configs. The stale field only matters when Talos reinstalls from
+      the stored config. Fix by a no-reboot patch of
+      `/machine/install/image` per node; Phase 3's `talos apply` would
+      also converge it, and its schematic check would flag it.)*
 - [ ] Closing loop: `validate`, `talos emit --dry-run`,
       `talos ipxe --dry-run`, and `talos vms --dry-run` all report 0
       to apply.
