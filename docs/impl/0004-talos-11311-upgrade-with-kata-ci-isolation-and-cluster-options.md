@@ -327,7 +327,7 @@ renders 1.13.11 configs, because the contract derives from
       pod, upgraded, back Ready on v1.13.11, etcd 3/3, 11 socket-LB
       hooks, host-network ClusterIP 401. Leadership moved ctrl03 →
       ctrl02. All 8 nodes now report v1.13.11, kernel 6.18.54.)*
-- [ ] Verify the stored `install.image` on all 8 nodes by **field
+- [x] Verify the stored `install.image` on all 8 nodes by **field
       extraction only**, never a full config dump. Workers carry the
       worker schematic and control planes `88d1f7a5…`, both at
       v1.13.11.
@@ -342,6 +342,17 @@ renders 1.13.11 configs, because the contract derives from
       the stored config. Fix by a no-reboot patch of
       `/machine/install/image` per node; Phase 3's `talos apply` would
       also converge it, and its schematic check would flag it.)*
+
+      *(2026-10-13, fixed: a no-reboot strategic-merge patch,
+      `{"machine":{"install":{"image":"<class image>"}}}`, on each
+      node. A dry-run diff showed exactly the one `image:` line. Field
+      extraction now shows `88d1f7a5…:v1.13.11` on ctrl01–03 and
+      `95025911…:v1.13.11` on work01–05. The live configs are
+      multi-document (three documents per node), so talosctl refuses
+      JSON6902 patches ("not supported for multi-document machine
+      configuration"). Day-2 hand patches must be strategic-merge, and
+      Phase 3's renderer and apply must treat the live config as
+      multi-document.)*
 - [ ] Closing loop: `validate`, `talos emit --dry-run`,
       `talos ipxe --dry-run`, and `talos vms --dry-run` all report 0
       to apply.
