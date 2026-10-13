@@ -371,6 +371,16 @@ renders 1.13.11 configs, because the contract derives from
       kubectl taint node work04 hoomlab.io/workload=ci:NoSchedule
       ```
 
+      *(2026-10-13, pre-check: of the 8 DaemonSets, only cilium,
+      cilium-envoy and node-exporter tolerate every taint. Alloy and
+      all four democratic-csi node plugins carry no tolerations. Their
+      pods already on work04 keep running under a `NoSchedule` taint,
+      but a rollout could not replace them there, which would leave the
+      CI pool without storage or log shipping. The test kit
+      (`~/drill/kata-test/`) warns about this at setup. Phase 4 must
+      give those DaemonSets a `hoomlab.io/workload` toleration before
+      the taint becomes permanent.)*
+
 - [ ] Apply a test RuntimeClass `kata`:
       - `handler: kata`;
       - `overhead.podFixed` 130Mi / 250m;
