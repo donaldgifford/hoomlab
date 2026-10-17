@@ -364,7 +364,11 @@ renders 1.13.11 configs, because the contract derives from
 
 **0.5 Kata test kit (operator; hand-applied, not GitOps)**
 
-- [ ] Label and taint the first CI worker, `work04` (OQ-4), with the final keys:
+- [x] ~~Label and taint the first CI worker, `work04` (OQ-4), with the final keys:~~
+      *Dropped 2026-10-17: no CI pool (DESIGN-0005 direction change,
+      OQ-11 reopened). Kata is opt-in per workload on every worker. The
+      kit pins its test pods to work04 by hostname only, so T7 and T8
+      measure a known node. The notes below are kept for the record.*
 
       ```sh
       kubectl label node work04 hoomlab.io/workload=ci
@@ -406,15 +410,17 @@ renders 1.13.11 configs, because the contract derives from
       loop-mounted ext4 image if `emptyDir` fails.
 - [ ] **T5 BuildKit:** `buildkitd`, privileged or rootless (record
       which), under `kata` builds the same image.
-- [ ] **T6 placement:** a pod tolerating the taint with
-      `runtimeClassName: kata` runs on the CI worker. A plain pod
-      without a toleration never lands there. A `kata` pod on a plain
-      worker also runs, since every worker has Kata.
+- [ ] **T6 placement** (re-cut 2026-10-17 for the no-pool model): a
+      `kata` pod with no node pin runs on a worker. A `kata` pod pinned
+      to a control plane, tolerating its taint, stays Pending, because
+      the RuntimeClass selects the kata extension label and control
+      planes lack it. A pod without `runtimeClassName` runs under
+      runc.
 - [ ] **T7 cost:** per Kata pod, record the host RSS of
       `cloud-hypervisor` plus `virtiofsd` (from `talosctl -n <ip>
       processes`), the node's `MemAvailable` delta, and the cold-start
       time to Running. Compare with runc.
-- [ ] **T8 reboot:** reboot the CI worker. Kata pods come back, and the
+- [ ] **T8 reboot:** reboot the test node (work04). Kata pods come back, and the
       cilium#48420 check passes.
 - [ ] Write the findings into the [record table](#the-record-table)
       and a Phase 0 findings note under this phase. Clean up the test
