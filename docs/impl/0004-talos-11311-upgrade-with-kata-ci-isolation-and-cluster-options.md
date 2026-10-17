@@ -381,6 +381,14 @@ renders 1.13.11 configs, because the contract derives from
       give those DaemonSets a `hoomlab.io/workload` toleration before
       the taint becomes permanent.)*
 
+      *(2026-10-17: no worker carries a taint or a `hoomlab.io/*`
+      label, although work04 and work05 were the CI pool before this
+      work. Their node objects are 19 days old, against 48 for
+      work01–03. Re-created node objects came up without the taint
+      applied by hand, which is the loss `registerWithTaints` in
+      machine config (Phase 4) exists to prevent. Until the taint is
+      back, ARC runners schedule on every worker.)*
+
 - [ ] Apply a test RuntimeClass `kata`:
       - `handler: kata`;
       - `overhead.podFixed` 130Mi / 250m;
