@@ -400,30 +400,71 @@ renders 1.13.11 configs, because the contract derives from
         `extensions.talos.dev/kata-containers: "<version>"`, the exact
         value from the record table. This is a test object only;
         Phase 5 replaces it.
-- [ ] **T1 kernel boundary:** a `runtimeClassName: kata` pod's
+- [x] **T1 kernel boundary:** a `runtimeClassName: kata` pod's
       `uname -r` differs from the host's.
+      *(2026-10-18, pass on work05: host and runc pod `6.18.54-talos`,
+      Kata guest `6.18.35`.)*
 - [ ] **T2 networking:** from the Kata pod, `nslookup
       kubernetes.default` works, and an HTTP request to a ClusterIP
       Service and to a pod IP on another node both work.
+      *(2026-10-18, pass: DNS resolves `kubernetes.default` to
+      10.96.0.1; the `kubernetes` ClusterIP answers 401, the `podinfo`
+      ClusterIP 200, and the podinfo pod IP on work01 200. With
+      `bpf-lb-sock-hostns-only=true`, Service translation for the
+      guest's traffic happens at tc, as designed.)*
 - [ ] **T3 storage:** a pod with a democratic-csi PVC (`iscsi-ssd-*`
       class) under `kata` writes, reads, and survives a pod delete and
       recreate. Note the mount path (virtio-fs or block).
+      *(2026-10-18, pass: write/read survived a pod delete and
+      recreate. The guest sees `none /data virtiofs`, so the iSCSI
+      volume is mounted on the host and shared into the VM through
+      virtiofsd, not passed through as a block device. The host
+      therefore still holds the filesystem, and I/O goes through
+      virtiofsd; Phase 2 should weigh both.)*
 - [ ] **T4 privileged DinD:** a privileged `docker:dind` pod under
       `kata`, with `/var/lib/docker` on `emptyDir` `medium: Memory`,
       runs `docker build` of a small Dockerfile. Repeat with a
       loop-mounted ext4 image if `emptyDir` fails.
+      *(2026-10-18, first run: no build ran. dockerd itself started
+      cleanly (overlayfs, containerd snapshotter). The failure was
+      `kubectl exec` into the privileged container: the Kata agent's
+      write to the container's `cgroup.procs` fails with EBUSY once
+      dockerd nests cgroups inside it. Under cgroup v2, a cgroup with
+      active child groups can't take processes, and runc handles this
+      case but the Kata agent doesn't. The kit now builds from a client
+      container in the same pod, which is also how CI jobs drive a DinD
+      sidecar. Re-run pending. Finding for Phase 2: under Kata, never
+      exec into a container whose process manages cgroups; CI job
+      specs must use the client-sidecar shape.)*
 - [ ] **T5 BuildKit:** `buildkitd`, privileged or rootless (record
       which), under `kata` builds the same image.
-- [ ] **T6 placement** (re-cut 2026-10-17 for the no-pool model): a
+      *(2026-10-18, first run: the same exec EBUSY as T4; buildkitd
+      started fine (runc worker, native snapshotter). Re-run with
+      `buildctl` in a client container sharing `/run/buildkit`.)*
+- [x] **T6 placement** (re-cut 2026-10-17 for the no-pool model): a
       `kata` pod with no node pin runs on a worker. A `kata` pod pinned
       to a control plane, tolerating its taint, stays Pending, because
       the RuntimeClass selects the kata extension label and control
       planes lack it. A pod without `runtimeClassName` runs under
       runc.
+      *(2026-10-18, pass: `kata-anywhere` Running on work05;
+      `kata-on-ctrl` Pending with "8 node(s) didn't match Pod's node
+      affinity/selector"; `runc-default` Running with no
+      `runtimeClassName`.)*
 - [ ] **T7 cost:** per Kata pod, record the host RSS of
       `cloud-hypervisor` plus `virtiofsd` (from `talosctl -n <ip>
       processes`), the node's `MemAvailable` delta, and the cold-start
       time to Running. Compare with runc.
+      *(2026-10-18, partial; cold-start timing broke on GNU `date` and
+      is fixed for the re-run. Memory on work05: one idle Kata probe
+      (512Mi limit) dropped MemAvailable by 177 MiB. Per idle VM,
+      `cloud-hypervisor` RSS is 148–156 MB, plus `containerd-shim-kata-v2`
+      at 44 MB and the two `virtiofsd` processes at about 2–8 MB:
+      about 200 MB per idle pod. The DinD and BuildKit VMs ran at
+      266–310 MB of `cloud-hypervisor` RSS, with their busiest
+      `virtiofsd` at 50–90 MB. The test RuntimeClass's
+      `overhead.podFixed` of 130Mi is too low; it should be about
+      200–250Mi, so the scheduler accounts for it.)*
 - [ ] **T8 reboot:** reboot the test node (work05), without a drain. Kata pods come back, and the
       cilium#48420 check passes.
 - [ ] Write the findings into the [record table](#the-record-table)
