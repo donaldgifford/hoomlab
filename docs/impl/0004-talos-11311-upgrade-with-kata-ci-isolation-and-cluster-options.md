@@ -366,9 +366,11 @@ renders 1.13.11 configs, because the contract derives from
 
 - [x] ~~Label and taint the first CI worker, `work04` (OQ-4), with the final keys:~~
       *Dropped 2026-10-17: no CI pool (DESIGN-0005 direction change,
-      OQ-11 reopened). Kata is opt-in per workload on every worker. The
-      kit pins its test pods to work04 by hostname only, so T7 and T8
-      measure a known node. The notes below are kept for the record.*
+      OQ-11 reopened). Kata is opt-in per workload on every worker, and
+      the kit pins no test pod: the scheduler places them. T7 measures
+      on the node the kata probe lands on, and T8 reboots that node
+      without a drain, so pods restart in place and the layout stays.
+      The notes below are kept for the record.*
 
       ```sh
       kubectl label node work04 hoomlab.io/workload=ci
@@ -420,7 +422,7 @@ renders 1.13.11 configs, because the contract derives from
       `cloud-hypervisor` plus `virtiofsd` (from `talosctl -n <ip>
       processes`), the node's `MemAvailable` delta, and the cold-start
       time to Running. Compare with runc.
-- [ ] **T8 reboot:** reboot the test node (work04). Kata pods come back, and the
+- [ ] **T8 reboot:** reboot the kata probe's node, without a drain. Kata pods come back, and the
       cilium#48420 check passes.
 - [ ] Write the findings into the [record table](#the-record-table)
       and a Phase 0 findings note under this phase. Clean up the test
