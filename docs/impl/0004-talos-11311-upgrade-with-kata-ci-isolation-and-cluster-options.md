@@ -436,11 +436,15 @@ renders 1.13.11 configs, because the contract derives from
       sidecar. Re-run pending. Finding for Phase 2: under Kata, never
       exec into a container whose process manages cgroups; CI job
       specs must use the client-sidecar shape.)*
-- [ ] **T5 BuildKit:** `buildkitd`, privileged or rootless (record
+- [x] **T5 BuildKit:** `buildkitd`, privileged or rootless (record
       which), under `kata` builds the same image.
       *(2026-10-18, first run: the same exec EBUSY as T4; buildkitd
       started fine (runc worker, native snapshotter). Re-run with
       `buildctl` in a client container sharing `/run/buildkit`.)*
+      *(2026-10-18, re-run: pass with **privileged** buildkitd under
+      Kata. `buildctl` in the client container built the two-step
+      Dockerfile, and the `RUN` step printed `kata-ci-test`. Rootless
+      not needed.)*
 - [x] **T6 placement** (re-cut 2026-10-17 for the no-pool model): a
       `kata` pod with no node pin runs on a worker. A `kata` pod pinned
       to a control plane, tolerating its taint, stays Pending, because
@@ -451,7 +455,7 @@ renders 1.13.11 configs, because the contract derives from
       `kata-on-ctrl` Pending with "8 node(s) didn't match Pod's node
       affinity/selector"; `runc-default` Running with no
       `runtimeClassName`.)*
-- [ ] **T7 cost:** per Kata pod, record the host RSS of
+- [x] **T7 cost:** per Kata pod, record the host RSS of
       `cloud-hypervisor` plus `virtiofsd` (from `talosctl -n <ip>
       processes`), the node's `MemAvailable` delta, and the cold-start
       time to Running. Compare with runc.
@@ -465,6 +469,13 @@ renders 1.13.11 configs, because the contract derives from
       `virtiofsd` at 50–90 MB. The test RuntimeClass's
       `overhead.podFixed` of 130Mi is too low; it should be about
       200–250Mi, so the scheduler accounts for it.)*
+      *(2026-10-18, re-run: cold start (pod created → container
+      started, images cached) runc 1s, Kata 3s. One idle Kata probe:
+      MemAvailable −165 MiB, consistent with the first run. Per idle
+      VM, `cloud-hypervisor` 148–156 MB plus shim 43–45 MB plus
+      `virtiofsd` 2–6 MB, about 200 MB. The DinD and BuildKit VMs:
+      `cloud-hypervisor` 308–329 MB, `virtiofsd` 92–99 MB. Phase 5's
+      RuntimeClass overhead should be about 250Mi.)*
 - [ ] **T8 reboot:** reboot the test node (work05), without a drain. Kata pods come back, and the
       cilium#48420 check passes.
 - [ ] Write the findings into the [record table](#the-record-table)
