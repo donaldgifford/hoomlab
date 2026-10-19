@@ -32,6 +32,7 @@ whole point of running the drill from here rather than from memory.
 - [13. Convergence pass](#13-convergence-pass)
 - [14. After the handoff — the first BGP peering](#14-after-the-handoff--the-first-bgp-peering)
 - [15. Full re-image — teardown and rebuild](#15-full-re-image--teardown-and-rebuild)
+- [16. Day-2 apply](#16-day-2-apply)
 - [Troubleshooting](#troubleshooting)
 
 ## Before you start
@@ -797,6 +798,53 @@ A DNS-server change rides the same window for free: resolvers reach
 the nodes via DHCP and nothing in the config carries one —
 `talosctl get resolvers -n <node>` on a rebuilt node shows the new
 servers.
+
+## 16. Day-2 apply
+
+**`[not yet run live — IMPL-0004 Phase 3]`**
+
+Config changes to a running cluster go through `talos apply`, not a
+re-image. Edit the config, re-run `talos emit` (and restart booty) so a
+future PXE boot serves the same thing, then survey first:
+
+```sh
+bootstrap talos apply --dry-run
+```
+
+Each node prints `done` (live equals render) or `pending` with a diff
+of the normalised documents, secrets shown as `******`:
+
+```text
+--- worker-01 (live)
++++ worker-01 (rendered)
+@@ HostnameConfig
+  …
+- hostname: worker-old
++ hostname: worker-01
+pending    apply-worker-01
+done       apply-worker-02
+```
+
+Read every diff before applying. With nothing changed in the config,
+the survey must be all `done` — a diff then means render and live have
+drifted, and is investigated, not applied. When the diffs are the
+change you made:
+
+```sh
+bootstrap talos apply                    # every node, NO_REBOOT
+bootstrap talos apply --node worker-01   # or one at a time
+```
+
+Two outcomes stop the run instead of applying:
+
+- **Refused without a reboot.** The change needs one. Cordon and drain
+  the node first (INV-0005) — never a bare `talosctl reboot`, which
+  takes its workloads down unannounced — then take the reboot.
+- **Schematic mismatch.** The node runs a different Image Factory
+  schematic than it renders, which is an upgrade. The error carries the
+  exact `talosctl -n <addr> upgrade --image <image>` command; run it
+  through the same cordon → drain path. A stale stored `install.image`
+  on an otherwise matching node is ordinary drift and is applied.
 
 ## Files you own
 

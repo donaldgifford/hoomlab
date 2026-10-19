@@ -5,6 +5,9 @@
 // (DESIGN-0001 Stage 3). It also builds boot/ipxe.efi — the pinned
 // iPXE source compiled in a container with the chain script embedded
 // (ipxe.go), converged via a build-time stamp of the embedded script.
+// NodeConfigs (nodeconfig.go) renders each node's final machine config
+// the way booty serves it, from the same templates and vars — the
+// render the talos apply stage compares live nodes against.
 //
 // Emission is pure rendering — no API calls, deterministic output — so
 // the convergence Check is a byte-diff of a fresh render against the

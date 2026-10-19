@@ -180,6 +180,29 @@ After a full pass, run every stage again. Each should report all steps
 done and apply nothing — that no-op property is what the Hoomlab
 service later relies on when it takes ownership of the cluster.
 
+## Day-2: `bootstrap talos apply`
+
+Not part of the stage flow — run it after editing the config, once the
+cluster is up. For every node it renders the machine config exactly as
+booty would serve it, compares it against the config the node is
+running, and applies the render in `NO_REBOOT` mode where they differ:
+
+```sh
+bootstrap talos apply --dry-run              # per-node diff, secrets redacted
+bootstrap talos apply                        # converge every node
+bootstrap talos apply --node worker-01       # converge one node
+```
+
+- Comparison is per document after normalisation through machinery's
+  loader, so formatting, comments, and document order are not drift.
+- Node addresses come from Talos discovery, dialed with
+  `<output>/out/talosconfig`; static secondary planes are skipped.
+- It never reboots: a change Talos refuses without one fails naming the
+  node, and the reboot goes through cordon → drain.
+- It never upgrades: a node running a different Image Factory schematic
+  than it renders fails with the `talosctl upgrade --image` command to
+  run. In `--dry-run` that shows as `unknown` against the node.
+
 ## Files the operator owns
 
 | Path | Written by | Rule |

@@ -653,52 +653,63 @@ DESIGN-0005 Phase 2. Every later live change depends on it.
 
 #### Tasks
 
-- [ ] `internal/talos/client.go`: extend `Client`, then regenerate the
+- [x] `internal/talos/client.go`: extend `Client`, then regenerate the
       mockery mocks. New calls:
       - list cluster members (for addressing);
       - read a node's live machine config (the `MachineConfig`
         resource);
       - `ApplyConfiguration` with mode `NO_REBOOT`;
       - list a node's extensions.
-- [ ] Node addressing (OQ-7 a): list cluster members through the
+      *(2026-10-19: `Members`, `MachineConfig`, `ApplyNoReboot`, `Extensions`, plus `NewClientFromTalosconfig` for the written talosconfig; mocks regenerated.)*
+- [x] Node addressing (OQ-7 a): list cluster members through the
       configured endpoint and match each config node by hostname. A
       config node with no member is an error naming it.
-- [ ] Renderer: a per-node config is the class template plus the
+      *(2026-10-19: `NodeAddresses` in `internal/talos/apply.go`; skips addresses inside static-plane prefixes (the storage plane is unroutable from the workstation) and prefers IPv4.)*
+- [x] Renderer: a per-node config is the class template plus the
       node's vars, rendered with the same `text/template` and
       `.Vars` contract booty uses. Share the var assembly with
       `internal/emit/catalog.go`, so emit and apply can't diverge.
-- [ ] Normalisation:
+      *(2026-10-19: `Emitter.NodeConfigs` in `internal/emit/nodeconfig.go`; `groupVars` is now the one source of per-node vars for both the catalog groups and the render, and the goldens are byte-identical.)*
+- [x] Normalisation:
       - decode live and rendered configs through machinery's config
         loader and re-encode, then compare;
       - the configs are **multi-document** (3 documents per node
         today), so compare documents by kind and name, ignoring order;
       - print a unified diff of the normalised YAML in `--dry-run`,
         with secrets redacted.
-- [ ] One `Step` per node, `apply-<node>`:
+      *(2026-10-19: `internal/talos/normalize.go` — per-document normal form keyed by kind/name and sorted; `configsEqual` for Check, `configDiff` (LCS, 2 lines context, secrets redacted via `RedactSecrets`) for dry-run output.)*
+- [x] One `Step` per node, `apply-<node>`:
       - `Check` reports equal or differs;
       - `Apply` sends the whole rendered config with `NO_REBOOT`;
       - a reboot-required refusal becomes an error naming the node and
         the change. It tells the operator to reboot through cordon →
         drain (INV-0005), never a bare `talosctl reboot`.
-- [ ] Schematic check: a mismatch between the rendered `install.image`
+      *(2026-10-19: `Applier.Steps` in `internal/talos/apply.go` resolves every address up front, then one `apply-<node>` step each; Check prints the redacted diff to `Out`; a `FailedPrecondition`/reboot refusal names the node and points at cordon → drain.)*
+- [x] Schematic check: a mismatch between the rendered `install.image`
       and the running extensions is reported with the exact
       `talosctl upgrade --image` command. It is never applied. A stored
       `install.image` that is merely stale (the Stage 1 case) is
       ordinary config drift and is applied.
-- [ ] `cmd/talos.go`: add `bootstrap talos apply [--dry-run] [--node
+      *(2026-10-19: `Applier.checkSchematic` runs first in each Check — the running `schematic` extension version vs the ID parsed from the rendered installer ref; a mismatch fails with the exact `talosctl -n <addr> upgrade --image <img>` command and never applies.)*
+- [x] `cmd/talos.go`: add `bootstrap talos apply [--dry-run] [--node
       NAME]`. It is not part of any default chain, and it reads
       `out/talosconfig`.
-- [ ] Tests:
+      *(2026-10-19: `newTalosApplyCmd` — renders via `Emitter.NodeConfigs`, narrows with `--node`, dials `<output>/out/talosconfig` through `NewClientFromTalosconfig`, runs `Applier.Steps`; in no chain.)*
+- [x] Tests:
       - table tests with the mock client for equal, differs, apply,
         refusal, unresolvable node, schematic mismatch, and document
         reordering (no drift);
       - a render round-trip that machinery `Validate` accepts.
-- [ ] Docs: a README stage section, a runbook section ("day-2 apply"),
+      *(2026-10-19: `internal/talos/apply_test.go` (mock client: equal, reordering, differs dry-run + apply, reboot refusal, other apply errors, schematic mismatch in both modes, unresolvable node, `NodeAddresses` plane skip / IPv6 fallback); `normalize_internal_test.go`; `internal/emit/nodeconfig_test.go` asserts `NodeConfigs` is byte-identical to what booty serves and passes metal-mode `Validate`.)*
+- [x] Docs: a README stage section, a runbook section ("day-2 apply"),
       and an example invocation.
+      *(2026-10-19: README "Day-2: `bootstrap talos apply`" section; runbook §16 "Day-2 apply" with the dry-run → apply invocation and the two stop conditions; `talos` and `emit` package docs updated.)*
 - [ ] Release (OQ-9 a): the operator runs `tools-release.yml` once the
       PR merges.
+      *(Deferred — human required: the operator runs `tools-release.yml` after merge.)*
 - [ ] **Live (operator):** `bootstrap talos apply --dry-run` across all
       8 nodes.
+      *(Deferred — human required: operator runs the live dry-run with the released binary; expect 0 pending.)*
 
 #### Success Criteria
 

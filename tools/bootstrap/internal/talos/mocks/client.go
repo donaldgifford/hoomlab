@@ -10,6 +10,8 @@ import (
 	"time"
 
 	mock "github.com/stretchr/testify/mock"
+
+	"github.com/donaldgifford/hoomlab/tools/bootstrap/internal/talos"
 )
 
 // NewMockClient creates a new instance of MockClient. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
@@ -18,10 +20,19 @@ func NewMockClient(t interface {
 	mock.TestingT
 	Cleanup(func())
 }) *MockClient {
+	if helper, ok := t.(interface{ Helper() }); ok {
+		helper.Helper()
+	}
+
 	mock := &MockClient{}
 	mock.Mock.Test(t)
 
-	t.Cleanup(func() { mock.AssertExpectations(t) })
+	t.Cleanup(func() {
+		if helper, ok := t.(interface{ Helper() }); ok {
+			helper.Helper()
+		}
+		mock.AssertExpectations(t)
+	})
 
 	return mock
 }
@@ -37,6 +48,69 @@ type MockClient_Expecter struct {
 
 func (_m *MockClient) EXPECT() *MockClient_Expecter {
 	return &MockClient_Expecter{mock: &_m.Mock}
+}
+
+// ApplyNoReboot provides a mock function for the type MockClient
+func (_mock *MockClient) ApplyNoReboot(ctx context.Context, address string, data []byte) error {
+	ret := _mock.Called(ctx, address, data)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ApplyNoReboot")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []byte) error); ok {
+		r0 = returnFunc(ctx, address, data)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockClient_ApplyNoReboot_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ApplyNoReboot'
+type MockClient_ApplyNoReboot_Call struct {
+	*mock.Call
+}
+
+// ApplyNoReboot is a helper method to define mock.On call
+//   - ctx context.Context
+//   - address string
+//   - data []byte
+func (_e *MockClient_Expecter) ApplyNoReboot(ctx any, address any, data any) *MockClient_ApplyNoReboot_Call {
+	return &MockClient_ApplyNoReboot_Call{Call: _e.mock.On("ApplyNoReboot", ctx, address, data)}
+}
+
+func (_c *MockClient_ApplyNoReboot_Call) Run(run func(ctx context.Context, address string, data []byte)) *MockClient_ApplyNoReboot_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 []byte
+		if args[2] != nil {
+			arg2 = args[2].([]byte)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_ApplyNoReboot_Call) Return(err error) *MockClient_ApplyNoReboot_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockClient_ApplyNoReboot_Call) RunAndReturn(run func(ctx context.Context, address string, data []byte) error) *MockClient_ApplyNoReboot_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // Bootstrap provides a mock function for the type MockClient
@@ -196,6 +270,74 @@ func (_c *MockClient_EtcdMemberList_Call) RunAndReturn(run func(ctx context.Cont
 	return _c
 }
 
+// Extensions provides a mock function for the type MockClient
+func (_mock *MockClient) Extensions(ctx context.Context, address string) ([]talos.Extension, error) {
+	ret := _mock.Called(ctx, address)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Extensions")
+	}
+
+	var r0 []talos.Extension
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) ([]talos.Extension, error)); ok {
+		return returnFunc(ctx, address)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) []talos.Extension); ok {
+		r0 = returnFunc(ctx, address)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]talos.Extension)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, address)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockClient_Extensions_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Extensions'
+type MockClient_Extensions_Call struct {
+	*mock.Call
+}
+
+// Extensions is a helper method to define mock.On call
+//   - ctx context.Context
+//   - address string
+func (_e *MockClient_Expecter) Extensions(ctx any, address any) *MockClient_Extensions_Call {
+	return &MockClient_Extensions_Call{Call: _e.mock.On("Extensions", ctx, address)}
+}
+
+func (_c *MockClient_Extensions_Call) Run(run func(ctx context.Context, address string)) *MockClient_Extensions_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_Extensions_Call) Return(extensions []talos.Extension, err error) *MockClient_Extensions_Call {
+	_c.Call.Return(extensions, err)
+	return _c
+}
+
+func (_c *MockClient_Extensions_Call) RunAndReturn(run func(ctx context.Context, address string) ([]talos.Extension, error)) *MockClient_Extensions_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Health provides a mock function for the type MockClient
 func (_mock *MockClient) Health(ctx context.Context, timeout time.Duration, log *slog.Logger) error {
 	ret := _mock.Called(ctx, timeout, log)
@@ -317,6 +459,136 @@ func (_c *MockClient_Kubeconfig_Call) Return(bytes []byte, err error) *MockClien
 }
 
 func (_c *MockClient_Kubeconfig_Call) RunAndReturn(run func(ctx context.Context) ([]byte, error)) *MockClient_Kubeconfig_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// MachineConfig provides a mock function for the type MockClient
+func (_mock *MockClient) MachineConfig(ctx context.Context, address string) ([]byte, error) {
+	ret := _mock.Called(ctx, address)
+
+	if len(ret) == 0 {
+		panic("no return value specified for MachineConfig")
+	}
+
+	var r0 []byte
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) ([]byte, error)); ok {
+		return returnFunc(ctx, address)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) []byte); ok {
+		r0 = returnFunc(ctx, address)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]byte)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, address)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockClient_MachineConfig_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'MachineConfig'
+type MockClient_MachineConfig_Call struct {
+	*mock.Call
+}
+
+// MachineConfig is a helper method to define mock.On call
+//   - ctx context.Context
+//   - address string
+func (_e *MockClient_Expecter) MachineConfig(ctx any, address any) *MockClient_MachineConfig_Call {
+	return &MockClient_MachineConfig_Call{Call: _e.mock.On("MachineConfig", ctx, address)}
+}
+
+func (_c *MockClient_MachineConfig_Call) Run(run func(ctx context.Context, address string)) *MockClient_MachineConfig_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_MachineConfig_Call) Return(bytes []byte, err error) *MockClient_MachineConfig_Call {
+	_c.Call.Return(bytes, err)
+	return _c
+}
+
+func (_c *MockClient_MachineConfig_Call) RunAndReturn(run func(ctx context.Context, address string) ([]byte, error)) *MockClient_MachineConfig_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Members provides a mock function for the type MockClient
+func (_mock *MockClient) Members(ctx context.Context) ([]talos.Member, error) {
+	ret := _mock.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Members")
+	}
+
+	var r0 []talos.Member
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context) ([]talos.Member, error)); ok {
+		return returnFunc(ctx)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context) []talos.Member); ok {
+		r0 = returnFunc(ctx)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]talos.Member)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = returnFunc(ctx)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockClient_Members_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Members'
+type MockClient_Members_Call struct {
+	*mock.Call
+}
+
+// Members is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockClient_Expecter) Members(ctx any) *MockClient_Members_Call {
+	return &MockClient_Members_Call{Call: _e.mock.On("Members", ctx)}
+}
+
+func (_c *MockClient_Members_Call) Run(run func(ctx context.Context)) *MockClient_Members_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockClient_Members_Call) Return(members []talos.Member, err error) *MockClient_Members_Call {
+	_c.Call.Return(members, err)
+	return _c
+}
+
+func (_c *MockClient_Members_Call) RunAndReturn(run func(ctx context.Context) ([]talos.Member, error)) *MockClient_Members_Call {
 	_c.Call.Return(run)
 	return _c
 }
