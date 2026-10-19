@@ -36,6 +36,6 @@ docz create design "Your Design Title"
 | DESIGN-0002 | Talos cluster completion scope for bootstrap | Implemented | 2026-08-26 | Donald Gifford | [0002-talos-cluster-completion-scope-for-bootstrap.md](0002-talos-cluster-completion-scope-for-bootstrap.md) |
 | DESIGN-0003 | Nested test environment for the bootstrap CLI | Draft | 2026-08-28 | Donald Gifford | [0003-nested-test-environment-for-the-bootstrap-cli.md](0003-nested-test-environment-for-the-bootstrap-cli.md) |
 | DESIGN-0004 | Network planes and interfaces for the bootstrap CLI | Implemented | 2026-08-31 | Donald Gifford | [0004-network-planes-and-interfaces-for-the-bootstrap-cli.md](0004-network-planes-and-interfaces-for-the-bootstrap-cli.md) |
-| DESIGN-0005 | Talos 1.13.11 upgrade with Kata CI isolation and cluster options | Draft | 2026-10-11 | Donald Gifford | [0005-talos-11311-upgrade-with-kata-ci-isolation-and-cluster-options.md](0005-talos-11311-upgrade-with-kata-ci-isolation-and-cluster-options.md) |
+| DESIGN-0005 | Talos 1.13.11 upgrade with Kata CI isolation and cluster options | In Review | 2026-10-11 | Donald Gifford | [0005-talos-11311-upgrade-with-kata-ci-isolation-and-cluster-options.md](0005-talos-11311-upgrade-with-kata-ci-isolation-and-cluster-options.md) |
 | DESIGN-0006 | Talos 1.14 multi-document migration requirements | Draft | 2026-10-11 | Donald Gifford | [0006-talos-114-multi-document-migration-requirements.md](0006-talos-114-multi-document-migration-requirements.md) |
 <!-- END DOCZ AUTO-GENERATED -->

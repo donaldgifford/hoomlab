@@ -606,9 +606,16 @@ Nothing in Stage 2 starts until this phase closes.
 
 #### Tasks
 
-- [ ] Amend DESIGN-0005 with the Phase 0 findings: sizing, the
+- [x] Amend DESIGN-0005 with the Phase 0 findings: sizing, the
       storage path, the DinD/BuildKit layout, networking, and anything
       contradicted.
+      *(2026-10-19: a new Stage 1 findings section. In-place
+      corrections: `install.image` isn't rewritten by `talosctl
+      upgrade`, the configs are multi-document, and reboots go through
+      cordon → drain. Phase 3 is rewritten as labels only and Phase 4
+      as per-workload Kata with one `kata` class (250Mi overhead). The
+      Buildkite privileged controller is the first user. DESIGN-0005
+      is now In Review.)*
 - [ ] Re-answer the remaining DESIGN-0005 open questions (OQ-4, 5, 7,
       8, 9, 12–19, 21) in light of the findings.
 - [ ] Re-cut Phases 3–7 of this IMPL: adjust, reorder, or drop tasks.
