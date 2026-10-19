@@ -35,5 +35,5 @@ docz create impl "Your Implementation Title"
 | IMPL-0001 | Bootstrap CLI | Completed | 2026-08-20 | Donald Gifford | [0001-bootstrap-cli.md](0001-bootstrap-cli.md) |
 | IMPL-0002 | Hardware acceptance drill for the bootstrap CLI | Completed | 2026-08-22 | Donald Gifford | [0002-hardware-acceptance-drill-for-the-bootstrap-cli.md](0002-hardware-acceptance-drill-for-the-bootstrap-cli.md) |
 | IMPL-0003 | Talos storage plane | Completed | 2026-08-31 | Donald Gifford | [0003-talos-storage-plane.md](0003-talos-storage-plane.md) |
-| IMPL-0004 | Talos 1.13.11 upgrade with Kata CI isolation and cluster options | Draft | 2026-10-11 | Donald Gifford | [0004-talos-11311-upgrade-with-kata-ci-isolation-and-cluster-options.md](0004-talos-11311-upgrade-with-kata-ci-isolation-and-cluster-options.md) |
+| IMPL-0004 | Talos 1.13.11 upgrade with Kata CI isolation and cluster options | In Progress | 2026-10-11 | Donald Gifford | [0004-talos-11311-upgrade-with-kata-ci-isolation-and-cluster-options.md](0004-talos-11311-upgrade-with-kata-ci-isolation-and-cluster-options.md) |
 <!-- END DOCZ AUTO-GENERATED -->

@@ -1,7 +1,7 @@
 ---
 id: DESIGN-0005
 title: "Talos 1.13.11 upgrade with Kata CI isolation and cluster options"
-status: In Review
+status: Approved
 author: Donald Gifford
 created: 2026-10-11
 ---
@@ -51,7 +51,9 @@ does four things:
   default everywhere;
 - turns the useful Sidero guides into **opt-in HCL options**.
 
-> **Amended at the Phase 2 gate, 2026-10-19.** Stage 1 is done. Its
+> **Amended and approved at the Phase 2 gate, 2026-10-19.** Stage 1
+> is done, and every open question was answered with its recommended
+> option (a). Its
 > findings are in [Stage 1 findings](#stage-1-findings), and the
 > sections they contradicted have been corrected in place. The
 > direction change of 2026-10-17 is now the design: there is **no
@@ -685,10 +687,16 @@ spec, not the boundary.
   measured ~400 MB host-side, so build pods carry the difference in
   their memory requests.
 - A VM can't live-migrate while nesting is active, which means while
-  a Kata pod runs on it. Kata pods can now land on any worker, so
-  treat **every worker** as non-migratable. Keep the workers outside
-  PVE HA and the 9.2 load balancer. For host maintenance, cordon and
-  drain the worker (INV-0005) rather than migrating it.
+  a Kata pod runs on it. Kata pods can now land on any worker, so no
+  worker can be **live-migrated** without a drain first.
+  - Turn off automatic live migration for the worker VMs: the PVE 9.2
+    load balancer's rebalancing, and an HA shutdown policy of
+    `migrate`.
+  - For host maintenance, cordon and drain the worker (INV-0005).
+    Then migrate or shut down the empty VM.
+  - HA recovery after a host failure is unaffected. It cold-starts the
+    VM elsewhere, which the pods see as a node reboot.
+  - Nothing is affected until a workload uses the `kata` class.
 
 ### Phase 5 — Talos-side options
 
@@ -1006,7 +1014,8 @@ own.
 **At the Phase 2 gate (2026-10-19):** every other open question is
 re-asked in light of the Stage 1 findings. OQ-4, OQ-5, OQ-11, and
 OQ-21 are rewritten for the per-workload model, and OQ-22 is new.
-DESIGN-0005 moves to Approved once they're answered.
+**All answered 2026-10-19 with option a**, and DESIGN-0005 is
+Approved.
 
 1. **Record-fix scope (Phase 0).** *Resolved 2026-10-11*: comment and
    IMPL-0003 note only, done **first** in Phase 0, before any upgrade
@@ -1018,7 +1027,7 @@ DESIGN-0005 moves to Approved once they're answered.
    only. gVisor, crun, and NVIDIA are deferred and not installed. Each
    returns later as one runtime-table row (NVIDIA as a per-node
    profile).
-4. **Taints.** *Rewritten 2026-10-19*, now that nothing needs to repel
+4. **Taints.** *Resolved 2026-10-19 (a).* *Rewritten 2026-10-19*, now that nothing needs to repel
    pods.
    - a. Defer them. Phase 3 ships labels only. When a consumer
      appears, a taint comes back as one more primitive:
@@ -1028,7 +1037,7 @@ DESIGN-0005 moves to Approved once they're answered.
      report), unused by default.
    - c. Build it now, with the apply stage patching Node taints itself
      via `kubeconfig`.
-5. **Sugar for scheduling attributes.** *Rewritten 2026-10-19.*
+5. **Sugar for scheduling attributes.** *Resolved 2026-10-19 (a).* *Rewritten 2026-10-19.*
    - a. None: `labels` only. `workload_class` existed to pair a label
      with a taint, and there is no taint now.
    - b. A named `node_class "<name>"` block (labels, later taints) that
@@ -1037,7 +1046,7 @@ DESIGN-0005 moves to Approved once they're answered.
    for now, changeable. The prefix lives in one constant in code and in
    the GitOps objects that select on it. Changing it later costs a
    relabel of the live nodes (via the apply stage) plus a GitOps edit.
-7. **Derived runtime label.** T6 confirmed the problem: the test class
+7. **Derived runtime label.** *Resolved 2026-10-19 (a).* T6 confirmed the problem: the test class
    selects on the versioned Talos label, so the next Kata bump would
    leave every Kata pod Pending.
    - a. The Kata extension in a node's profiles derives
@@ -1048,7 +1057,7 @@ DESIGN-0005 moves to Approved once they're answered.
    - c. No label; the `kata` RuntimeClass has no `nodeSelector` and
      relies on every schedulable node carrying Kata. That breaks the
      day a worker without Kata (e.g. a GPU node) joins.
-8. **Cilium `socketLB.hostNamespaceOnly` rule.** T2 and every reboot
+8. **Cilium `socketLB.hostNamespaceOnly` rule.** *Resolved 2026-10-19 (a).* T2 and every reboot
    check passed with it in effect.
    - a. Required explicitly in the values when any node carries the
      Kata extension; error otherwise. Bandwidth manager with Kata is
@@ -1056,14 +1065,14 @@ DESIGN-0005 moves to Approved once they're answered.
    - b. Required always, sandbox or not. It's in effect live anyway
      via Gateway API.
    - c. Warning only.
-9. **Who owns the `kata` RuntimeClass object.**
+9. **Who owns the `kata` RuntimeClass object.** *Resolved 2026-10-19 (a).*
    - a. GitOps, with the contract above written here.
    - b. Bootstrap, via `extraManifests` / inline manifest at day 0.
    - c. Bootstrap's Phase 6 add-on stage (`addon "runtimeclasses"`).
 10. **Kata VM handler.** *Resolved by research*: Talos 1.13.11 ships
     only `kata` (Cloud Hypervisor). Revisit if `kata-qemu` ever
     appears.
-11. **Placement once there is no CI pool.** *Resolved 2026-10-11* as a
+11. **Placement once there is no CI pool.** *Resolved 2026-10-19 (a).* *Resolved 2026-10-11* as a
     tainted two-worker pool; *reopened 2026-10-17* when the pool was
     dropped. Kata is on every worker and opt-in per workload in every
     option below.
@@ -1075,7 +1084,7 @@ DESIGN-0005 moves to Approved once they're answered.
     - b. No size label: the scheduler places freely by requests.
     - c. Keep a dedicated pool after all. T7's numbers (~200–400 MB per
       Kata pod) don't call for one.
-12. **Day-2 delivery to live nodes.** Stage 1 needed three
+12. **Day-2 delivery to live nodes.** *Resolved 2026-10-19 (a).* Stage 1 needed three
     hand-patches. The last, `install.image`, was the multi-document
     strategic-merge case.
     - a. A new `talos apply` stage (render → diff → `NO_REBOOT`
@@ -1084,19 +1093,19 @@ DESIGN-0005 moves to Approved once they're answered.
       patch`.
     - c. Templates only; live nodes get options at their next
       reinstall.
-13. **Where the Talos-side options live in HCL.**
+13. **Where the Talos-side options live in HCL.** *Resolved 2026-10-19 (a).*
     - a. Inside `talos.cluster`, beside the CNI. It is already the
       completion surface.
     - b. A new `talos.options` block.
     - c. Top-level blocks.
-14. **etcd metrics exposure.**
+14. **etcd metrics exposure.** *Resolved 2026-10-19 (a).*
     - a. `listen-metrics-urls = http://0.0.0.0:2381`, plain HTTP on
       the control planes.
     - b. No Talos change; scrape 2379 with etcd client mTLS (client
       cert as a Secret in the monitoring namespace).
     - c. a, plus a Talos ingress firewall rule (`NetworkRuleConfig`)
       limiting 2381 to the pod CIDR.
-15. **How Talos reaches the Alloy log receiver.**
+15. **How Talos reaches the Alloy log receiver.** *Resolved 2026-10-19 (a).*
     - a. A fixed LoadBalancer IP (Cilium LB IPAM) for an Alloy
       TCP/json_lines listener. Talos is configured with that IP.
     - b. A `hostNetwork` Alloy DaemonSet listener; Talos sends to
@@ -1107,40 +1116,40 @@ DESIGN-0005 moves to Approved once they're answered.
     **[unverified]**. Vector's `socket` source is the documented
     pattern. Logging is third in the option order (IMPL OQ-10), so this
     can be settled when that phase starts.
-16. **Where the pull-through mirror runs.**
+16. **Where the pull-through mirror runs.** *Resolved 2026-10-19 (a).*
     - a. Off-cluster (e.g. zot or `registry:2` in proxy mode on the
       booty host), so the cluster can pull during its own recovery.
     - b. The in-cluster zot that already exists. It is simpler, but it
       is unavailable exactly when a cluster recovery needs it.
     - c. No mirror until CI pull volume demands it.
-17. **Initial image-verification policy.**
+17. **Initial image-verification policy.** *Resolved 2026-10-19 (a).*
     - a. Verify `ghcr.io/siderolabs/*` and `factory.talos.dev/*`
       keyless; terminal `*` skip. Add `registry.k8s.io/*` after a
       one-node test.
     - b. Also verify `registry.k8s.io/*` from the start.
     - c. Closed policy: terminal `*` deny with an explicit allow-list.
-18. **metrics-server and KEDA delivery.** Amends DESIGN-0002 OQ-D.
+18. **metrics-server and KEDA delivery.** *Resolved 2026-10-19 (a).* Amends DESIGN-0002 OQ-D.
     - a. The opt-in post-T2 `cluster addons` stage: server-side apply
       of pinned upstream manifests, off unless declared.
     - b. Talos `extraManifests` like cert-approver. That re-syncs on
       `upgrade-k8s` **[unverified]** and fights GitOps.
     - c. Keep both in GitOps; bootstrap documents the prerequisites
       only.
-19. **KEDA Temporal scaler.**
+19. **KEDA Temporal scaler.** *Resolved 2026-10-19 (a).*
     - a. A per-workload `ScaledObject` in GitOps, next to the worker
       Deployment, using the pattern documented here.
     - b. An HCL block that renders `ScaledObject`s from bootstrap.
 20. **When Kata enters the worker image.** *Resolved 2026-10-11*: in
     the 1.13.11 re-image (Stage 1), so there is one re-image per worker.
     *Done 2026-10-13.*
-21. **Which RuntimeClasses to publish.** *Rewritten 2026-10-19.*
+21. **Which RuntimeClasses to publish.** *Resolved 2026-10-19 (a).* *Rewritten 2026-10-19.*
     - a. One `kata` class: handler `kata`, overhead 250Mi / 250m (T7),
       `nodeSelector` on the derived runtime label. Placement preference
       lives in each workload.
     - b. Also a `kata-large` class whose `nodeSelector` adds
       `hoomlab.io/size=large`, a hard pin for workloads that must run
       on the large workers.
-22. **The unprivileged Buildkite controller.** *New 2026-10-19.*
+22. **The unprivileged Buildkite controller.** *Resolved 2026-10-19 (a).* *New 2026-10-19.*
     - a. It stays on runc. Its namespace is `baseline`, so job pods
       can't run privileged daemons. Move it to Kata later if
       untrusted pipelines ever run there.

@@ -1,7 +1,7 @@
 ---
 id: IMPL-0004
 title: "Talos 1.13.11 upgrade with Kata CI isolation and cluster options"
-status: Draft
+status: In Progress
 author: Donald Gifford
 created: 2026-10-11
 ---
@@ -30,10 +30,10 @@ created: 2026-10-11
   - [Phase 3: talos apply stage (code)](#phase-3-talos-apply-stage-code)
     - [Tasks](#tasks-3)
     - [Success Criteria](#success-criteria-3)
-  - [Phase 4: Node labels and taints (code + operator)](#phase-4-node-labels-and-taints-code--operator)
+  - [Phase 4: Node labels (code + operator)](#phase-4-node-labels-code--operator)
     - [Tasks](#tasks-4)
     - [Success Criteria](#success-criteria-4)
-  - [Phase 5: Kata runtime label, Cilium rule, CI onto kata-ci](#phase-5-kata-runtime-label-cilium-rule-ci-onto-kata-ci)
+  - [Phase 5: Kata runtime label, Cilium rule, Buildkite onto Kata](#phase-5-kata-runtime-label-cilium-rule-buildkite-onto-kata)
     - [Tasks](#tasks-5)
     - [Success Criteria](#success-criteria-5)
   - [Phase 6: Talos-side options](#phase-6-talos-side-options)
@@ -60,16 +60,20 @@ with a hand-applied test (Stage 1). Then build the Stage 2 surfaces on
 what that proof shows:
 
 - a day-2 `talos apply` stage;
-- node labels and registration taints;
+- node labels (a size label for the large workers);
 - a derived Kata runtime label;
 - the Cilium validation rule;
-- CI jobs moved onto `kata-ci`;
+- one `kata` RuntimeClass, with the Buildkite privileged controller's
+  jobs as its first user;
 - opt-in Talos options and cluster add-ons.
+
+Kata is opt-in per workload, and there is no dedicated CI pool
+(DESIGN-0005, as amended at the Phase 2 gate).
 
 runc stays the default runtime throughout.
 
-**Implements:** DESIGN-0005 (Draft; Stage 1 decisions recorded
-2026-10-11), from INV-0004.
+**Implements:** DESIGN-0005 (Approved 2026-10-19, at the Phase 2
+gate), from INV-0004.
 
 ## Scope
 
@@ -85,10 +89,11 @@ runc stays the default runtime throughout.
 - **Between the stages** (Phase 1): Kubernetes 1.36.3 → 1.36.5 and the
   HCL pin.
 - **Stage 2** (Phases 2–7): the design gate, then the DESIGN-0005
-  Phases 2–6 surfaces. Stage 2 task lists are **provisional**. Phase 2
-  re-cuts them against Stage 1's findings before any is started.
+  Phases 2–6 surfaces. Phase 2 re-cut the task lists against Stage 1's
+  findings on 2026-10-19.
 - The GitOps-side changes this work depends on, tracked here as
-  operator tasks: Cilium values, RuntimeClasses, CI pod specs, and the
+  operator tasks: Cilium values, the RuntimeClass, the Buildkite
+  controller config, and the
   receivers and scrapes for the options. They are carried out in the
   private homelab repo; no site detail is recorded here.
 
@@ -101,6 +106,11 @@ runc stays the default runtime throughout.
 - Kubernetes 1.37 (gated on Cilium 1.21 GA — DESIGN-0006).
 - Changing the default runtime (it stays runc), and PVE HA or
   load-balancer automation.
+- Node taints and a dedicated CI pool (deferred, DESIGN-0005 OQ-4 and
+  OQ-11).
+- Moving ARC runners to Kata. ARC is being retired for Buildkite.
+- The unprivileged Buildkite controller, which stays on runc
+  (DESIGN-0005 OQ-22).
 
 ## Phase map
 
@@ -110,7 +120,7 @@ runc stays the default runtime throughout.
 | 1 | — (between stages) | — | operator |
 | 2 | — (design gate) | — | docs |
 | 3 | 2 (apply stage) | 2 | code |
-| 4 | 3 (labels, taints) | 2 | code + operator |
+| 4 | 3 (labels) | 2 | code + operator |
 | 5 | 4 (Kata runtime) | 2 | code + GitOps |
 | 6 | 5 (Talos options) | 2 | code + operator + GitOps |
 | 7 | 6 (add-ons) | 2 | code + operator |
@@ -129,7 +139,7 @@ this IMPL.
 | Talos | v1.13.8 → v1.13.11 (all 8 nodes, 2026-10-13; kernel 6.18.54) |
 | Kubernetes | v1.36.3 → v1.36.5 (all 8 nodes, 2026-10-19; CoreDNS v1.14.7) |
 | CI workers | ~~`work04`, `work05` (OQ-4)~~ none: no CI pool (DESIGN-0005 direction change, 2026-10-17). Kata test node: work05 |
-| Label and taint key | ~~`hoomlab.io/workload=ci`~~ unused; the `hoomlab.io/` prefix stands for later labels |
+| Label keys | ~~`hoomlab.io/workload=ci`~~ dropped. `hoomlab.io/size=large` on work04/05 (Phase 4); `runtime.hoomlab.io/kata=true` derived on every worker (Phase 5). Taints deferred |
 | bootstrap release with the apply stage | *(Phase 3)* |
 | Kata cost per idle pod | ~200 MB host RSS (`cloud-hypervisor` ~150, shim ~44, `virtiofsd` ~5); MemAvailable −165 to −177 MiB. Build VMs: ~310–330 MB plus `virtiofsd` ~95 MB. RuntimeClass `overhead.podFixed` should be ~250Mi (the test used 130Mi) |
 | Kata cold start (cached images) | runc 1s, Kata 3s |
@@ -616,11 +626,18 @@ Nothing in Stage 2 starts until this phase closes.
       as per-workload Kata with one `kata` class (250Mi overhead). The
       Buildkite privileged controller is the first user. DESIGN-0005
       is now In Review.)*
-- [ ] Re-answer the remaining DESIGN-0005 open questions (OQ-4, 5, 7,
+- [x] Re-answer the remaining DESIGN-0005 open questions (OQ-4, 5, 7,
       8, 9, 12–19, 21) in light of the findings.
-- [ ] Re-cut Phases 3–7 of this IMPL: adjust, reorder, or drop tasks.
+      *(2026-10-19: OQ-4, 5, 11, and 21 were rewritten for the
+      per-workload model, and OQ-22 was added. All were answered with
+      option a.)*
+- [x] Re-cut Phases 3–7 of this IMPL: adjust, reorder, or drop tasks.
       Resolve this document's Stage 2 open questions (OQ-7 to OQ-12).
-- [ ] Move DESIGN-0005 to **Approved**.
+      *(2026-10-19: Phase 4 is labels only, and Phase 5 moves the
+      Buildkite privileged controller onto one `kata` class. Taints,
+      taint drift, and the `kata-ci` and ARC moves are dropped. OQ-7 to
+      OQ-12 were answered a; OQ-8 is moot.)*
+- [x] Move DESIGN-0005 to **Approved**. *(2026-10-19.)*
 
 #### Success Criteria
 
@@ -632,46 +649,54 @@ Nothing in Stage 2 starts until this phase closes.
 
 ### Phase 3: talos apply stage (code)
 
-*Provisional — re-cut in Phase 2.* DESIGN-0005 Phase 2. Every later
-live change depends on it.
+DESIGN-0005 Phase 2. Every later live change depends on it.
 
 #### Tasks
 
 - [ ] `internal/talos/client.go`: extend `Client`, then regenerate the
       mockery mocks. New calls:
+      - list cluster members (for addressing);
       - read a node's live machine config (the `MachineConfig`
         resource);
       - `ApplyConfiguration` with mode `NO_REBOOT`;
       - list a node's extensions.
-- [ ] Node addressing (OQ-7). Resolve each config node to a Talos API
-      address. A node the CLI can't resolve is an error naming it.
+- [ ] Node addressing (OQ-7 a): list cluster members through the
+      configured endpoint and match each config node by hostname. A
+      config node with no member is an error naming it.
 - [ ] Renderer: a per-node config is the class template plus the
       node's vars, rendered with the same `text/template` and
       `.Vars` contract booty uses. Share the var assembly with
       `internal/emit/catalog.go`, so emit and apply can't diverge.
-- [ ] Normalisation: decode live and rendered configs through
-      machinery's config loader and re-encode, then compare. Print a
-      unified diff of the normalised YAML in `--dry-run`, with secrets
-      redacted.
+- [ ] Normalisation:
+      - decode live and rendered configs through machinery's config
+        loader and re-encode, then compare;
+      - the configs are **multi-document** (3 documents per node
+        today), so compare documents by kind and name, ignoring order;
+      - print a unified diff of the normalised YAML in `--dry-run`,
+        with secrets redacted.
 - [ ] One `Step` per node, `apply-<node>`:
       - `Check` reports equal or differs;
-      - `Apply` sends `NO_REBOOT`;
+      - `Apply` sends the whole rendered config with `NO_REBOOT`;
       - a reboot-required refusal becomes an error naming the node and
-        the change.
+        the change. It tells the operator to reboot through cordon →
+        drain (INV-0005), never a bare `talosctl reboot`.
 - [ ] Schematic check: a mismatch between the rendered `install.image`
       and the running extensions is reported with the exact
-      `talosctl upgrade --image` command. It is never applied.
+      `talosctl upgrade --image` command. It is never applied. A stored
+      `install.image` that is merely stale (the Stage 1 case) is
+      ordinary config drift and is applied.
 - [ ] `cmd/talos.go`: add `bootstrap talos apply [--dry-run] [--node
       NAME]`. It is not part of any default chain, and it reads
       `out/talosconfig`.
 - [ ] Tests:
       - table tests with the mock client for equal, differs, apply,
-        refusal, unresolvable node, and schematic mismatch;
+        refusal, unresolvable node, schematic mismatch, and document
+        reordering (no drift);
       - a render round-trip that machinery `Validate` accepts.
 - [ ] Docs: a README stage section, a runbook section ("day-2 apply"),
       and an example invocation.
-- [ ] Release (OQ-9): the operator runs `tools-release.yml` once the PR
-      merges.
+- [ ] Release (OQ-9 a): the operator runs `tools-release.yml` once the
+      PR merges.
 - [ ] **Live (operator):** `bootstrap talos apply --dry-run` across all
       8 nodes.
 
@@ -687,73 +712,63 @@ live change depends on it.
 
 ---
 
-### Phase 4: Node labels and taints (code + operator)
+### Phase 4: Node labels (code + operator)
 
-*Provisional — re-cut in Phase 2.* DESIGN-0005 Phase 3.
+DESIGN-0005 Phase 3. Labels only; taints are deferred (DESIGN-0005
+OQ-4), and there is no sugar (OQ-5).
 
 #### Tasks
 
-- [ ] `internal/config/config.go` — add to `TalosNode`:
-      - `Labels map[string]string`;
-      - `Taints []Taint` (labeled `taint` blocks: `value`, `effect`);
-      - `WorkloadClass string`.
-
-      Hold the `hoomlab.io/` prefix in one constant.
-- [ ] `internal/config/resolve.go`: resolve the explicit labels and
-      taints plus the `workload_class` sugar into the resolved form.
-      The sugar and an explicit key together are an XOR error.
+- [ ] `internal/config/config.go`: add `Labels map[string]string` to
+      `TalosNode`. Hold the `hoomlab.io/` prefix in one constant.
+- [ ] `internal/config/resolve.go`: carry the explicit labels into the
+      resolved form. Phase 5 adds the derived runtime label beside
+      them.
 - [ ] `internal/config/validate.go`:
-      - qualified-name syntax;
+      - qualified-name syntax for keys and values;
       - reject the NodeRestriction-restricted prefixes
         (`node-role.kubernetes.io/`,
         `node-restriction.kubernetes.io/`, and other `kubernetes.io/`
         or `k8s.io/` prefixes off the allow-list), with the error
         naming NodeRestriction;
-      - completion-label collisions;
-      - the effect enum;
-      - duplicate `key:effect` pairs.
-- [ ] `internal/talos/completion.go`:
-      - labels go to `machine.nodeLabels`, merged with the completion
-        labels;
-      - taints go to `machine.kubelet.extraConfig.registerWithTaints`,
-        never `machine.nodeTaints`.
+      - collisions with the completion labels.
+- [ ] `internal/talos/completion.go`: labels go to `machine.nodeLabels`,
+      merged with the completion labels.
 - [ ] `internal/talos/machineconfig.go` and `internal/emit/catalog.go`:
-      key templates by (role, scheduling set). Class names are derived
-      only when a role splits; single-class roles keep today's names.
-- [ ] Apply stage: report taint drift between declared and live Node
-      taints, and print the exact `kubectl taint` command (OQ-8).
+      key templates by (role, label set). Class names are derived only
+      when a role splits; single-class roles keep today's names.
 - [ ] Tests:
       - load tests per rule, with positive controls;
-      - goldens for a split worker role;
-      - **byte-identity**: a config without the new attributes emits
-        exactly today's tree;
+      - goldens for a split worker role (plain and `size=large`);
+      - **byte-identity**: a config without `labels` emits exactly
+        today's tree;
       - `Validate` passes on every class template.
 - [ ] Docs: the example HCL and the README.
-- [ ] Release (OQ-9).
+- [ ] Release (OQ-9 a).
 - [ ] **Live (operator):**
-      - set `workload_class = "ci"` on both CI workers (OQ-4);
-      - run `talos emit` and sync booty;
-      - run `talos apply --node <each CI worker>`;
-      - run the printed `kubectl taint` for the second worker (the
-        first matches from Phase 0).
+      - add `labels = { "hoomlab.io/size" = "large" }` to work04 and
+        work05 in `~/drill/bootstrap.hcl`;
+      - run `talos emit` and sync and restart booty;
+      - run `talos apply --dry-run` (only work04/05 differ, by the
+        label), then `talos apply --node work04` and `--node work05`.
 
 #### Success Criteria
 
-- Both CI workers carry `hoomlab.io/workload=ci` and the `NoSchedule`
-  taint. `talos apply --dry-run` reports 0, with no taint drift, on all
-  8 nodes.
-- Configs without the new attributes are byte-identical.
+- work04 and work05 carry `hoomlab.io/size=large`, and no other node
+  does. `talos apply --dry-run` reports 0 on all 8 nodes.
+- Configs without `labels` are byte-identical.
 
 ---
 
-### Phase 5: Kata runtime label, Cilium rule, CI onto kata-ci
+### Phase 5: Kata runtime label, Cilium rule, Buildkite onto Kata
 
-*Provisional — re-cut in Phase 2.* DESIGN-0005 Phase 4.
+DESIGN-0005 Phase 4.
 
 #### Tasks
 
-- [ ] Runtime table, e.g. in `internal/config`: a `kata` row (extension
-      `siderolabs/kata-containers`, handler `kata`, worker-only).
+- [ ] Runtime table, e.g. `internal/config/runtime.go`: a `kata` row
+      (extension `siderolabs/kata-containers`, handler `kata`,
+      worker-only).
 - [ ] Resolver: a node whose flattened extensions include a runtime's
       extension derives the label `runtime.hoomlab.io/kata=true`. An
       explicit label on that key is an XOR error.
@@ -764,10 +779,11 @@ live change depends on it.
       `bandwidthManager.enabled: true` an error.
 - [ ] Tests: the derived label, the XOR, Kata on a control plane, both
       Cilium checks, and positive controls. Goldens carry the label in
-      the worker classes.
+      every worker class. Since the label is the same on every worker,
+      it does not split a role.
 - [ ] Docs: the example HCL `kata` profile is live, not commented, and
       the README covers it.
-- [ ] Release (OQ-9).
+- [ ] Release (OQ-9 a).
 - [ ] **Operator / GitOps:**
       - [ ] Add `socketLB.hostNamespaceOnly: true` explicitly to
             `~/drill/cilium-values.yaml` and the GitOps Cilium values.
@@ -776,21 +792,33 @@ live change depends on it.
       - [ ] Run `talos emit`, sync booty, then `talos apply` on all
             workers so the derived label goes live. `--dry-run` reports
             0 after.
-      - [ ] GitOps: add the `kata` and `kata-ci` RuntimeClasses
-            (DESIGN-0005 contract) and delete the Phase 0 test class.
-      - [ ] Re-run T1–T6 against `kata-ci`.
-      - [ ] Move one ARC runner scale set to `runtimeClassName:
-            kata-ci`, with `/var/lib/docker` per the Phase 0 finding.
-            Watch it for a few days.
-      - [ ] Move the remaining ARC scale sets, then the Buildkite job
-            pods (with `prohibit-kubernetes-plugin` on), then BuildKit.
+      - [ ] Delete the Phase 0 test RuntimeClass and let GitOps create
+            the `kata` class from the DESIGN-0005 contract
+            (`overhead.podFixed` 250Mi / 250m, `nodeSelector`
+            `runtime.hoomlab.io/kata: "true"`).
+      - [ ] Re-run T1, T2, and T6 against the GitOps class: T6 with a
+            pod that prefers `hoomlab.io/size=large`.
+      - [ ] PVE: turn off automatic live migration for the worker VMs
+            (the 9.2 load balancer's rebalancing, and an HA shutdown
+            policy of `migrate`). HA cold restart stays.
+      - [ ] Buildkite privileged controller (GitOps):
+            - controller `pod-spec-patch` sets `runtimeClassName: kata`
+              and the size preference;
+            - `prohibit-kubernetes-plugin: true`;
+            - docker/buildkit daemons run as sidecars and are driven
+              from the command container;
+            - `/var/lib/docker` goes on a memory `emptyDir` with a
+              `sizeLimit` counted in the pod's memory limit;
+            - BuildKit's snapshotter is pinned explicitly.
+      - [ ] Run one real pipeline on it, then a week of normal builds.
 
 #### Success Criteria
 
-- Every CI pod (ARC, Buildkite, BuildKit) runs with `runtimeClassName:
-  kata-ci` on the two CI workers.
-- One week of normal CI runs green on Kata.
-- Non-CI workloads run under runc and never on the CI workers.
+- Every Buildkite privileged job pod runs with `runtimeClassName:
+  kata`, preferring work04/05.
+- One week of normal builds runs green on Kata.
+- Nothing else uses Kata unless it opted in, and the unprivileged
+  controller is unchanged on runc.
 - Validation rejects a values file missing `hostNamespaceOnly` while
   Kata is present.
 
@@ -798,9 +826,9 @@ live change depends on it.
 
 ### Phase 6: Talos-side options
 
-*Provisional — re-cut in Phase 2.* DESIGN-0005 Phase 5. Each option is
-its own PR, and each is enabled live on one node before the fleet, in
-OQ-10 order.
+DESIGN-0005 Phase 5. Each option is its own PR, and each is enabled
+live on one node before the fleet, in the OQ-10 a order: etcd metrics,
+logging, registry mirror, then image verification.
 
 #### Tasks
 
@@ -824,7 +852,10 @@ OQ-10 order.
       `KmsgLogConfig` documents. `format` is required (`json_lines`);
       the endpoint must be `tcp://` or `udp://`.
 - [ ] Tests, docs, and a release.
-- [ ] **GitOps first:** the receiver, as DESIGN-0005 OQ-15 decides.
+- [ ] **GitOps first:** the receiver, an Alloy listener on a fixed
+      LoadBalancer IP (DESIGN-0005 OQ-15 a). Confirm which Alloy
+      component accepts Talos `json_lines` over TCP before building
+      it; if none does, raise it before falling back to Vector.
 - [ ] **Live:** one worker, check lines arrive in Loki; then the fleet.
 
 **6.3 Registry mirror**
@@ -833,8 +864,8 @@ OQ-10 order.
       override_path }`. It renders `RegistryMirrorConfig` documents,
       never `machine.registries`. `skip_fallback` is required.
 - [ ] Tests, docs, and a release.
-- [ ] **Operator first:** stand up the mirror, as DESIGN-0005 OQ-16
-      decides.
+- [ ] **Operator first:** stand up the mirror off-cluster, on the
+      booty host (DESIGN-0005 OQ-16 a).
 - [ ] **Live:** one worker; pull a fresh image and confirm it was
       served from the mirror (mirror logs); then the fleet.
 
@@ -865,13 +896,14 @@ OQ-10 order.
 
 ### Phase 7: Cluster add-on options
 
-*Provisional — re-cut in Phase 2. Gated on DESIGN-0005 OQ-18.* If that
-resolves to "keep in GitOps", this phase reduces to the GitOps tasks.
+DESIGN-0005 Phase 6, delivered as the opt-in `cluster addons` stage
+(DESIGN-0005 OQ-18 a).
 
 #### Tasks
 
-- [ ] Kubernetes access (OQ-11): add the client dependency and a
-      kubeconfig loader from `out/kubeconfig`.
+- [ ] Kubernetes access (OQ-11 a): add `k8s.io/client-go` and a
+      kubeconfig loader from `out/kubeconfig`. Keep it reusable: the
+      INV-0005 cordon/drain stage needs the same client.
 - [ ] `addon "<name>" { version }`, a closed set mapping names to
       pinned upstream manifest URLs: `metrics-server` (components.yaml)
       and `keda` (release YAML). An unknown name or a bad version is a
@@ -933,12 +965,12 @@ resolves to "keep in GitOps", this phase reduces to the GitOps tasks.
 | `tools/bootstrap/internal/talos/apply.go` | Create | the apply stage: render, normalise, diff, steps | 3 |
 | `tools/bootstrap/cmd/talos.go` | Modify | `talos apply` | 3 |
 | `tools/bootstrap/internal/emit/catalog.go` | Modify | shared var assembly; class keys | 3, 4 |
-| `tools/bootstrap/internal/config/config.go` | Modify | labels, taints, `workload_class`, options, add-ons | 4, 6, 7 |
-| `tools/bootstrap/internal/config/resolve.go` | Modify | scheduling resolution; derived runtime label | 4, 5 |
-| `tools/bootstrap/internal/config/validate.go` | Modify | label, taint, runtime, and option rules | 4–7 |
+| `tools/bootstrap/internal/config/config.go` | Modify | labels, options, add-ons | 4, 6, 7 |
+| `tools/bootstrap/internal/config/resolve.go` | Modify | label resolution; derived runtime label | 4, 5 |
+| `tools/bootstrap/internal/config/validate.go` | Modify | label, runtime, and option rules | 4–7 |
 | `tools/bootstrap/internal/config/runtime.go` | Create | runtime table | 5 |
 | `tools/bootstrap/internal/config/ciliumvalues.go` | Modify | `hostNamespaceOnly` / bandwidth-manager checks | 5 |
-| `tools/bootstrap/internal/talos/completion.go` | Modify | labels, `registerWithTaints`, option rendering | 4–6 |
+| `tools/bootstrap/internal/talos/completion.go` | Modify | labels, option rendering | 4–6 |
 | `tools/bootstrap/internal/cluster/addons.go` | Create | add-on stage | 7 |
 | `tools/bootstrap/cmd/cluster.go` | Create | `cluster addons` | 7 |
 
@@ -963,8 +995,9 @@ resolves to "keep in GitOps", this phase reduces to the GitOps tasks.
 Each question offers lettered options: **a** is the recommendation and
 the others are alternatives. Answer with a letter or write your own.
 
-**Before Phase 0:** OQ-1 to OQ-6, all resolved 2026-10-11. OQ-7 to
-OQ-12 are Stage 2 and are re-asked at the Phase 2 gate.
+**Before Phase 0:** OQ-1 to OQ-6, all resolved 2026-10-11. **At the
+Phase 2 gate:** OQ-7 to OQ-12, all resolved 2026-10-19 with option a
+(OQ-8 is moot).
 
 1. **Branch and merge order.** *Resolved 2026-10-11 (a)*: merge
    `inv/0004` first, then cut the Phase 0 chore branch from `main`.
@@ -983,36 +1016,41 @@ OQ-12 are Stage 2 and are re-asked at the Phase 2 gate.
 6. **The Phase 0 test RuntimeClass after the test kit.** *Resolved
    2026-10-11 (a)*: keep it until Phase 5 replaces it. Nothing in GitOps
    references it.
-7. **How the apply stage finds node addresses** (Stage 2). The config
-   has no per-node IPs.
+7. **How the apply stage finds node addresses** (Stage 2). *Resolved
+   2026-10-19 (a).* The config has no per-node IPs.
    - a. Talos discovery: list cluster members through the endpoint and
      match by hostname. A missing node is an error.
    - b. Kubernetes Node `InternalIP` via `out/kubeconfig`.
    - c. A new optional per-node `address` attribute: explicit, but it
      duplicates the DHCP reservation and can drift.
-8. **Taint-drift detection** (Stage 2).
+8. **Taint-drift detection** (Stage 2). *Moot 2026-10-19*: taints
+   are deferred (DESIGN-0005 OQ-4). Option a stands for when they
+   return.
    - a. Read-only Node lookup through the Kubernetes client, with the
      exact `kubectl taint` printed on drift.
    - b. No live read: always print the declared taints as commands for
      the operator to compare.
    - c. Shell out to `kubectl`.
-9. **Tools release cadence in Stage 2.**
+9. **Tools release cadence in Stage 2.** *Resolved 2026-10-19 (a).*
    - a. A release after each code phase with a live step (3, 4, 5, and
      each 6.x and 7), so the operator always runs a tagged binary.
    - b. One release at the end of Stage 2, with the operator on locally
      built binaries until then.
-10. **Order of the Phase 6 options.**
+10. **Order of the Phase 6 options.** *Resolved 2026-10-19 (a).*
     - a. etcd metrics → logging → registry mirror → image verification:
       ascending blast radius, and image verification can block pulls.
     - b. The DESIGN-0005 order: image verification, logging, etcd
       metrics, registry mirror.
-11. **Kubernetes client for Phases 4 and 7** (Stage 2).
+11. **Kubernetes client** (Stage 2). *Resolved 2026-10-19 (a)*, for
+    Phase 7 and the INV-0005 drain stage. Phase 4 no longer needs it.
     - a. Add `k8s.io/client-go` (typed and dynamic clients, server-side
       apply) as a direct dependency of `tools/bootstrap`.
     - b. Shell out to `kubectl`.
     - c. No Kubernetes access: print commands only, and drop the
       add-on stage.
-12. **Where Stage 2 findings land** (Stage 2).
+12. **Where Stage 2 findings land** (Stage 2). *Resolved 2026-10-19
+    (a)*: in DESIGN-0005's Stage 1 findings section and this IMPL's
+    record table. INV-0005 is about upgrades, not Kata.
     - a. In DESIGN-0005 as amendments (Phase 2), with this IMPL
       recording only results.
     - b. In a short INV-0005 for the Kata test, with DESIGN-0005
@@ -1020,15 +1058,15 @@ OQ-12 are Stage 2 and are re-asked at the Phase 2 gate.
 
 ## Dependencies
 
-- INV-0004 (Concluded) and DESIGN-0005 (Draft; Stage 1 decisions
-  recorded). DESIGN-0006 for everything 1.14.
+- INV-0004 (Concluded) and DESIGN-0005 (Approved 2026-10-19). DESIGN-0006 for everything 1.14.
 - The live cluster: 3 control planes and 5 workers, `cpu = host` VMs
   with `/dev/kvm` present, Cilium 1.20.1 with Gateway API on (which
   forces `hostNamespaceOnly` today).
 - The booty host serving the emitted tree (the sync-and-restart update
   contract from IMPL-0003 Phase 1).
-- The private GitOps repo for Cilium values, RuntimeClasses, CI pod
-  specs, receivers, scrapes, the mirror, and add-on ownership.
+- The private GitOps repo for Cilium values, the RuntimeClass, the
+  Buildkite controller config, receivers, scrapes, and add-on
+  ownership.
 - `tools-release.yml` (workflow_dispatch) for any binary the operator
   needs.
 - Upstream: Image Factory serving `siderolabs/kata-containers` for
