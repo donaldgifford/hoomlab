@@ -3,11 +3,16 @@ package talos
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/netip"
 	"slices"
 	"strings"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"github.com/donaldgifford/hoomlab/tools/bootstrap/internal/config"
+	"github.com/donaldgifford/hoomlab/tools/bootstrap/internal/steps"
 )
 
 // NodeAddresses resolves every config node to the address the CLI
@@ -104,4 +109,94 @@ type RenderedNode struct {
 	Name         string
 	Config       []byte
 	InstallImage string
+}
+
+// Applier builds the day-2 apply stage: for each node, compare the
+// config booty would serve it against the one it is running, and
+// apply the rendered config in NO_REBOOT mode where they differ. The
+// render is the source of truth, so a node converged through the
+// stage is one a fresh PXE boot would reproduce.
+type Applier struct {
+	Cluster *config.Cluster
+	// Client is the Talos API session; each call targets one node.
+	Client Client
+	// Nodes are the rendered configs to converge, in order.
+	Nodes []RenderedNode
+	// Out receives the per-node diffs. Nil discards them.
+	Out io.Writer
+}
+
+// Steps resolves every node's address and returns one apply-<node>
+// step per rendered node. Resolution happens up front so a node
+// discovery doesn't know fails the stage before anything is applied.
+func (a *Applier) Steps(ctx context.Context) ([]steps.Step, error) {
+	addrs, err := NodeAddresses(ctx, a.Client, a.Cluster)
+	if err != nil {
+		return nil, err
+	}
+	stage := make([]steps.Step, 0, len(a.Nodes))
+	for _, n := range a.Nodes {
+		addr, ok := addrs[n.Name]
+		if !ok {
+			return nil, fmt.Errorf("talos node %q is not in the config", n.Name)
+		}
+		stage = append(stage, steps.Step{
+			Name:  "apply-" + n.Name,
+			Check: a.check(n, addr),
+			Apply: a.apply(n, addr),
+		})
+	}
+	return stage, nil
+}
+
+// check reports whether the node already runs its rendered config,
+// printing the redacted diff when it doesn't.
+func (a *Applier) check(n RenderedNode, addr string) func(context.Context) (bool, error) {
+	return func(ctx context.Context) (bool, error) {
+		live, err := a.Client.MachineConfig(ctx, addr)
+		if err != nil {
+			return false, fmt.Errorf("read %s machine config: %w", n.Name, err)
+		}
+		equal, err := configsEqual(live, n.Config)
+		if err != nil || equal {
+			return equal, err
+		}
+		diff, err := configDiff(live, n.Config)
+		if err != nil {
+			return false, err
+		}
+		if a.Out != nil {
+			if _, err := fmt.Fprintf(a.Out, "--- %s (live)\n+++ %s (rendered)\n%s", n.Name, n.Name, diff); err != nil {
+				return false, fmt.Errorf("write diff: %w", err)
+			}
+		}
+		return false, nil
+	}
+}
+
+// apply sends the whole rendered config in NO_REBOOT mode. A change
+// Talos can only take with a reboot is refused; that refusal comes
+// back naming the node and the change, and the reboot goes through
+// cordon → drain (INV-0005) — a bare talosctl reboot would take the
+// node's workloads down unannounced.
+func (a *Applier) apply(n RenderedNode, addr string) func(context.Context) error {
+	return func(ctx context.Context) error {
+		err := a.Client.ApplyNoReboot(ctx, addr, n.Config)
+		if err == nil {
+			return nil
+		}
+		if !rebootRequired(err) {
+			return fmt.Errorf("apply %s machine config: %w", n.Name, err)
+		}
+		return fmt.Errorf("talos node %s refused the change without a reboot: %w\n"+
+			"take the reboot through cordon → drain (INV-0005), never a bare talosctl reboot:\n"+
+			"  kubectl cordon %s && kubectl drain %s --ignore-daemonsets --delete-emptydir-data",
+			n.Name, err, n.Name, n.Name)
+	}
+}
+
+// rebootRequired reports whether an apply error is Talos refusing a
+// NO_REBOOT apply because the change needs a reboot.
+func rebootRequired(err error) bool {
+	return status.Code(err) == codes.FailedPrecondition || strings.Contains(err.Error(), "reboot")
 }

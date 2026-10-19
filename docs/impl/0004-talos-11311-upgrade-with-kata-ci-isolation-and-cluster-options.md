@@ -678,12 +678,13 @@ DESIGN-0005 Phase 2. Every later live change depends on it.
       - print a unified diff of the normalised YAML in `--dry-run`,
         with secrets redacted.
       *(2026-10-19: `internal/talos/normalize.go` — per-document normal form keyed by kind/name and sorted; `configsEqual` for Check, `configDiff` (LCS, 2 lines context, secrets redacted via `RedactSecrets`) for dry-run output.)*
-- [ ] One `Step` per node, `apply-<node>`:
+- [x] One `Step` per node, `apply-<node>`:
       - `Check` reports equal or differs;
       - `Apply` sends the whole rendered config with `NO_REBOOT`;
       - a reboot-required refusal becomes an error naming the node and
         the change. It tells the operator to reboot through cordon →
         drain (INV-0005), never a bare `talosctl reboot`.
+      *(2026-10-19: `Applier.Steps` in `internal/talos/apply.go` resolves every address up front, then one `apply-<node>` step each; Check prints the redacted diff to `Out`; a `FailedPrecondition`/reboot refusal names the node and points at cordon → drain.)*
 - [ ] Schematic check: a mismatch between the rendered `install.image`
       and the running extensions is reported with the exact
       `talosctl upgrade --image` command. It is never applied. A stored
