@@ -653,13 +653,14 @@ DESIGN-0005 Phase 2. Every later live change depends on it.
 
 #### Tasks
 
-- [ ] `internal/talos/client.go`: extend `Client`, then regenerate the
+- [x] `internal/talos/client.go`: extend `Client`, then regenerate the
       mockery mocks. New calls:
       - list cluster members (for addressing);
       - read a node's live machine config (the `MachineConfig`
         resource);
       - `ApplyConfiguration` with mode `NO_REBOOT`;
       - list a node's extensions.
+      *(2026-10-19: `Members`, `MachineConfig`, `ApplyNoReboot`, `Extensions`, plus `NewClientFromTalosconfig` for the written talosconfig; mocks regenerated.)*
 - [ ] Node addressing (OQ-7 a): list cluster members through the
       configured endpoint and match each config node by hostname. A
       config node with no member is an error naming it.

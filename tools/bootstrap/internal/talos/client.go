@@ -9,11 +9,15 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/cosi-project/runtime/pkg/safe"
 	clusterapi "github.com/siderolabs/talos/pkg/machinery/api/cluster"
 	machineapi "github.com/siderolabs/talos/pkg/machinery/api/machine"
 	"github.com/siderolabs/talos/pkg/machinery/client"
 	clientconfig "github.com/siderolabs/talos/pkg/machinery/client/config"
 	"github.com/siderolabs/talos/pkg/machinery/config/generate/secrets"
+	clusterres "github.com/siderolabs/talos/pkg/machinery/resources/cluster"
+	configres "github.com/siderolabs/talos/pkg/machinery/resources/config"
+	runtimeres "github.com/siderolabs/talos/pkg/machinery/resources/runtime"
 	"github.com/siderolabs/talos/pkg/machinery/role"
 
 	"github.com/donaldgifford/hoomlab/tools/bootstrap/internal/config"
@@ -42,8 +46,35 @@ type Client interface {
 	// Health blocks until the cluster reports healthy or the server-side
 	// wait times out, streaming progress to log.
 	Health(ctx context.Context, timeout time.Duration, log *slog.Logger) error
+	// Members lists the cluster members the endpoint node knows through
+	// Talos discovery — the apply stage's way of finding node addresses,
+	// since the config declares none.
+	Members(ctx context.Context) ([]Member, error)
+	// MachineConfig reads the active machine config of the node at
+	// address, as the raw (multi-document) bytes Talos holds.
+	MachineConfig(ctx context.Context, address string) ([]byte, error)
+	// ApplyNoReboot applies a whole machine config to the node at
+	// address in NO_REBOOT mode. A change Talos can only take with a
+	// reboot is refused; the error returns verbatim.
+	ApplyNoReboot(ctx context.Context, address string, data []byte) error
+	// Extensions lists the system extensions running on the node at
+	// address. Image Factory images carry one named "schematic" whose
+	// version is the schematic ID.
+	Extensions(ctx context.Context, address string) ([]Extension, error)
 	// Close releases the underlying connection.
 	Close() error
+}
+
+// Member is one Talos cluster member as discovery reports it.
+type Member struct {
+	Hostname  string
+	Addresses []string
+}
+
+// Extension is one running system extension.
+type Extension struct {
+	Name    string
+	Version string
 }
 
 // endpointHost extracts the host the CLI dials for Talos API calls
@@ -77,6 +108,21 @@ func Talosconfig(bundle *secrets.Bundle, cluster *config.Cluster) (*clientconfig
 		return nil, fmt.Errorf("generate admin client certificate: %w", err)
 	}
 	return clientconfig.NewConfig(cluster.TalosName(), []string{host}, bundle.Certs.OS.Crt, clientCert), nil
+}
+
+// NewClientFromTalosconfig dials the Talos API with the credentials in
+// a talosconfig file — the operator's written <output>/out/talosconfig,
+// which day-2 stages read rather than minting a fresh certificate.
+func NewClientFromTalosconfig(ctx context.Context, path string) (Client, error) {
+	cfg, err := clientconfig.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open talosconfig %s: %w", path, err)
+	}
+	c, err := client.New(ctx, client.WithConfig(cfg))
+	if err != nil {
+		return nil, fmt.Errorf("dial talos api: %w", err)
+	}
+	return &machineryClient{c: c}, nil
 }
 
 // NewClient dials the Talos API at the cluster endpoint host with
@@ -145,6 +191,59 @@ func (m *machineryClient) Health(ctx context.Context, timeout time.Duration, log
 			log.Info("health", "status", msg)
 		}
 	}
+}
+
+func (m *machineryClient) Members(ctx context.Context) ([]Member, error) {
+	list, err := safe.StateListAll[*clusterres.Member](ctx, m.c.COSI)
+	if err != nil {
+		return nil, fmt.Errorf("list cluster members: %w", err)
+	}
+	members := make([]Member, 0, list.Len())
+	for member := range list.All() {
+		spec := member.TypedSpec()
+		addrs := make([]string, 0, len(spec.Addresses))
+		for _, a := range spec.Addresses {
+			addrs = append(addrs, a.String())
+		}
+		members = append(members, Member{Hostname: spec.Hostname, Addresses: addrs})
+	}
+	return members, nil
+}
+
+func (m *machineryClient) MachineConfig(ctx context.Context, address string) ([]byte, error) {
+	ctx = client.WithNode(ctx, address)
+	mc, err := safe.StateGetByID[*configres.MachineConfig](ctx, m.c.COSI, configres.ActiveID)
+	if err != nil {
+		return nil, fmt.Errorf("read machine config: %w", err)
+	}
+	data, err := mc.Provider().Bytes()
+	if err != nil {
+		return nil, fmt.Errorf("encode machine config: %w", err)
+	}
+	return data, nil
+}
+
+func (m *machineryClient) ApplyNoReboot(ctx context.Context, address string, data []byte) error {
+	ctx = client.WithNode(ctx, address)
+	_, err := m.c.ApplyConfiguration(ctx, &machineapi.ApplyConfigurationRequest{
+		Data: data,
+		Mode: machineapi.ApplyConfigurationRequest_NO_REBOOT,
+	})
+	return err
+}
+
+func (m *machineryClient) Extensions(ctx context.Context, address string) ([]Extension, error) {
+	ctx = client.WithNode(ctx, address)
+	list, err := safe.StateListAll[*runtimeres.ExtensionStatus](ctx, m.c.COSI)
+	if err != nil {
+		return nil, fmt.Errorf("list extensions: %w", err)
+	}
+	exts := make([]Extension, 0, list.Len())
+	for ext := range list.All() {
+		md := ext.TypedSpec().Metadata
+		exts = append(exts, Extension{Name: md.Name, Version: md.Version})
+	}
+	return exts, nil
 }
 
 func (m *machineryClient) Close() error {

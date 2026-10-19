@@ -3,6 +3,7 @@ module github.com/donaldgifford/hoomlab/tools/bootstrap
 go 1.26.9
 
 require (
+	github.com/cosi-project/runtime v1.16.3
 	github.com/donaldgifford/booty v0.2.1
 	github.com/donaldgifford/hclkit v0.2.0
 	github.com/donaldgifford/proxmox-go-sdk v0.12.0
@@ -31,7 +32,6 @@ require (
 	github.com/cloudflare/circl v1.6.4 // indirect
 	github.com/containerd/go-cni v1.1.13 // indirect
 	github.com/containernetworking/cni v1.3.0 // indirect
-	github.com/cosi-project/runtime v1.16.3 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/gertd/go-pluralize v0.2.1 // indirect
