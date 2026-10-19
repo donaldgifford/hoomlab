@@ -71,7 +71,7 @@ cluster "homelab" {
 
   # ── Stages 3–5: talos secrets/emit/ipxe/vms/bootstrap/health ──────
   talos {
-    version  = "v1.13.8"
+    version  = "v1.13.11"
     endpoint = "https://10.0.20.10:6443" # cluster VIP / endpoint
 
     # Optional: names the Talos cluster independently of the PVE
@@ -84,7 +84,7 @@ cluster "homelab" {
     # Optional: pins the Kubernetes version the machineconfigs
     # install. Omitted means the default of the Talos machinery this
     # CLI was built against.
-    # kubernetes_version = "1.36.3"
+    # kubernetes_version = "1.36.5"
 
     # Optional: pin one Image Factory schematic ID for every node's
     # boot assets and installer image. Omitted means the vanilla
@@ -153,6 +153,17 @@ cluster "homelab" {
         "siderolabs/iscsi-tools",
       ]
     }
+
+    # Kata Containers (DESIGN-0005): reference it from WORKER nodes only
+    # — profiles = ["base", "kata"] — so every worker can run Kata
+    # pods. Installed is not enabled: runc stays the default runtime,
+    # and a pod opts in with runtimeClassName once a RuntimeClass for
+    # handler "kata" exists. Needs /dev/kvm in the guest, which the
+    # VMs' cpu = host plus nested virtualisation on the PVE hosts
+    # provide. Control planes stay without it.
+    # profile "kata" {
+    #   extensions = ["siderolabs/kata-containers"]
+    # }
 
     booty {
       # Where the operator runs the booty container; the emitted

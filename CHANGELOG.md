@@ -15,6 +15,36 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(design)* DESIGN-0005 resolve OQ-1 and OQ-6
 - *(impl)* IMPL-0004 from DESIGN-0005
 - *(impl)* IMPL-0004 resolve OQ-1 to OQ-6
+- *(bootstrap)* Correct the setInterfaces legacy-network rationale
+- *(impl)* IMPL-0004 Phase 0.1 and 0.2 complete
+- *(impl)* IMPL-0004 record the worker schematic
+- *(impl)* IMPL-0004 Phase 0.3 complete
+- *(impl)* IMPL-0004 booty verification note
+- *(impl)* IMPL-0004 record the pre-1.13.11 config backup
+- *(impl)* IMPL-0004 work01 upgraded, drain-blocker finding
+- *(impl)* IMPL-0004 work01 cilium#48420 check passes
+- *(inv)* INV-0005 rolling node upgrades managed by hoomlab
+- *(inv)* INV-0005 observation 7, fix the drain blockers at the workloads
+- *(impl)* IMPL-0004 workers on 1.13.11
+- *(impl)* IMPL-0004 control planes on 1.13.11, stale install.image finding
+- *(impl)* IMPL-0004 install.image converged on all nodes
+- *(impl)* IMPL-0004 Phase 0.4 complete
+- *(impl)* IMPL-0004 0.5 DaemonSet toleration pre-check
+- *(impl)* IMPL-0004 0.5 CI taints lost on node re-registration
+- *(impl)* IMPL-0004 0.5 correct the CI taint note
+- Drop the tainted CI pool, Kata opt-in per workload
+- *(impl)* IMPL-0004 0.5 unpinned test pods, T8 plain reboot
+- *(impl)* IMPL-0004 0.5 test node work05
+- *(impl)* IMPL-0004 0.5 first Kata test run (T1-T3, T6 pass; T4/T5 exec finding; T7 memory)
+- *(impl)* IMPL-0004 0.5 T5 and T7 pass
+- IMPL-0004 Phase 0 complete; INV-0005 observation 8
+- *(impl)* IMPL-0004 Phase 1 emit pinned to 1.36.5
+- *(impl)* IMPL-0004 Phase 1 complete
+
+### Miscellaneous Tasks
+
+- *(bootstrap)* Machinery v1.13.11 and Talos v1.13.11 references
+- *(bootstrap)* Kubernetes_version hint to 1.36.5; IMPL-0004 Phase 1 progress
 
 ## [tools/bootstrap/v0.3.2] - 2026-10-10
 

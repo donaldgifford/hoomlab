@@ -49,6 +49,18 @@ does four things:
   everywhere;
 - turns the useful Sidero guides into **opt-in HCL options**.
 
+> **Direction change, 2026-10-17 (pending the Phase 2 gate).** The
+> dedicated, tainted CI pool is dropped. Kata stays opt-in per
+> workload, CI or not. A pod chooses `runtimeClassName: kata` and runs
+> on any worker. Placement is a separate concern, and labels with
+> preferred affinity handle it, not taints. Two facts drove this:
+> work04/05 are the large workers (16 cores, 32 GiB, against 8 and 16
+> for work01–03), and big services should keep using them; and CI is
+> moving from ARC to self-hosted Buildkite (`agent-stack-k8s`, with a
+> separate privileged controller), which can set the RuntimeClass per
+> controller. The Phase 3 taint and Phase 4 `kata-ci` material below
+> stays as written until the Phase 2 gate re-cuts it; see OQ-11.
+
 The options are: image signature verification, Talos log shipping,
 the etcd metrics endpoint, a pull-through registry mirror,
 metrics-server, and KEDA.
@@ -993,6 +1005,18 @@ change because of them.
     existing workers, tainted and labelled `ci`, with the taint put on
     once via `kubectl taint` and carried in `registerWithTaints` for
     re-registration.
+    *Reopened 2026-10-17:* there is no CI pool. Kata is opt-in per
+    workload on every worker, and nothing is tainted. Still to decide
+    at the Phase 2 gate:
+    - a. Kata through the RuntimeClass on the workloads that need it:
+      always on the Buildkite privileged controller's pod spec, and per
+      workload elsewhere. Placement by an optional size label
+      (`hoomlab.io/size=large` on work04/05) with preferred affinity.
+      Bootstrap keeps label and taint support as primitives, unused by
+      default.
+    - b. As (a), without a size label: the scheduler places freely.
+    - c. Keep a dedicated pool after all, for example if T7 shows the
+      Kata overhead crowding services on the large workers.
 12. **Day-2 delivery to live nodes.**
     - a. A new `talos apply` stage (render → diff → `NO_REBOOT`
       apply).

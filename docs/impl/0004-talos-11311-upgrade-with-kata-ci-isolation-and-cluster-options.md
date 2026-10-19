@@ -124,13 +124,17 @@ this IMPL.
 | Fact | Value |
 | ---- | ----- |
 | Control-plane schematic (`base` + `iscsi`) | `88d1f7a5c4f1d3aba7df787c448c1d3d008ed29cfb34af53fa0df4336a56040b` (unchanged: schematic IDs depend on extensions, not version) |
-| Worker schematic (`base` + `iscsi` + `kata`) | *(from Phase 0 emit)* |
-| Kata extension version | *(from `talosctl get extensions`; expected 3.32.0)* |
-| Talos | v1.13.8 → *v1.13.11* |
-| Kubernetes | v1.36.3 → *v1.36.5* |
-| CI workers | `work04`, `work05` (OQ-4) |
-| Label and taint key | `hoomlab.io/workload=ci` (DESIGN-0005 OQ-6) |
+| Worker schematic (`base` + `iscsi` + `kata`) | `95025911f4700432cab85474232840e2e25477bf0c9e0db8f24bd8c396cc8a56` (iscsi-tools, kata-containers, qemu-guest-agent, util-linux-tools; resolved 2026-10-11) |
+| Kata extension version | 3.32.0 (`kata` handler, Cloud Hypervisor); guest kernel 6.18.35 |
+| Talos | v1.13.8 → v1.13.11 (all 8 nodes, 2026-10-13; kernel 6.18.54) |
+| Kubernetes | v1.36.3 → v1.36.5 (all 8 nodes, 2026-10-19; CoreDNS v1.14.7) |
+| CI workers | ~~`work04`, `work05` (OQ-4)~~ none: no CI pool (DESIGN-0005 direction change, 2026-10-17). Kata test node: work05 |
+| Label and taint key | ~~`hoomlab.io/workload=ci`~~ unused; the `hoomlab.io/` prefix stands for later labels |
 | bootstrap release with the apply stage | *(Phase 3)* |
+| Kata cost per idle pod | ~200 MB host RSS (`cloud-hypervisor` ~150, shim ~44, `virtiofsd` ~5); MemAvailable −165 to −177 MiB. Build VMs: ~310–330 MB plus `virtiofsd` ~95 MB. RuntimeClass `overhead.podFixed` should be ~250Mi (the test used 130Mi) |
+| Kata cold start (cached images) | runc 1s, Kata 3s |
+| Kata storage path | iSCSI PVC mounted on the host, shared into the guest as `virtiofs` |
+| Kata + privileged builds | DinD (overlayfs on memory `emptyDir`) and privileged BuildKit both build. Drive them from a client container: `kubectl exec` into the daemon's own container fails (agent `cgroup.procs` EBUSY) |
 
 ## Implementation Phases
 
@@ -153,8 +157,9 @@ renders 1.13.11 configs, because the contract derives from
 
 **0.1 Record fix (code, first)**
 
-- [ ] Cut the chore branch (OQ-1), e.g. `chore/talos-1.13.11-kata`.
-- [ ] `tools/bootstrap/internal/talos/machineconfig.go`: rewrite the
+- [x] Cut the chore branch (OQ-1), e.g. `chore/talos-1.13.11-kata`.
+      *(cut from `main` at the PR #16 merge, 2026-10-11)*
+- [x] `tools/bootstrap/internal/talos/machineconfig.go`: rewrite the
       `setInterfaces` doc comment and the `nolint:staticcheck`
       reason. Drop the false "machinery v1.13 ships no multi-doc
       network device type". State the real reasons:
@@ -162,62 +167,93 @@ renders 1.13.11 configs, because the contract derives from
       - fields and their documents are mutually exclusive, so a switch
         is a whole-config replacement;
       - the migration is DESIGN-0006's.
-- [ ] `docs/impl/0003-talos-storage-plane.md` Phase 2 note: append a
-      dated correction (2026-10-xx) with the same facts and a link to
+- [x] `docs/impl/0003-talos-storage-plane.md` Phase 2 note: append a
+      dated correction (2026-10-11) with the same facts and a link to
       INV-0004 F5. Amend the record; don't rewrite it.
-- [ ] `just bootstrap-lint` and `just bootstrap-test` pass.
-- [ ] Commit:
+- [x] `just bootstrap-lint` and `just bootstrap-test` pass.
+- [x] Commit:
       `docs(bootstrap): correct the setInterfaces legacy-network rationale`.
+      *(`c6be73f`, first on the branch)*
 
 **0.2 CLI hygiene (code)**
 
-- [ ] `go get github.com/siderolabs/talos/pkg/machinery@v1.13.11` in
+- [x] `go get github.com/siderolabs/talos/pkg/machinery@v1.13.11` in
       `tools/bootstrap`, then `go mod tidy`. Keep the local `go.work` in
       step; it is untracked.
-- [ ] `internal/emit/emit_test.go`: `talosVersion = "v1.13.11"`.
+      *(Transitive updates rode along: testify 1.12.1, cosi runtime
+      1.16.3, grpc-gateway 2.30.0, zap 1.28.0. The local `go.work`
+      needed no change.)*
+- [x] `internal/emit/emit_test.go`: `talosVersion = "v1.13.11"`.
       Regenerate the goldens with `go test ./internal/emit -update` and
       review the diff: only version strings and boot-asset URLs.
-- [ ] `examples/bootstrap.hcl`: set `version = "v1.13.11"`. Add a
+      *(Confirmed: only the catalog `talos_version` default and the
+      `install_image` tags moved. The machineconfig templates are
+      byte-identical under machinery v1.13.11.)*
+- [x] `examples/bootstrap.hcl`: set `version = "v1.13.11"`. Add a
       commented `profile "kata"` example with the worker-only note.
-- [ ] `tools/bootstrap/README.md` and `docs/runbook/bootstrap-cluster.md`:
+- [x] `tools/bootstrap/README.md` and `docs/runbook/bootstrap-cluster.md`:
       update the version references.
-- [ ] Add a load test asserting that example-style node names pass
+      *(The README has none. The runbook's one boot-asset `curl`
+      example moved to v1.13.11. Unit-test fixtures outside emit keep
+      v1.13.8: they test logic, not the pinned release.)*
+- [x] Add a load test asserting that example-style node names pass
       1.13.11's stricter hostname validation (machinery
       `Validate`, metal mode).
-- [ ] `just bootstrap-lint`, `just bootstrap-test`, and govulncheck are
+      *(Deviation: no new test. The existing
+      `TestRoleTemplatesMultiNICRoundTrip` already renders a real
+      hostname (`cp-01`) into each role template and fails on any
+      machinery `Validate` warning in metal mode. Under v1.13.11 that
+      is exactly the stricter check, `ValidateDNSNameChars`, and it
+      passes.)*
+- [x] `just bootstrap-lint`, `just bootstrap-test`, and govulncheck are
       green. Push and open the PR **only when the operator asks**
       (OQ-2).
+      *(lint 0 issues and all packages ok. govulncheck: 0 called
+      vulnerabilities. Two uncalled module findings predate this bump:
+      cel-go GO-2026-6094, fixed in v0.30.0, and x/crypto GO-2026-5932,
+      no fix yet.)*
 
 **0.3 HCL and emit (operator)**
 
-- [ ] Back up `~/drill/bootstrap.hcl` alongside the existing
-      `bootstrap.hcl.v0.2.0` copy.
-- [ ] Set `talos.version = "v1.13.11"`.
-- [ ] Add `profile "kata" { extensions = ["siderolabs/kata-containers"] }`.
+- [x] Back up `~/drill/bootstrap.hcl` alongside the existing
+      `bootstrap.hcl.v0.2.0` copy. *(`bootstrap.hcl.pre-1.13.11`)*
+- [x] Set `talos.version = "v1.13.11"`.
+- [x] Add `profile "kata" { extensions = ["siderolabs/kata-containers"] }`.
       Append `"kata"` to the `profiles` of the **five workers only**;
       control planes stay `["base", "iscsi"]`.
-- [ ] `bootstrap validate` is clean.
-- [ ] `bootstrap talos emit --dry-run`: expect template and catalog
+- [x] `bootstrap validate` is clean.
+      *(The secrets are `env()` references, so every stage, even
+      talos-only ones, needs them exported. The working form is
+      `op run --env-file ~/code/hoomlab/.env -- bootstrap … --config
+      ~/drill/bootstrap.hcl`.)*
+- [x] `bootstrap talos emit --dry-run`: expect template and catalog
       changes, a second schematic (workers) with new boot assets, the
       control-plane schematic unchanged at the new version, and
       nothing else.
-- [ ] `bootstrap talos emit`, then `bootstrap talos ipxe`. Record the
+      *(It resolved `88d1f7a5…` for the control planes and `95025911…`
+      for the workers. Both `emit-artifacts` and `boot-assets` were
+      pending.)*
+- [x] `bootstrap talos emit`, then `bootstrap talos ipxe`. Record the
       worker schematic ID in the record table.
-- [ ] Sync the booty tree to the booty host and restart booty
+- [x] Sync the booty tree to the booty host and restart booty
       (the sync-and-restart update contract from IMPL-0003 Phase 1).
-- [ ] Verify that `/ipxe?mac=<worker MAC>` renders the worker
+- [x] Verify that `/ipxe?mac=<worker MAC>` renders the worker
       schematic at v1.13.11, and that a control-plane MAC renders
       `88d1f7a5…` at v1.13.11.
+      *(Verified 2026-10-11 on work01 and ctrl01: HTTP 200, and work01
+      matches profile `talos-worker`, still one worker class since all
+      five workers share the schematic. An empty repeat earlier was an
+      interrupted curl, not booty.)*
 
 **0.4 Rolling re-image (operator)**
 
-- [ ] Pre-flight:
+- [x] Pre-flight:
       - `talosctl health` is green;
       - etcd shows 3/3 members;
       - every democratic-csi node pod is Ready;
       - take an etcd snapshot (OQ-5): `talosctl etcd snapshot` to
         `~/drill/backups/`.
-- [ ] Workers first, one at a time (OQ-3):
+- [x] Workers first, one at a time (OQ-3):
 
       ```sh
       talosctl -n <worker-ip> upgrade \
@@ -234,7 +270,49 @@ renders 1.13.11 configs, because the contract derives from
         `bpftool cgroup show /sys/fs/cgroup effective` from a
         `kube-system` host-netns debug pod, plus a ClusterIP curl
         from host network.
-- [ ] Control planes, one at a time:
+
+      *(2026-10-11, finding — drain blockers: every CNPG cluster is
+      `instances: 1` (primary PDB `minAvailable: 1`) and OpenBao is one
+      replica (PDB `maxUnavailable: 0`), so no eviction ever succeeds
+      and the upgrade's drain loops. In 1.13 the installer writes the
+      new UKI first and the client drains and reboots after, so a loop
+      that is abandoned leaves the new version staged for the next
+      boot. The working per-node procedure is to empty the node before
+      the upgrade: `kubectl cordon`, then `kubectl delete pod` each
+      `*-db-1` / `*-postgres-1` / `openbao-0` on it (never `--force`;
+      data stays on the iSCSI PVCs and the pods reattach elsewhere),
+      wait until only DaemonSets remain, then upgrade. CNPG pods take
+      minutes to go: a 1800s grace period and a smart shutdown that
+      waits on client connections. OpenBao auto-unseals after the move.
+      Follow-ups, outside this IMPL: no CNPG cluster has backups
+      configured, and iSCSI-backed ext4 volumes log `Aborting journal`
+      on detach, on work01 since 2026-09-27.)*
+
+      *(2026-10-11, work01 done: v1.13.11, kernel 6.18.54, containerd
+      2.2.9; extensions kata-containers 3.32.0, iscsi-tools,
+      qemu-guest-agent, util-linux-tools under schematic `95025911…`;
+      `/dev/kvm`, `vhost-net`, `vhost-vsock` present; every pod in the
+      cluster Running; OpenBao unsealed; democratic-csi node pods Ready.
+      cilium#48420 check passes: all 11 socket-LB
+      hooks (`cil_sock4/6_connect`, `sendmsg`, `recvmsg`, `getpeername`,
+      `post_bind`, `cil_sock_release`) attached at the root cgroup, and
+      a host-network curl to the `kubernetes` ClusterIP got the API
+      server's 401.)*
+
+      *(2026-10-11, workers done: work01–05 all on v1.13.11 (kernel
+      6.18.54, containerd 2.2.9), each labelled
+      `extensions.talos.dev/kata-containers=3.32.0`, each with 11
+      socket-LB hooks at the root cgroup. work02–05 were upgraded after
+      the drain blockers were fixed at the workloads (INV-0005 Observation 7): every CNPG cluster now
+      has `enablePDB: false` and `smartShutdownTimeout: 15`, and
+      OpenBao has no PDB, so plain drains succeed. After the roll,
+      `ts-atlantis` (tailscale) crash-loops: its operator-generated
+      `ts-atlantis-egress` CiliumNetworkPolicy allows only atlantis,
+      DNS and `world`, not the `kube-apiserver` entity, so it can't
+      reach 10.96.0.1. It's a policy gap the restart exposed, not an
+      upgrade regression: `ts-repo-guardian` on the same node has no
+      policy and runs.)*
+- [x] Control planes, one at a time:
 
       ```sh
       talosctl -n <cp-ip> upgrade \
@@ -243,57 +321,213 @@ renders 1.13.11 configs, because the contract derives from
 
       Between each: etcd 3/3 healthy, `talosctl health` green, the
       cilium#48420 check.
-- [ ] Verify the stored `install.image` on all 8 nodes by **field
+
+      *(2026-10-13, done with `~/drill/upgrade-node.sh` in the order
+      ctrl02, ctrl03, ctrl01. ctrl01 went last because both the
+      kubeconfig and the talosconfig point at it alone, and its run
+      used `TALOS_ENDPOINT` set to ctrl02. Each node: etcd snapshot
+      first (`~/drill/backups/etcd-pre-v1.13.11-<node>-<ts>.db`, on top
+      of the fleet-wide `etcd-pre-1.13.11.db`), drained one ReplicaSet
+      pod, upgraded, back Ready on v1.13.11, etcd 3/3, 11 socket-LB
+      hooks, host-network ClusterIP 401. Leadership moved ctrl03 →
+      ctrl02. All 8 nodes now report v1.13.11, kernel 6.18.54.)*
+- [x] Verify the stored `install.image` on all 8 nodes by **field
       extraction only**, never a full config dump. Workers carry the
       worker schematic and control planes `88d1f7a5…`, both at
       v1.13.11.
-- [ ] Closing loop: `validate`, `talos emit --dry-run`,
+
+      *(2026-10-13, finding: `talosctl upgrade --image` installs the
+      image but does not write it back to the stored config. All 8
+      nodes still carry `install.image` =
+      `…/88d1f7a5…:v1.13.8`, workers included, since before this IMPL
+      every node shared one schematic. The running OS is correct, and
+      re-PXE gets the right per-class image from booty's emitted
+      configs. The stale field only matters when Talos reinstalls from
+      the stored config. Fix by a no-reboot patch of
+      `/machine/install/image` per node; Phase 3's `talos apply` would
+      also converge it, and its schematic check would flag it.)*
+
+      *(2026-10-13, fixed: a no-reboot strategic-merge patch,
+      `{"machine":{"install":{"image":"<class image>"}}}`, on each
+      node. A dry-run diff showed exactly the one `image:` line. Field
+      extraction now shows `88d1f7a5…:v1.13.11` on ctrl01–03 and
+      `95025911…:v1.13.11` on work01–05. The live configs are
+      multi-document (three documents per node), so talosctl refuses
+      JSON6902 patches ("not supported for multi-document machine
+      configuration"). Day-2 hand patches must be strategic-merge, and
+      Phase 3's renderer and apply must treat the live config as
+      multi-document.)*
+- [x] Closing loop: `validate`, `talos emit --dry-run`,
       `talos ipxe --dry-run`, and `talos vms --dry-run` all report 0
       to apply.
 
+      *(2026-10-13: `validate` clean (3 PVE nodes, 8 Talos nodes);
+      `emit` resolved both schematics (control plane `88d1f7a5…`,
+      worker `95025911…` with kata-containers), 0 of 2 pending; `ipxe`
+      0 of 1; `vms` 0 of 16. 0.4 complete.)*
+
 **0.5 Kata test kit (operator; hand-applied, not GitOps)**
 
-- [ ] Label and taint the first CI worker, `work04` (OQ-4), with the final keys:
+- [x] ~~Label and taint the first CI worker, `work04` (OQ-4), with the final keys:~~
+      *Dropped 2026-10-17: no CI pool (DESIGN-0005 direction change,
+      OQ-11 reopened). Kata is opt-in per workload on every worker. For
+      the test only, the kit pins T1–T5 to a chosen node (`TEST_NODE`,
+      default work05: a large worker at 13% CPU / 17% memory requested,
+      no databases, only atlantis, bazel-cache and zot stateful), so T7
+      measures and T8 reboots a known node. T6's `kata-anywhere` stays
+      unpinned. T8 reboots without a drain, so pods restart in place and
+      nothing migrates. The notes below are kept for the record.*
 
       ```sh
       kubectl label node work04 hoomlab.io/workload=ci
       kubectl taint node work04 hoomlab.io/workload=ci:NoSchedule
       ```
 
-- [ ] Apply a test RuntimeClass `kata`:
+      *(2026-10-13, pre-check: of the 8 DaemonSets, only cilium,
+      cilium-envoy and node-exporter tolerate every taint. Alloy and
+      all four democratic-csi node plugins carry no tolerations. Their
+      pods already on work04 keep running under a `NoSchedule` taint,
+      but a rollout could not replace them there, which would leave the
+      CI pool without storage or log shipping. The test kit
+      (`~/drill/kata-test/`) warns about this at setup. Phase 4 must
+      give those DaemonSets a `hoomlab.io/workload` toleration before
+      the taint becomes permanent.)*
+
+      *(2026-10-17: no worker carries a taint or a `hoomlab.io/*`
+      label. The CI pool was never tainted on this cluster; this step
+      creates it. Until then, ARC runners schedule on every worker.)*
+
+- [x] Apply a test RuntimeClass `kata`:
       - `handler: kata`;
       - `overhead.podFixed` 130Mi / 250m;
       - `scheduling.nodeSelector`
         `extensions.talos.dev/kata-containers: "<version>"`, the exact
         value from the record table. This is a test object only;
         Phase 5 replaces it.
-- [ ] **T1 kernel boundary:** a `runtimeClassName: kata` pod's
+- [x] **T1 kernel boundary:** a `runtimeClassName: kata` pod's
       `uname -r` differs from the host's.
-- [ ] **T2 networking:** from the Kata pod, `nslookup
+      *(2026-10-18, pass on work05: host and runc pod `6.18.54-talos`,
+      Kata guest `6.18.35`.)*
+- [x] **T2 networking:** from the Kata pod, `nslookup
       kubernetes.default` works, and an HTTP request to a ClusterIP
       Service and to a pod IP on another node both work.
-- [ ] **T3 storage:** a pod with a democratic-csi PVC (`iscsi-ssd-*`
+      *(2026-10-18, pass: DNS resolves `kubernetes.default` to
+      10.96.0.1; the `kubernetes` ClusterIP answers 401, the `podinfo`
+      ClusterIP 200, and the podinfo pod IP on work01 200. With
+      `bpf-lb-sock-hostns-only=true`, Service translation for the
+      guest's traffic happens at tc, as designed.)*
+- [x] **T3 storage:** a pod with a democratic-csi PVC (`iscsi-ssd-*`
       class) under `kata` writes, reads, and survives a pod delete and
       recreate. Note the mount path (virtio-fs or block).
-- [ ] **T4 privileged DinD:** a privileged `docker:dind` pod under
+      *(2026-10-18, pass: write/read survived a pod delete and
+      recreate. The guest sees `none /data virtiofs`, so the iSCSI
+      volume is mounted on the host and shared into the VM through
+      virtiofsd, not passed through as a block device. The host
+      therefore still holds the filesystem, and I/O goes through
+      virtiofsd; Phase 2 should weigh both.)*
+- [x] **T4 privileged DinD:** a privileged `docker:dind` pod under
       `kata`, with `/var/lib/docker` on `emptyDir` `medium: Memory`,
       runs `docker build` of a small Dockerfile. Repeat with a
       loop-mounted ext4 image if `emptyDir` fails.
-- [ ] **T5 BuildKit:** `buildkitd`, privileged or rootless (record
+      *(2026-10-18, first run: no build ran. dockerd itself started
+      cleanly (overlayfs, containerd snapshotter). The failure was
+      `kubectl exec` into the privileged container: the Kata agent's
+      write to the container's `cgroup.procs` fails with EBUSY once
+      dockerd nests cgroups inside it. Under cgroup v2, a cgroup with
+      active child groups can't take processes, and runc handles this
+      case but the Kata agent doesn't. The kit now builds from a client
+      container in the same pod, which is also how CI jobs drive a DinD
+      sidecar. Re-run pending. Finding for Phase 2: under Kata, never
+      exec into a container whose process manages cgroups; CI job
+      specs must use the client-sidecar shape.)*
+      *(2026-10-18, re-run: pass. From the client container, `docker
+      info` shows dockerd on overlayfs (on the memory `emptyDir`,
+      inside the guest), cgroupfs driver, cgroup v2, guest kernel
+      6.18.35. `docker build` ran the `RUN` step (`kata-ci-test`) and
+      tagged `t4:latest`. No ext4 fallback needed.)*
+- [x] **T5 BuildKit:** `buildkitd`, privileged or rootless (record
       which), under `kata` builds the same image.
-- [ ] **T6 placement:** a pod tolerating the taint with
-      `runtimeClassName: kata` runs on the CI worker. A plain pod
-      without a toleration never lands there. A `kata` pod on a plain
-      worker also runs, since every worker has Kata.
-- [ ] **T7 cost:** per Kata pod, record the host RSS of
+      *(2026-10-18, first run: the same exec EBUSY as T4; buildkitd
+      started fine (runc worker, native snapshotter). Re-run with
+      `buildctl` in a client container sharing `/run/buildkit`.)*
+      *(2026-10-18, re-run: pass with **privileged** buildkitd under
+      Kata. `buildctl` in the client container built the two-step
+      Dockerfile, and the `RUN` step printed `kata-ci-test`. Rootless
+      not needed.)*
+- [x] **T6 placement** (re-cut 2026-10-17 for the no-pool model): a
+      `kata` pod with no node pin runs on a worker. A `kata` pod pinned
+      to a control plane, tolerating its taint, stays Pending, because
+      the RuntimeClass selects the kata extension label and control
+      planes lack it. A pod without `runtimeClassName` runs under
+      runc.
+      *(2026-10-18, pass: `kata-anywhere` Running on work05;
+      `kata-on-ctrl` Pending with "8 node(s) didn't match Pod's node
+      affinity/selector"; `runc-default` Running with no
+      `runtimeClassName`.)*
+- [x] **T7 cost:** per Kata pod, record the host RSS of
       `cloud-hypervisor` plus `virtiofsd` (from `talosctl -n <ip>
       processes`), the node's `MemAvailable` delta, and the cold-start
       time to Running. Compare with runc.
-- [ ] **T8 reboot:** reboot the CI worker. Kata pods come back, and the
-      cilium#48420 check passes.
-- [ ] Write the findings into the [record table](#the-record-table)
+      *(2026-10-18, partial; cold-start timing broke on GNU `date` and
+      is fixed for the re-run. Memory on work05: one idle Kata probe
+      (512Mi limit) dropped MemAvailable by 177 MiB. Per idle VM,
+      `cloud-hypervisor` RSS is 148–156 MB, plus `containerd-shim-kata-v2`
+      at 44 MB and the two `virtiofsd` processes at about 2–8 MB:
+      about 200 MB per idle pod. The DinD and BuildKit VMs ran at
+      266–310 MB of `cloud-hypervisor` RSS, with their busiest
+      `virtiofsd` at 50–90 MB. The test RuntimeClass's
+      `overhead.podFixed` of 130Mi is too low; it should be about
+      200–250Mi, so the scheduler accounts for it.)*
+      *(2026-10-18, re-run: cold start (pod created → container
+      started, images cached) runc 1s, Kata 3s. One idle Kata probe:
+      MemAvailable −165 MiB, consistent with the first run. Per idle
+      VM, `cloud-hypervisor` 148–156 MB plus shim 43–45 MB plus
+      `virtiofsd` 2–6 MB, about 200 MB. The DinD and BuildKit VMs:
+      `cloud-hypervisor` 308–329 MB, `virtiofsd` 92–99 MB. Phase 5's
+      RuntimeClass overhead should be about 250Mi.)*
+- [x] **T8 reboot:** reboot the test node (work05). Kata pods come
+      back, and the cilium#48420 check passes.
+      *(2026-10-19, pass: after the reboot, the pinned `kata-probe` and
+      `kata-storage` were Running on work05 again, with the PVC
+      reattached, and work05 had 11 socket-LB hooks. Finding: the run
+      used a plain `talosctl reboot` with no cordon. Kubelet graceful
+      node shutdown terminated work05's pods rather than letting them
+      restart in place, so the unpinned ones (atlantis, zot,
+      bazel-cache, `kata-anywhere`) were rescheduled to work04. While
+      the node shut down, its kubelet rejected new pods with
+      `NodeShutdown`, and the single cilium-operator replica (which
+      tolerates every taint) was recreated and bound back to work05
+      93 times in about 90 seconds, until the node returned. Its pods
+      are harmless debris, but a reboot must cordon first. The kit's T8
+      now cordons, and `upgrade-node.sh` always did. Recorded for
+      INV-0005.)*
+- [x] Write the findings into the [record table](#the-record-table)
       and a Phase 0 findings note under this phase. Clean up the test
       pods. Keep the test RuntimeClass until Phase 5 (OQ-6).
+
+**Phase 0 findings (for the Phase 2 gate)**
+
+- Kata works for what we need: kernel boundary (T1), Service and
+  cross-node networking (T2), iSCSI PVCs (T3, through virtiofs),
+  privileged DinD (T4) and privileged BuildKit (T5), placement through
+  the RuntimeClass (T6), and recovery after a reboot (T8).
+- **Exec constraint:** never `kubectl exec` into a Kata container whose
+  process nests cgroups (dockerd, buildkitd). Run builds from a client
+  container in the same pod, which is the shape Buildkite job pods
+  already use.
+- **Overhead:** ~200 MB per idle Kata pod, ~400 MB for a build VM.
+  Set the Phase 5 RuntimeClass `overhead.podFixed` to ~250Mi.
+- **Storage path:** volumes reach the guest through `virtiofsd` on the
+  host. Fine for CI caches, but weigh it for I/O-heavy workloads.
+- **Drains:** single-instance CNPG and OpenBao PDBs blocked every drain
+  until fixed at the workloads (`enablePDB: false`, no OpenBao PDB).
+- **Reboots:** always cordon first. A reboot without a cordon caused a
+  `NodeShutdown` pod storm (93 cilium-operator pods).
+- **Stored config:** `talosctl upgrade` does not update
+  `install.image`. The live configs are multi-document, so hand patches
+  must be strategic-merge.
+- **Direction:** no CI pool, no taints. Kata is opt-in per workload;
+  CI (the Buildkite privileged controller) is only the first user.
 
 #### Success Criteria
 
@@ -315,17 +549,46 @@ After Phase 0 is complete (DESIGN-0005 OQ-2).
 
 #### Tasks
 
-- [ ] `talosctl -n <cp-ip> upgrade-k8s --to 1.36.5 --dry-run`, and
+- [x] `talosctl -n <cp-ip> upgrade-k8s --to 1.36.5 --dry-run`, and
       review it.
-- [ ] `talosctl -n <cp-ip> upgrade-k8s --to 1.36.5`.
-- [ ] Verify:
+      *(2026-10-19: all 8 nodes compatible; apiserver, controller-manager,
+      scheduler and kubelet v1.36.3 → 1.36.5; kube-proxy a no-op, since
+      Cilium replaces it; the only manifest change was CoreDNS v1.14.6 →
+      v1.14.7. `cilium-install`, the Cilium values and the Gateway API
+      CRDs were unchanged. No deprecations flagged.)*
+- [x] `talosctl -n <cp-ip> upgrade-k8s --to 1.36.5`.
+      *(2026-10-19: etcd snapshot first
+      (`~/drill/backups/etcd-pre-k8s-1.36.5.db`). Control-plane
+      components rolled one node at a time, then kubelets on all 8
+      (a kubelet restart, not a node shutdown, so no evictions), then
+      CoreDNS. Ended with `done`.)*
+- [x] Verify:
       - `kubectl get nodes` shows v1.36.5 everywhere;
       - `talosctl health` is green;
       - CI and CSI workloads are healthy.
-- [ ] Set `kubernetes_version = "1.36.5"` in `~/drill/bootstrap.hcl`.
+
+      *(2026-10-19: all 8 nodes Ready on v1.36.5; both CoreDNS replicas
+      Running on the new ReplicaSet; no pod in the cluster other than
+      Running or Completed.)*
+- [x] Set `kubernetes_version = "1.36.5"` in `~/drill/bootstrap.hcl`.
       Run `talos emit --dry-run` (kubelet and control-plane image refs
       change), then `talos emit`, and sync and restart booty.
-- [ ] Update the example's commented `kubernetes_version` hint to
+      *(2026-10-19: set; the `emit --dry-run` had `emit-artifacts`
+      pending and `boot-assets` done, as expected, since boot images
+      key on the Talos version and schematic only. After `talos emit`,
+      the closing dry-run is 0 of 2. Booty synced and restarted. Its
+      rendered configs, checked by extracting the `image:` fields only,
+      give work01 the worker installer `95025911…:v1.13.11` and kubelet
+      v1.36.5, and ctrl01 the installer `88d1f7a5…:v1.13.11`, kubelet,
+      apiserver, controller-manager and scheduler all at v1.36.5.
+      Phase 1 complete. Follow-up for the CLI, outside this IMPL:
+      `--output` defaults to `./bootstrap-out` relative to the working
+      directory, while `--secrets` resolves next to the config. An
+      emit dry-run from another directory reports every step pending
+      instead of saying the output root doesn't exist. Default
+      `--output` next to the config, or have the dry-run name the
+      missing root.)*
+- [x] Update the example's commented `kubernetes_version` hint to
       1.36.5 (code, on the Phase 0 branch if it is still open,
       otherwise the next PR).
 
