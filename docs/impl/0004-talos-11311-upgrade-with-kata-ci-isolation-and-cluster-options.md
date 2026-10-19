@@ -570,14 +570,18 @@ After Phase 0 is complete (DESIGN-0005 OQ-2).
       *(2026-10-19: all 8 nodes Ready on v1.36.5; both CoreDNS replicas
       Running on the new ReplicaSet; no pod in the cluster other than
       Running or Completed.)*
-- [ ] Set `kubernetes_version = "1.36.5"` in `~/drill/bootstrap.hcl`.
+- [x] Set `kubernetes_version = "1.36.5"` in `~/drill/bootstrap.hcl`.
       Run `talos emit --dry-run` (kubelet and control-plane image refs
       change), then `talos emit`, and sync and restart booty.
       *(2026-10-19: set; the `emit --dry-run` had `emit-artifacts`
       pending and `boot-assets` done, as expected, since boot images
       key on the Talos version and schematic only. After `talos emit`,
-      the closing dry-run is 0 of 2. Booty sync and restart: pending
-      operator confirmation. Follow-up for the CLI, outside this IMPL:
+      the closing dry-run is 0 of 2. Booty synced and restarted. Its
+      rendered configs, checked by extracting the `image:` fields only,
+      give work01 the worker installer `95025911…:v1.13.11` and kubelet
+      v1.36.5, and ctrl01 the installer `88d1f7a5…:v1.13.11`, kubelet,
+      apiserver, controller-manager and scheduler all at v1.36.5.
+      Phase 1 complete. Follow-up for the CLI, outside this IMPL:
       `--output` defaults to `./bootstrap-out` relative to the working
       directory, while `--secrets` resolves next to the config. An
       emit dry-run from another directory reports every step pending
