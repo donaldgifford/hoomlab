@@ -5,6 +5,16 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
 ## [unreleased]
 
+### Features
+
+- *(bootstrap)* Extend Talos client for the apply stage
+- *(bootstrap)* Resolve Talos node addresses via discovery
+- *(bootstrap)* Render per-node machine configs as booty serves them
+- *(bootstrap)* Normalise and diff multi-document machine configs
+- *(bootstrap)* Add per-node talos apply steps
+- *(bootstrap)* Report schematic mismatches as talosctl upgrades
+- *(bootstrap)* Add the talos apply command
+
 ### Documentation
 
 - *(inv)* INV-0003 platform reuse for hoomlab
@@ -43,6 +53,12 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(design)* DESIGN-0005 Phase 2 gate — Stage 1 findings, per-workload Kata
 - *(impl)* IMPL-0004 Phase 2 gate closed; DESIGN-0005 approved
 - Add interactive hoomlab guide (docs/hoomlab-guide.html)
+- *(bootstrap)* Document the day-2 talos apply stage
+- *(impl)* Defer the phase 3 operator tasks
+
+### Testing
+
+- *(bootstrap)* Cover the talos apply stage
 
 ### Miscellaneous Tasks
 
