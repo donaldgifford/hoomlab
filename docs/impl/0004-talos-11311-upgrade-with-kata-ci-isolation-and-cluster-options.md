@@ -701,8 +701,9 @@ DESIGN-0005 Phase 2. Every later live change depends on it.
         reordering (no drift);
       - a render round-trip that machinery `Validate` accepts.
       *(2026-10-19: `internal/talos/apply_test.go` (mock client: equal, reordering, differs dry-run + apply, reboot refusal, other apply errors, schematic mismatch in both modes, unresolvable node, `NodeAddresses` plane skip / IPv6 fallback); `normalize_internal_test.go`; `internal/emit/nodeconfig_test.go` asserts `NodeConfigs` is byte-identical to what booty serves and passes metal-mode `Validate`.)*
-- [ ] Docs: a README stage section, a runbook section ("day-2 apply"),
+- [x] Docs: a README stage section, a runbook section ("day-2 apply"),
       and an example invocation.
+      *(2026-10-19: README "Day-2: `bootstrap talos apply`" section; runbook §16 "Day-2 apply" with the dry-run → apply invocation and the two stop conditions; `talos` and `emit` package docs updated.)*
 - [ ] Release (OQ-9 a): the operator runs `tools-release.yml` once the
       PR merges.
 - [ ] **Live (operator):** `bootstrap talos apply --dry-run` across all
