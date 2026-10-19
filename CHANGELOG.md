@@ -40,6 +40,9 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - IMPL-0004 Phase 0 complete; INV-0005 observation 8
 - *(impl)* IMPL-0004 Phase 1 emit pinned to 1.36.5
 - *(impl)* IMPL-0004 Phase 1 complete
+- *(design)* DESIGN-0005 Phase 2 gate — Stage 1 findings, per-workload Kata
+- *(impl)* IMPL-0004 Phase 2 gate closed; DESIGN-0005 approved
+- Add interactive hoomlab guide (docs/hoomlab-guide.html)
 
 ### Miscellaneous Tasks
 

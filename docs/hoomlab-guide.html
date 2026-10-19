@@ -1,0 +1,1107 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>hoomlab: a guide to the bootstrap CLI, the cluster it builds, and the design trail</title>
+<style>
+:root{
+  --bg:#0f1218; --panel:#161b24; --panel2:#1c2330; --border:#263040; --text:#d8dee9; --muted:#8b96a8;
+  --blue:#6cb6ff; --green:#5fd38d; --amber:#f0b84a; --red:#f07178; --purple:#c792ea; --cyan:#5ccfe6;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif}
+a{color:var(--blue)}
+code,pre{font-family:var(--mono);font-size:12.5px}
+code{background:#0b0e13;border:1px solid var(--border);border-radius:4px;padding:0 4px}
+pre{background:#0b0e13;border:1px solid var(--border);border-radius:8px;padding:12px 14px;overflow:auto;line-height:1.45}
+pre code{background:none;border:0;padding:0}
+.layout{display:grid;grid-template-columns:260px 1fr;min-height:100vh}
+nav{position:sticky;top:0;height:100vh;overflow:auto;border-right:1px solid var(--border);padding:18px 14px;background:#0c0f14}
+nav h1{font-size:14px;margin:0 0 4px;color:var(--text)}
+nav .sub{font-size:12px;color:var(--muted);margin-bottom:14px}
+nav a{display:block;color:var(--muted);text-decoration:none;font-size:13px;padding:4px 8px;border-radius:6px;border-left:2px solid transparent}
+nav a:hover{color:var(--text);background:var(--panel)}
+nav a.active{color:var(--text);border-left-color:var(--blue);background:var(--panel)}
+nav .grp{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#5d6778;margin:14px 8px 4px}
+main{padding:28px 44px 120px;max-width:1240px}
+section{margin:0 0 64px;scroll-margin-top:16px}
+h2{font-size:26px;margin:0 0 6px}
+h2 .part{font-size:13px;font-family:var(--mono);color:var(--blue);display:block;letter-spacing:.06em;text-transform:uppercase;margin-bottom:2px}
+h3{font-size:18px;margin:26px 0 8px}
+.lede{color:var(--muted);margin:0 0 18px;max-width:880px}
+.hero{padding:26px 28px;border:1px solid var(--border);border-radius:14px;background:linear-gradient(135deg,#17202d,#121722 60%,#1a1726);margin-bottom:40px}
+.hero h1{font-size:32px;margin:0 0 8px}
+.hero p{color:var(--muted);max-width:920px;margin:6px 0}
+.pill{display:inline-block;font-size:11.5px;padding:2px 9px;border-radius:999px;border:1px solid var(--border);color:var(--muted);margin:2px 4px 2px 0;background:var(--panel);white-space:nowrap}
+.pill.b{color:var(--blue);border-color:#2b4a6b}.pill.g{color:var(--green);border-color:#285a3d}.pill.a{color:var(--amber);border-color:#5f4a20}.pill.r{color:var(--red);border-color:#5f2a30}.pill.p{color:var(--purple);border-color:#4b3463}
+.grid{display:grid;gap:14px}
+.g2{grid-template-columns:repeat(2,minmax(0,1fr))}.g3{grid-template-columns:repeat(3,minmax(0,1fr))}.g4{grid-template-columns:repeat(4,minmax(0,1fr))}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+.card h4{margin:0 0 6px;font-size:15px}
+.card p{margin:4px 0;color:var(--muted);font-size:13.5px}
+.card ul,.callout ul{margin:4px 0;padding-left:18px;font-size:13.5px}
+.card ul{color:var(--muted)}
+.card.hl{border-color:#2b4a6b;box-shadow:0 0 0 1px #2b4a6b inset}
+.callout{border-left:3px solid var(--amber);background:#1d1a12;padding:10px 14px;border-radius:0 8px 8px 0;margin:14px 0;font-size:14px}
+.callout.blue{border-color:var(--blue);background:#121b26}
+.callout.green{border-color:var(--green);background:#11201a}
+.callout.red{border-color:var(--red);background:#22141a}
+.callout.purple{border-color:var(--purple);background:#1b1524}
+table{border-collapse:collapse;width:100%;font-size:13.5px;margin:10px 0}
+th,td{border-bottom:1px solid var(--border);padding:7px 9px;text-align:left;vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.04em;background:#121720}
+tr:hover td{background:#141a23}
+.btns{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+button{font:inherit;font-size:13px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:6px 12px;cursor:pointer}
+button:hover{border-color:#3a4a60}
+button.on{background:#1e3350;border-color:var(--blue);color:#fff}
+.diagram{background:#0b0e13;border:1px solid var(--border);border-radius:12px;padding:8px;position:relative}
+.diagram svg{width:100%;height:auto;display:block}
+.split{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:14px;align-items:start}
+.info{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px;min-height:200px;font-size:13.5px}
+.info h4{margin:0 0 6px;color:var(--blue)}
+.info .hint{color:var(--muted)}
+svg text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.node{cursor:pointer}
+.node:hover rect.box{stroke:#fff}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--muted);margin:6px 2px}
+.legend span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px;background:var(--c)}
+.steps{display:flex;flex-direction:column;gap:8px}
+.step{display:flex;gap:10px;align-items:flex-start;padding:9px 12px;border:1px solid var(--border);border-radius:10px;background:var(--panel);transition:all .3s ease}
+.step .ic{width:22px;height:22px;border-radius:50%;flex:0 0 22px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#0b0e13}
+.step.run .ic{background:var(--green)}.step.skip .ic{background:#4a5568;color:#cbd5e0}.step.warn .ic{background:var(--amber)}.step.inf .ic{background:var(--blue)}.step.plan .ic{background:var(--purple)}
+.step .t{font-size:13.5px}.step .n{font-size:12.5px;color:var(--muted)}
+.step.skip{opacity:.45}.step.skip .t{text-decoration:line-through;color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 14px}
+.chip{font-size:12px;padding:3px 10px;border-radius:999px;border:1px solid var(--border);background:var(--panel);cursor:pointer;color:var(--muted);font-family:var(--mono)}
+.chip.on{color:#fff;border-color:var(--blue);background:#1e3350}
+.tree{font-family:var(--mono);font-size:12.5px;line-height:1.7;background:#0b0e13;border:1px solid var(--border);border-radius:10px;padding:12px 14px;overflow:auto}
+.tree div{cursor:pointer;padding:0 6px;border-radius:4px;white-space:pre}
+.tree div:hover{background:#151c27}
+.tree div.on{background:#1e3350;color:#fff}
+.tree .c{color:#5d6778}
+.stepper{display:grid;grid-template-columns:250px 1fr;gap:14px}
+.stepper ol{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:4px}
+.stepper li{padding:7px 10px;border-radius:8px;border:1px solid transparent;cursor:pointer;font-size:13px;color:var(--muted)}
+.stepper li.on{border-color:var(--blue);color:#fff;background:#15202f}
+.stepper .pane{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px 16px;font-size:13.5px;min-height:240px}
+.stepper .pane h4{margin:0 0 6px}
+.st{font-size:11px;font-weight:600;padding:1px 8px;border-radius:999px;margin-left:6px;vertical-align:1px}
+.st.built{background:#11201a;color:var(--green);border:1px solid #285a3d}
+.st.partial{background:#1d1a12;color:var(--amber);border:1px solid #5f4a20}
+.st.planned{background:#121b26;color:var(--blue);border:1px solid #2b4a6b}
+.st.proposed{background:#1b1524;color:var(--purple);border:1px solid #4b3463}
+.st.stub{background:#22141a;color:var(--red);border:1px solid #5f2a30}
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.small{font-size:12.5px;color:var(--muted)}
+.waves{display:flex;flex-direction:column;gap:6px}
+.wave{display:grid;grid-template-columns:70px 170px 1fr;gap:10px;align-items:center;padding:8px 12px;border:1px solid var(--border);border-radius:10px;background:var(--panel);cursor:pointer}
+.wave:hover{border-color:#3a4a60}
+.wave.on{border-color:var(--blue);background:#15202f}
+.wave .w{font-family:var(--mono);color:var(--blue);font-weight:700}
+.wave .bar{height:8px;border-radius:4px;background:linear-gradient(90deg,var(--blue),var(--purple))}
+.matrix td.cell{cursor:pointer}
+.matrix td.cell:hover{background:#1a2230}
+@keyframes dash{to{stroke-dashoffset:-24}}
+.flow{stroke-dasharray:6 6;animation:dash 1.2s linear infinite}
+@media (max-width:1000px){.layout{grid-template-columns:1fr}nav{position:relative;height:auto}.split,.stepper{grid-template-columns:1fr}.g3,.g4{grid-template-columns:1fr 1fr}main{padding:20px}}
+
+.flowline{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:10px 0}
+.flowline .fs{padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:var(--panel);font-size:12.5px;font-family:var(--mono)}
+.flowline .fs.hl{border-color:var(--blue);color:#fff;background:#15202f}
+.flowline .ar{color:#5d6778}
+.timeline{display:grid;grid-template-columns:repeat(9,minmax(0,1fr));gap:6px}
+.timeline .ph{border:1px solid var(--border);border-radius:10px;padding:8px;background:var(--panel);cursor:pointer;font-size:12.5px;min-height:92px}
+.timeline .ph:hover{border-color:#3a4a60}
+.timeline .ph.on{border-color:var(--blue);background:#15202f}
+.timeline .ph .k{font-family:var(--mono);color:var(--blue);font-weight:700}
+.timeline .ph .bar{height:4px;border-radius:2px;margin:6px 0}
+.timeline .ph.done .bar{background:var(--green)}.timeline .ph.todo .bar{background:#2b4a6b}
+.layers{display:flex;flex-direction:column;gap:6px;margin:10px 0}
+.layer{display:grid;grid-template-columns:230px 1fr 210px;gap:10px;padding:9px 12px;border:1px solid var(--border);border-radius:10px;background:var(--panel);font-size:13.5px}
+.layer b{color:var(--text)}.layer .o{color:var(--purple);font-family:var(--mono);font-size:12.5px}
+.layer .w{color:var(--muted)}
+.nodegrid{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px;margin:12px 0}
+.nd{border:1px solid var(--border);border-radius:10px;padding:9px;background:var(--panel);font-size:12px;min-height:150px;transition:all .25s}
+.nd h5{margin:0 0 2px;font-size:14px;font-family:var(--mono)}
+.nd .sz{color:var(--muted)}
+.nd .lb{font-family:var(--mono);font-size:10.5px;color:#7d8899;margin:4px 0;word-break:break-all}
+.nd .vd{margin-top:6px;font-weight:600}
+.nd.pref{border-color:var(--green);box-shadow:0 0 0 1px var(--green) inset;background:#11201a}
+.nd.ok{border-color:#285a3d}
+.nd.no{opacity:.55;border-color:#5f2a30}
+.nd.pref .vd,.nd.ok .vd{color:var(--green)}.nd.no .vd{color:var(--red)}
+.matrix-wrap{overflow:auto}
+.matrix td,.matrix th{text-align:center}
+.matrix td:first-child,.matrix th:first-child{text-align:left}
+.matrix input{accent-color:var(--blue);cursor:pointer}
+input,select{font:inherit;font-size:13px;background:#0b0e13;color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px}
+#envIn{font-family:var(--mono);width:220px}
+.ok{color:var(--green)}.bad{color:var(--red)}.warn{color:var(--amber)}
+@media (max-width:1000px){.timeline{grid-template-columns:repeat(3,1fr)}.nodegrid{grid-template-columns:repeat(4,1fr)}.layer{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="layout">
+<nav id="toc">
+  <h1>hoomlab guide</h1>
+  <div class="sub">tools/bootstrap · chart · docs · as of 2026-10-19</div>
+  <div class="grp">Start here</div>
+  <a href="#tldr">What hoomlab is</a>
+  <a href="#status">Status pills</a>
+  <a href="#map">Repo map</a>
+  <a href="#arch">The whole system</a>
+  <div class="grp">Part 1 · Ideas</div>
+  <a href="#concepts">Core concepts</a>
+  <a href="#docs">The doc trail (docz)</a>
+  <a href="#tiers">Completion tiers and ownership</a>
+  <div class="grp">Part 2 · Bootstrap CLI</div>
+  <a href="#stages">Stage chain</a>
+  <a href="#engine">Step / Runner engine</a>
+  <a href="#hcl">The HCL surface</a>
+  <a href="#xor">Resolver and the XOR rule</a>
+  <a href="#classes">Profiles → schematics → classes</a>
+  <div class="grp">Part 3 · The Talos cluster</div>
+  <a href="#vmcontract">VM boot contract</a>
+  <a href="#planes">Network planes</a>
+  <div class="grp">Part 4 · This branch</div>
+  <a href="#d5">DESIGN-0005 / IMPL-0004</a>
+  <a href="#findings">Stage 1 findings</a>
+  <a href="#kata">Kata per workload</a>
+  <a href="#placement">Placement simulator</a>
+  <a href="#apply">The day-2 apply stage</a>
+  <a href="#upgrade">Rolling upgrades (INV-0005)</a>
+  <a href="#decisions">Decision log</a>
+  <div class="grp">Part 5 · Service and delivery</div>
+  <a href="#service">Service and chart contract</a>
+  <a href="#release">Release train simulator</a>
+  <a href="#gates">CI gates</a>
+  <div class="grp">Wrap-up</div>
+  <a href="#roadmap">Roadmap: Talos 1.14 and beyond</a>
+  <a href="#sources">Sources</a>
+</nav>
+
+<main>
+<div class="hero">
+  <h1>hoomlab</h1>
+  <p>An opinionated, self-hosted, cloud-like platform for homelabs, built on <b>Proxmox VE</b> and <b>Talos Kubernetes</b>. "The opinions are the product." The aim is to be <i>simple</i> (few concepts, one way to do each thing, every decision written down), not <i>easy</i>: the operator is expected to understand what they run.</p>
+  <p>Today the repo ships the <b>bootstrap CLI</b> (<code>tools/bootstrap</code>). It takes bare Proxmox nodes to a healthy Talos cluster from one HCL file. The <b>hoomlab service</b> and its Helm chart are scaffolded around it: a release train, a chart contract and a stub binary.</p>
+  <div><span class="pill b">Go 1.26.9</span><span class="pill g">bootstrap v0.3.0</span><span class="pill">Talos v1.13.11</span><span class="pill">Kubernetes v1.36.5</span><span class="pill">Cilium v1.20.1</span><span class="pill p">Kata 3.32.0 (opt-in)</span><span class="pill a">branch: docs/design-0005-phase-2-gate</span></div>
+</div>
+
+<section id="tldr">
+  <h2>What hoomlab is</h2>
+  <p class="lede">RFC-0001 names two problems. First, home IaC is <i>invoked, not resident</i>: nothing reconciles between runs, and a state file becomes a third truth beside the config and the world. Second, production-like systems at home are a big investment of bespoke assembly. hoomlab answers with two deliverables, built strictly in order.</p>
+  <div class="grid g4">
+    <div class="card hl"><h4>Bootstrap CLI <span class="st built">built</span></h4><p>An out-of-cluster, operator-run CLI in <code>tools/bootstrap</code> (its own Go module). Each stage is a command that checks the world, applies only the delta, and is safe to re-run. There are no state files.</p></div>
+    <div class="card"><h4>hoomlab service <span class="st stub">stub</span></h4><p><code>cmd/hoomlab</code> only prints its version. The plan is a resident reconciler, deployed by the chart, that reads the <i>same</i> HCL and so "owns itself".</p></div>
+    <div class="card hl"><h4>Helm chart <span class="st built">built</span></h4><p><code>charts/hoomlab</code>: the deployment contract (env vars, probes, envFrom, collision guard). It has 8 helm-unittest suites with 45 cases and a JSON schema.</p></div>
+    <div class="card hl"><h4>Release train <span class="st built">built</span></h4><p>Merging to <code>main</code> with a semver label tags a version. Binary, image and chart publish in lockstep, signed with cosign and carrying SLSA provenance. Tools release on demand under their own tags.</p></div>
+  </div>
+  <div class="callout blue"><b>One rule ties it together:</b> the config file and the world are the only two truths. Every step reads actual state and converges toward the config, so an interrupted run is re-run, not repaired. Disaster recovery is the same act as the first bootstrap.</div>
+</section>
+
+<section id="status">
+  <h2>How to read the status pills</h2>
+  <table>
+    <tr><th>Pill</th><th>Meaning</th></tr>
+    <tr><td><span class="st built">built</span></td><td>In <code>main</code> and proven live (drill, convergence loop, or the running cluster).</td></tr>
+    <tr><td><span class="st partial">partial</span></td><td>Started; the rest is tracked in an IMPL doc.</td></tr>
+    <tr><td><span class="st stub">stub</span></td><td>The file or command exists but doesn't do the real job yet.</td></tr>
+    <tr><td><span class="st planned">planned</span></td><td>An Approved DESIGN or an IMPL commits to it; not started.</td></tr>
+    <tr><td><span class="st proposed">proposed</span></td><td>Only in a Draft design or an open investigation.</td></tr>
+  </table>
+</section>
+
+<section id="map">
+  <h2>Repo map</h2>
+  <p class="lede">Click a path to see what lives there, who writes it, and what guards it.</p>
+  <div class="split">
+    <div class="tree" id="mapTree"></div>
+    <div class="info" id="mapInfo"><h4>Pick a path</h4><p class="hint">Each entry lists its purpose, owner, and gate.</p></div>
+  </div>
+</section>
+
+<section id="arch">
+  <h2>The whole system</h2>
+  <p class="lede">The paths a change can take, from the operator's workstation to a running cluster and out to the registries. Solid lines are built; dashed purple lines are planned. Filter by flow to label and animate its edges, and click any box for details.</p>
+  <div class="btns" id="archBtns">
+    <button class="on" data-f="all">Everything</button>
+    <button data-f="boot">Day-0 bootstrap</button>
+    <button data-f="day2">Day-2 changes</button>
+    <button data-f="release">Release</button>
+  </div>
+  <div class="split">
+    <div class="diagram"><svg id="archSvg" viewBox="0 0 1000 560"></svg></div>
+    <div class="info" id="archInfo"><h4>Click a box</h4><p class="hint">The info pane explains each component and its contract.</p></div>
+  </div>
+  <div class="legend"><span style="--c:#5f4a20">workstation</span><span style="--c:#2b4a6b">boot network</span><span style="--c:#284a3a">Proxmox + Talos</span><span style="--c:#4b3463">external</span></div>
+</section>
+
+<!-- =============== PART 1 =============== -->
+<section id="concepts">
+  <h2><span class="part">Part 1 · Ideas</span>Core concepts</h2>
+  <p class="lede">A handful of ideas recur in every design. Click one to see where it comes from and how it shows up in the code.</p>
+  <div class="stepper" id="conceptStepper"></div>
+</section>
+
+<section id="docs">
+  <h2>The doc trail</h2>
+  <p class="lede">Every decision lives in a docz document. An RFC proposes, an ADR decides, a DESIGN details, an IMPL tracks phases with checkboxes, and an INV runs a time-boxed investigation whose findings feed the next design. Click a document to see its summary and highlight what it led to and came from.</p>
+  <div class="grid g3" style="margin-bottom:12px">
+    <div class="card"><h4>RFC → ADR</h4><p>A broad proposal (RFC-0001), then a lightweight, accepted decision (ADR-0001: the bootstrap CLI comes first).</p></div>
+    <div class="card"><h4>DESIGN → IMPL</h4><p>The how, then phases with checkboxes. Open questions are numbered, with lettered options and <b>a</b> as the recommendation.</p></div>
+    <div class="card"><h4>INV</h4><p>The drill, the storage plane, platform reuse, Talos 1.14 and rolling upgrades. Findings are folded back into designs as dated amendments.</p></div>
+  </div>
+  <div class="btns" id="docBtns">
+    <button class="on" data-t="all">All</button><button data-t="RFC">RFC</button><button data-t="ADR">ADR</button><button data-t="DESIGN">DESIGN</button><button data-t="IMPL">IMPL</button><button data-t="INV">INV</button>
+  </div>
+  <div class="split">
+    <div class="diagram"><svg id="docSvg" viewBox="0 0 1100 390"></svg></div>
+    <div class="info" id="docInfo"><h4>Click a document</h4><p class="hint">Green edges lead downstream; amber edges lead upstream.</p></div>
+  </div>
+  <div class="legend"><span style="--c:#5fd38d">Implemented / Completed / Concluded / Accepted</span><span style="--c:#6cb6ff">Approved / In Progress</span><span style="--c:#f0b84a">Draft / Open</span></div>
+</section>
+
+<section id="tiers">
+  <h2>Completion tiers and the ownership boundary</h2>
+  <p class="lede">DESIGN-0002 defines "done" for bootstrap as <b>T2</b>. Anything past it belongs to the GitOps/IaC layer. The rule: <i>if it must be decided at image-build or machine-config time, bootstrap owns it; if it is expressible as a Kubernetes API object on a running cluster, the IaC layer owns it.</i> Click a tier, then test the rule on a few things.</p>
+  <div class="waves" id="tierList"></div>
+  <h3>Who owns it?</h3>
+  <div class="chips" id="ownChips"></div>
+  <div class="callout" id="ownOut">Pick a thing above.</div>
+</section>
+
+<!-- =============== PART 2 =============== -->
+<section id="stages">
+  <h2><span class="part">Part 2 · Bootstrap CLI</span>Stage chain: bare metal to a running cluster</h2>
+  <p class="lede">Every stage is its own cobra subcommand. There is deliberately no <code>bootstrap run</code> meta-command (DESIGN-0001 OQ-7). Each stage runs <code>validate</code> first and prints a <code>next:</code> hint. Click through the chain.</p>
+  <div class="stepper" id="stageStepper"></div>
+</section>
+
+<section id="engine">
+  <h2>The Step / Runner engine</h2>
+  <p class="lede"><code>internal/steps</code> is the whole convergence engine: a stage is an ordered list of <code>Step{Name, Check, Apply}</code>. Check never writes, and Apply returns only once the change is effective. Dry-run calls only Check. Try it on a simulated <code>pve form</code>: break a run halfway, then re-run it.</p>
+<pre><code>type Step struct {
+    Name  string
+    Check func(ctx context.Context) (done bool, err error)
+    Apply func(ctx context.Context) error
+}
+type Runner struct { DryRun bool; Out io.Writer; Log *slog.Logger }</code></pre>
+  <div class="btns" id="engBtns">
+    <button data-a="dry">bootstrap pve form --dry-run</button>
+    <button data-a="apply">bootstrap pve form</button>
+    <button data-a="fail">… with join-node3 failing</button>
+    <button data-a="drift">Drift: node2 leaves the cluster</button>
+    <button data-a="reset">Reset world</button>
+  </div>
+  <div class="split">
+    <div class="steps" id="engSteps"></div>
+    <pre id="engLog" style="min-height:220px;margin:0"></pre>
+  </div>
+  <div class="callout green"><b>Why no plan or state file:</b> a persisted plan is a third truth that can go stale (INV-0003 rejected one from a sibling project). Here the re-run <i>is</i> the resume, because finished steps now check as done.</div>
+</section>
+
+<section id="hcl">
+  <h2>The HCL surface</h2>
+  <p class="lede">One <code>bootstrap.hcl</code> holds everything the service will also need. CLI-only concerns are flags (DESIGN-0001 OQ-8). Secrets are never values: they're <code>env("HOOMLAB_…")</code> references, resolved at load, so the same file works for the CLI (exported variables) and for the future service (a Secret via <code>envFrom</code>). Click a block to see its attributes and what it renders into.</p>
+  <div class="split">
+    <div class="tree" id="hclTree"></div>
+    <div class="info" id="hclInfo"><h4>Pick a block</h4><p class="hint">Planned blocks come from the approved DESIGN-0005.</p></div>
+  </div>
+</section>
+
+<section id="xor">
+  <h2>Resolver and the XOR rule</h2>
+  <p class="lede">The config pipeline is parse → decode → <b>resolve</b> → validate → render. DESIGN-0004's principle is <i>primitives first</i>: inline attributes are ground truth, and named planes are the first abstraction on top. A <code>network_interface</code> either references a plane or states its facts inline. Both or neither is an error, never an override, and there is no implicit default network.</p>
+  <div class="flowline" id="pipeLine"></div>
+  <div class="btns" id="xorBtns">
+    <button class="on" data-x="ref">Referenced</button><button data-x="inline">Inline</button><button data-x="both">Both</button><button data-x="neither">Neither</button><button data-x="addr">Static, address outside the CIDR</button>
+  </div>
+  <div class="grid g2"><pre id="xorHcl"></pre><div class="info" id="xorOut"></div></div>
+</section>
+
+<section id="classes">
+  <h2>Profiles → schematics → template classes</h2>
+  <p class="lede">Extensions are grouped into named <code>profile</code>s, and nodes list profiles. Each unique flattened extension set becomes one content-addressed Image Factory <b>schematic</b>. Emit keys templates and booty profiles by (role, schematic), and after DESIGN-0005 Phase 3 also by label set. A role only splits when something actually differs. Toggle the matrix and watch the validation and class output.</p>
+  <div class="matrix-wrap"><table class="matrix" id="profMatrix"></table></div>
+  <div class="grid g2">
+    <div class="info" id="profOut"></div>
+    <div class="info" id="profVal"></div>
+  </div>
+</section>
+
+<!-- =============== PART 3 =============== -->
+<section id="vmcontract">
+  <h2><span class="part">Part 3 · The Talos cluster</span>The VM boot contract</h2>
+  <p class="lede"><code>talos vms</code> pins every PVE setting that is load-bearing. Drop any one and you get a VM that "looks fine, never boots". The drill found two of them the hard way (INV-0001 deviations 12 and 14). Untick one to see the failure.</p>
+  <div class="split">
+    <div class="steps" id="vmList"></div>
+    <div class="info" id="vmOut"></div>
+  </div>
+</section>
+
+<section id="planes">
+  <h2>Network planes</h2>
+  <p class="lede">IMPL-0003 gave every node a second NIC on a storage plane. The primary plane carries PXE, DHCP and node traffic at MTU 1500. The storage plane is static, MTU 9000, and unroutable by construction: no gateway, routes or DNS, so its unroutability is the access boundary. Click a plane.</p>
+  <div class="split">
+    <div class="diagram"><svg id="planeSvg" viewBox="0 0 900 360"></svg></div>
+    <div class="info" id="planeInfo"><h4>Click a plane or NIC</h4></div>
+  </div>
+</section>
+
+<!-- =============== PART 4 =============== -->
+<section id="d5">
+  <h2><span class="part">Part 4 · This branch</span>DESIGN-0005 / IMPL-0004</h2>
+  <p class="lede"><b>DESIGN-0005</b> (Talos 1.13.11 upgrade with Kata isolation and cluster options) was <span class="st planned">Approved</span> at the Phase 2 gate on 2026-10-19, and <b>IMPL-0004</b> is <span class="st partial">In Progress</span>. The work runs in two stages: Stage 1 is the upgrade and image work plus a hand-applied Kata test, and Stage 2 builds the CLI surfaces on what Stage 1 proved. Click a phase.</p>
+  <div class="timeline" id="d5Line"></div>
+  <div class="info" id="d5Info" style="margin-top:12px"></div>
+  <div class="callout purple"><b>Direction change (2026-10-17, now the design):</b> there is no dedicated, tainted CI pool. Kata is opt-in per workload, CI or not. Placement is a <i>preference</i> carried by a label and the workload's affinity, not a taint. The first user is the Buildkite <code>agent-stack-k8s</code> privileged controller.</div>
+</section>
+
+<section id="findings">
+  <h2>Stage 1 findings</h2>
+  <p class="lede">Measured on the live fleet with the T1–T8 test kit (kernel boundary, networking, PVCs, privileged DinD and BuildKit, placement, cold start, reboot recovery). These numbers set the RuntimeClass overhead.</p>
+  <div class="btns" id="memBtns"><button class="on" data-m="1">Show RuntimeClass overhead lines</button><button data-m="0">Hide</button></div>
+  <div class="grid g2">
+    <div class="diagram"><svg id="memChart" viewBox="0 0 520 300"></svg></div>
+    <div class="diagram"><svg id="coldChart" viewBox="0 0 520 300"></svg></div>
+  </div>
+  <table id="findTable"></table>
+</section>
+
+<section id="kata">
+  <h2>Kata per workload</h2>
+  <p class="lede">runc stays the only default runtime, everywhere. Making a sandbox a node's default would push Cilium, the CSI node plugin and every <code>hostNetwork</code> DaemonSet into a VM they can't run in. Kata is a <i>capability</i> on every worker, opted into per pod. Four layers, each owned once:</p>
+  <div class="layers" id="kataLayers"></div>
+  <h3>The GitOps contract: one RuntimeClass</h3>
+<pre><code>apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata: { name: kata }
+handler: kata                              # Cloud Hypervisor; the only handler the extension ships
+overhead:
+  podFixed: { memory: 250Mi, cpu: 250m }   # T7 measured ~200 MB per idle pod (README says 130Mi)
+scheduling:
+  nodeSelector:
+    runtime.hoomlab.io/kata: "true"        # derived by bootstrap from the profile, version-free</code></pre>
+  <div class="grid g3">
+    <div class="card"><h4>Why a derived label?</h4><p>Talos labels <code>extensions.talos.dev/kata-containers=3.32.0</code>, and a <code>nodeSelector</code> is an exact match. Selecting on it would leave every Kata pod Pending at the next Kata bump.</p></div>
+    <div class="card"><h4>The Cilium rule</h4><p>Socket LB can't hook a guest kernel, so <code>socketLB.hostNamespaceOnly: true</code> must be set explicitly whenever any node carries Kata. Bandwidth manager plus Kata is an error (talos#13745).</p></div>
+    <div class="card"><h4>CI pod shape</h4><p>Run dockerd or buildkitd as a sidecar driven from the command container, because <code>kubectl exec</code> into a cgroup-nesting daemon hits EBUSY. Put <code>/var/lib/docker</code> on a memory <code>emptyDir</code>: virtio-fs can't be an overlayfs upper layer.</p></div>
+  </div>
+  <div class="callout red"><b>Live migration:</b> a VM can't live-migrate while a Kata guest runs inside it. Kata pods can land on any worker, so turn off <i>automatic</i> live migration for worker VMs (the load balancer's rebalancing, and an HA <code>migrate</code> shutdown policy), and drain before any manual migration. HA cold restart after a host failure is fine.</div>
+</section>
+
+<section id="placement">
+  <h2>Placement simulator</h2>
+  <p class="lede">Pick a workload and see where the scheduler may put it. Hard constraints come from taints and the RuntimeClass <code>nodeSelector</code>; soft ones from preferred affinity on <code>hoomlab.io/size=large</code>.</p>
+  <div class="btns" id="podBtns">
+    <button class="on" data-p="runc">runc service</button>
+    <button data-p="kata">kata pod</button>
+    <button data-p="big">big runc service (prefers large)</button>
+    <button data-p="bk">Buildkite privileged job</button>
+    <button data-p="bku">Buildkite unprivileged job</button>
+  </div>
+  <div class="btns" id="phaseBtns">
+    <button data-s="now">Today (test class, no labels)</button>
+    <button class="on" data-s="done">After Phases 4–5</button>
+    <button data-s="drain">After Phases 4–5, work04 drained</button>
+    <button data-s="bump">Today + a Kata version bump</button>
+  </div>
+  <div class="nodegrid" id="nodeGrid"></div>
+  <div class="callout blue" id="placeOut"></div>
+</section>
+
+<section id="apply">
+  <h2>The day-2 apply stage <span class="st planned">planned</span></h2>
+  <p class="lede">Today the CLI only feeds booty, which a node reads once, at install. Every option in DESIGN-0005 is a machine-config change, so IMPL-0004 Phase 3 adds <code>bootstrap talos apply</code>. It is opt-in, never part of a chain, and scoped by <code>--node</code>. Step through one node.</p>
+  <div class="stepper" id="applyStepper"></div>
+</section>
+
+<section id="upgrade">
+  <h2>Rolling upgrades (INV-0005) <span class="st proposed">open</span></h2>
+  <p class="lede">The 1.13.11 re-image was run by an operator script, one node at a time. INV-0005 asks who should own this; the hypothesis is a <code>bootstrap talos upgrade</code> stage on <code>steps.Runner</code>. Try the sequence, then break it the two ways the fleet actually broke it.</p>
+  <div class="btns" id="upBtns">
+    <button class="on" data-u="ok">Happy path (worker)</button>
+    <button data-u="cp">Control plane</button>
+    <button data-u="pdb">Single-instance CNPG with enablePDB</button>
+    <button data-u="nocordon">Reboot without a cordon</button>
+    <button data-u="abandon">Drain abandoned after install</button>
+  </div>
+  <div class="split">
+    <div class="steps" id="upSteps"></div>
+    <div class="info" id="upOut"></div>
+  </div>
+</section>
+
+<section id="decisions">
+  <h2>Decision log: DESIGN-0005 open questions</h2>
+  <p class="lede">All resolved. OQ-1/2/3/6/10/20 were settled before Stage 1, and the rest at the Phase 2 gate on 2026-10-19, every one with option <b>a</b>. Filter by area.</p>
+  <div class="btns" id="oqBtns"><button class="on" data-g="all">All</button><button data-g="kata">Kata and placement</button><button data-g="cli">CLI surface</button><button data-g="opt">Options and add-ons</button><button data-g="ver">Versions</button></div>
+  <table id="oqTable"></table>
+</section>
+
+<!-- =============== PART 5 =============== -->
+<section id="service">
+  <h2><span class="part">Part 5 · Service and delivery</span>Service and chart contract</h2>
+  <p class="lede">The chart is the deployment contract, written before the service exists. The chart manages the container environment, and the service must honour it once it is built. Type an env var name to see whether the chart would render.</p>
+  <div class="grid g2">
+    <table>
+      <tr><th>Name</th><th>Source</th><th>Value</th></tr>
+      <tr><td><code>LISTEN_ADDR</code></td><td><code>config.port</code></td><td><code>:8080</code></td></tr>
+      <tr><td><code>METRICS_ADDR</code></td><td><code>config.metricsPort</code></td><td><code>:9090</code></td></tr>
+      <tr><td><code>LOG_LEVEL</code></td><td><code>config.logLevel</code></td><td><code>info</code></td></tr>
+      <tr><td><code>POD_NAME</code></td><td>downward API</td><td><code>metadata.name</code></td></tr>
+      <tr><td><i>anything else</i></td><td><code>configMap.data</code> / <code>secrets.stringData</code> via <code>envFrom</code>, or <code>extraEnv</code></td><td>yours</td></tr>
+    </table>
+    <div class="info">
+      <h4>validateEnvCollisions</h4>
+      <p><select id="envSrc"><option value="extraEnv">extraEnv[].name</option><option value="configMap.data">configMap.data key</option><option value="secrets.stringData">secrets.stringData key</option></select>
+      <input id="envIn" value="LOG_LEVEL" spellcheck="false"></p>
+      <pre id="envOut"></pre>
+      <p class="small">Probes: liveness <code>GET /healthz</code>, readiness <code>GET /readyz</code> on port <code>http</code>. The image is distroless static, nonroot uid 65532, with a read-only root FS. <code>ci/ci-values.yaml</code> runs a busybox stand-in with probes off, because the binary doesn't serve them yet.</p>
+    </div>
+  </div>
+</section>
+
+<section id="release">
+  <h2>Release train simulator</h2>
+  <p class="lede">Releases happen on merge to <code>main</code>, never from a hand-pushed tag. Versions are <b>lockstep</b>: binary, image and chart carry the same tag. Pick the PR's label and what it touches. (The example assumes the last tag was <code>v1.4.2</code>.)</p>
+  <div class="btns" id="relLabel">
+    <button data-l="major">major</button><button data-l="minor">minor</button><button class="on" data-l="patch">patch</button><button data-l="dont-release">dont-release</button>
+  </div>
+  <div class="chips" id="relPaths"></div>
+  <div class="grid g2">
+    <div><h3 style="margin-top:6px">On the PR</h3><div class="steps" id="relPR"></div></div>
+    <div><h3 style="margin-top:6px">On merge to main</h3><div class="steps" id="relMain"></div></div>
+  </div>
+  <div class="callout">Tools release separately and on demand. <code>tools-release.yml</code> (workflow_dispatch) cuts a <code>tools/&lt;tool&gt;/vX.Y.Z</code> nested-module tag and publishes binary archives only: no image, no chart. A tools-only PR merges with <code>dont-release</code>, so the main train stays inert.</div>
+</section>
+
+<section id="gates">
+  <h2>CI gates</h2>
+  <p class="lede">12 workflows. The root-module CI is path-gated, so a <code>tools/</code> change never triggers it, and the tools module has its own <code>tools-ci.yml</code>.</p>
+  <table id="wfTable"></table>
+</section>
+
+<!-- =============== WRAP-UP =============== -->
+<section id="roadmap">
+  <h2><span class="part">Wrap-up</span>Roadmap: Talos 1.14 and beyond</h2>
+  <p class="lede">DESIGN-0006 (Draft) holds the 1.14 requirements. In 1.14 most <code>v1alpha1</code> fields become standalone documents. A deprecated field and its document are mutually exclusive, with no conversion tool, so the move is a whole-config replacement delivered by the apply stage. Click a step.</p>
+  <div class="diagram"><svg id="roadSvg" viewBox="0 0 1000 250"></svg></div>
+  <div class="info" id="roadInfo" style="margin-top:12px"><h4>Click a step</h4></div>
+  <h3>Still open</h3>
+  <div class="grid g3">
+    <div class="card"><h4>INV-0005 <span class="st proposed">open</span></h4><p>Who owns rolling upgrades: a <code>talos upgrade</code> stage, the service, or a script. Also the eviction policy and where the Kubernetes calls live (client-go is approved for the add-on stage).</p></div>
+    <div class="card"><h4>DESIGN-0003 <span class="st proposed">draft</span></h4><p>A nested test environment so the full drill can re-run unattended. It needs a cluster to host it, and five questions are open.</p></div>
+    <div class="card"><h4>The service <span class="st stub">stub</span></h4><p>Self-ownership from the same HCL. INV-0003 recommends a reconcile loop (no Temporal) and ownership tags on everything bootstrap creates.</p></div>
+    <div class="card"><h4>Follow-ups</h4><ul><li>CNPG backups (barman-cloud is installed, with no object store)</li><li>iSCSI journal aborts</li><li>A Talos VIP for the API endpoint</li><li><code>--output</code> defaulting next to the config</li></ul></div>
+    <div class="card"><h4>Kubernetes 1.37</h4><p>Gated on Cilium 1.21 GA. KEDA and democratic-csi are secondary checks.</p></div>
+    <div class="card"><h4>sandboxd</h4><p>1.14's isolation plane versus democratic-csi's <code>nsenter</code> path. This needs a one-worker spike before isolation goes fleet-wide.</p></div>
+  </div>
+</section>
+
+<section id="sources">
+  <h2>Sources</h2>
+  <p class="lede">Everything here comes from the repo. Links are relative to <code>docs/</code>.</p>
+  <div class="grid g3" id="srcGrid"></div>
+</section>
+</main>
+</div>
+<script>
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const NS = 'http://www.w3.org/2000/svg';
+function el(tag, attrs = {}, parent) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+function txt(parent, x, y, s, size, color, extra = {}) { const t = el('text', Object.assign({ x, y, 'font-size': size, fill: color }, extra), parent); t.textContent = s; return t; }
+function wrapText(parent, x, y, text, size, color, maxChars) {
+  const words = text.split(' '); const lines = []; let cur = '';
+  for (const w of words) { if ((cur + ' ' + w).trim().length > maxChars) { lines.push(cur.trim()); cur = w; } else cur += ' ' + w; }
+  if (cur.trim()) lines.push(cur.trim());
+  lines.forEach((ln, i) => txt(parent, x, y + i * (size + 3), ln, size, color));
+}
+function edgePoint(n, tx, ty) {
+  const cx = n.x + n.w / 2, cy = n.y + n.h / 2, dx = tx - cx, dy = ty - cy;
+  if (!dx && !dy) return [cx, cy];
+  const s = Math.min((n.w / 2) / Math.abs(dx || 1e-9), (n.h / 2) / Math.abs(dy || 1e-9));
+  return [cx + dx * s, cy + dy * s];
+}
+function markers(svg) {
+  const d = el('defs', {}, svg);
+  for (const [id, c] of [['a', '#5d6778'], ['p', '#c792ea'], ['g', '#5fd38d'], ['o', '#f0b84a']]) { const m = el('marker', { id: 'm' + id + svg.id, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, d); el('path', { d: 'M0,0 L10,5 L0,10 z', fill: c }, m); }
+}
+const ST = s => `<span class="st ${s}">${s}</span>`;
+function stepper(root, items) {
+  root.innerHTML = '<ol></ol><div class="pane"></div>';
+  const ol = $('ol', root), pane = $('.pane', root);
+  let k = 0;
+  items.forEach((it) => {
+    if (it.n === undefined) k++;
+    const li = document.createElement('li'); li.innerHTML = `${it.n ?? k}. ${it.t} ${it.s ? ST(it.s) : ''}`;
+    li.addEventListener('click', () => { $$('li', ol).forEach(x => x.classList.remove('on')); li.classList.add('on'); pane.innerHTML = `<h4>${it.t} ${it.s ? ST(it.s) : ''}</h4>${it.b}`; });
+    ol.appendChild(li);
+  });
+  ol.firstChild.click();
+}
+function btnGroup(sel, fn) {
+  const bs = $$(sel + ' button');
+  bs.forEach(b => b.addEventListener('click', () => { bs.forEach(x => x.classList.remove('on')); b.classList.add('on'); fn(b.dataset); }));
+  const on = bs.find(b => b.classList.contains('on')) || bs[0]; if (on) { on.classList.add('on'); fn(on.dataset); }
+}
+function pickTree(treeSel, infoSel, rows) {
+  const tree = $(treeSel); tree.innerHTML = '';
+  rows.forEach(([p, h, b]) => {
+    const d = document.createElement('div'); d.textContent = p;
+    d.addEventListener('click', () => { $$('div', tree).forEach(x => x.classList.remove('on')); d.classList.add('on'); $(infoSel).innerHTML = `<h4>${h}</h4><p>${b}</p>`; });
+    tree.appendChild(d);
+  });
+}
+
+/* ---------------- REPO MAP ---------------- */
+pickTree('#mapTree', '#mapInfo', [
+  ['cmd/hoomlab/', 'Service entrypoint ' + ST('stub'), 'The <code>main</code> package. Today it prints <code>hoomlab &lt;version&gt; (&lt;commit&gt;, &lt;date&gt;)</code> and exits; the values are stamped by ldflags from goreleaser, the Dockerfile and the justfile. It is meant to stay thin and call into <code>internal/</code>. <b>Gate:</b> <code>ci.yml</code> (lint, race tests, govulncheck, build).'],
+  ['internal/', 'Service library code ' + ST('stub'), 'Reserved for the service, and empty today (<code>.gitkeep</code>). It is private to the root module.'],
+  ['tools/bootstrap/', 'The bootstrap CLI ' + ST('built'), 'A <b>separate nested Go module</b> (<code>…/hoomlab/tools/bootstrap</code>): about 11.9k lines of Go across 60 files (22 of them tests, 120 <code>Test*</code> functions). It depends on cobra, hcl/v2, hclkit, proxmox-go-sdk, booty, and Talos machinery v1.13.11. <b>Gate:</b> <code>tools-ci.yml</code>. <b>Release:</b> <code>tools-release.yml</code> → <code>tools/bootstrap/vX.Y.Z</code>.'],
+  ['  tools/bootstrap/cmd/', 'Cobra tree', '<code>root.go</code> (global flags), <code>validate.go</code>, <code>pve.go</code>, <code>talos.go</code>, <code>version.go</code>. <code>helpers.go</code> loads and validates the config for every stage.'],
+  ['  tools/bootstrap/internal/config/', 'Schema, resolver, validators', 'gohcl structs (<code>config.go</code>); the hclkit loader with a strict <code>env()</code> (<code>load.go</code>, <code>env.go</code>); semantic checks (<code>validate.go</code>); the DESIGN-0004 interface resolver (<code>resolve.go</code>); the Cilium values checks (<code>ciliumvalues.go</code>); MAC normalisation.'],
+  ['  tools/bootstrap/internal/steps/', 'Convergence engine', '<code>Step{Name, Check, Apply}</code> plus <code>Runner{DryRun}</code>. Under 100 lines, and the whole idempotency story.'],
+  ['  tools/bootstrap/internal/pve/', 'Proxmox stages', '<code>Former</code> (form), <code>Declarer</code> (storage), <code>Certifier</code> (ACME), <code>Provisioner</code> (VMs). Everything goes through proxmox-go-sdk, and formation re-dials per call because joins restart the daemons.'],
+  ['  tools/bootstrap/internal/talos/', 'Talos stages', 'Secrets bundle, machineconfig templates, the DESIGN-0002 completion surface (Cilium inline Job, Gateway API CRDs, cert-approver, topology labels), profile flattening, a narrow gRPC <code>Client</code> interface with mockery mocks, and etcd bootstrap.'],
+  ['  tools/bootstrap/internal/emit/', 'Booty tree renderer', 'Catalog HCL, templates, <code>embed.ipxe</code>, <code>booty-run.sh</code>, Image Factory schematics and assets (TOFU sha256), and the docker iPXE build. Pure and deterministic, so its Check is a byte-diff. 10 golden files in two sets (single- and multi-NIC).'],
+  ['  tools/bootstrap/examples/', 'Reference config', 'An annotated <code>bootstrap.hcl</code>, a <code>cilium-values.yaml</code>, and <code>bgp/</code> (five Cilium BGP manifests plus a router FRR config, used after handoff).'],
+  ['charts/hoomlab/', 'Helm chart ' + ST('built'), 'Deployment, Service, ServiceAccount, ConfigMap, Secret, ServiceMonitor, PrometheusRule. <code>Chart.yaml</code> stays at <code>0.0.0-dev</code>, and the release stamps the real version. <b>Gates:</b> helm lint, ct lint/install, 8 unittest suites (45 cases), <code>values.schema.json</code>.'],
+  ['Dockerfile · docker-bake.hcl', 'Image build ' + ST('built'), 'A <code>golang:1.26.9</code> build stage, then <code>distroless/static-debian12:nonroot</code>. Bake targets: <code>default</code> (host arch, for k3d), <code>ci</code> (amd64 only), <code>release</code> (amd64 and arm64, pushed and signed).'],
+  ['justfile · *.just · mise.toml', 'Task runner and toolchain', '<code>just check</code> (lint and test), <code>helm-test</code>, <code>k3d-install</code> (the inner dev loop), <code>bootstrap-build/test/lint</code>. mise pins go, golangci-lint, helm, ct, k3d, git-cliff, docz and others, all tracked by Renovate.'],
+  ['.github/workflows/', 'CI and release', '12 workflows: <code>ci.yml</code>, <code>tools-ci.yml</code>, <code>release.yml</code>, <code>tools-release.yml</code>, the label and changelog checks, CodeQL, govulncheck, licenses, TruffleHog, and Dependabot labels. See <a href="#gates">CI gates</a>.'],
+  ['docs/', 'The doc trail (docz)', 'RFC 1, ADR 1, DESIGN 6, IMPL 4, INV 5, runbook 2. <code>docz</code> keeps the README indexes. See <a href="#docs">the doc trail</a>.'],
+  ['CHANGELOG.md · cliff.toml', 'Changelogs', 'Generated by git-cliff from Conventional Commits and drift-checked on every PR. The chart has its own <code>cliff.toml</code> for a chart-only changelog.'],
+]);
+
+/* ---------------- ARCHITECTURE ---------------- */
+const ZC = { ws: ['#1d1a12', '#5f4a20'], net: ['#122033', '#2b4a6b'], pve: ['#11201a', '#284a3a'], ext: ['#1d1626', '#4b3463'] };
+const A = {
+  zones: [
+    { x: 8, y: 8, w: 170, h: 544, label: 'operator workstation', z: 'ws' },
+    { x: 188, y: 8, w: 170, h: 544, label: 'boot network', z: 'net' },
+    { x: 368, y: 8, w: 430, h: 544, label: 'Proxmox VE hosts → Talos cluster', z: 'pve' },
+    { x: 808, y: 8, w: 184, h: 544, label: 'external', z: 'ext' }],
+  nodes: [
+    { id: 'hcl', x: 18, y: 36, w: 150, h: 62, z: 'ws', t: 'bootstrap.hcl', s: 'one file · env() secrets', f: 'boot day2' },
+    { id: 'cli', x: 18, y: 140, w: 150, h: 76, z: 'ws', t: 'bootstrap CLI', s: 'stages · Step/Runner · --dry-run', f: 'boot day2 release' },
+    { id: 'out', x: 18, y: 262, w: 150, h: 76, z: 'ws', t: 'bootstrap-out/', s: 'booty tree · talosconfig · kubeconfig', f: 'boot' },
+    { id: 'apply', x: 18, y: 390, w: 150, h: 76, z: 'ws', t: 'talos apply', s: 'render → diff → NO_REBOOT (IMPL-0004 P3)', f: 'day2', plan: 1 },
+    { id: 'booty', x: 198, y: 140, w: 150, h: 86, z: 'net', t: 'booty', s: 'proxyDHCP · TFTP · HTTP catalog + machine-config', f: 'boot' },
+    { id: 'dhcp', x: 198, y: 300, w: 150, h: 60, z: 'net', t: 'DHCP', s: 'a reservation per VM MAC', f: 'boot' },
+    { id: 'pveapi', x: 378, y: 36, w: 190, h: 76, z: 'pve', t: 'PVE cluster', s: 'formed + quorate · storage · ACME certs', f: 'boot' },
+    { id: 'vms', x: 378, y: 170, w: 190, h: 80, z: 'pve', t: 'Talos VMs', s: 'q35 · OVMF · cpu=host · disk first, PXE fallback', f: 'boot' },
+    { id: 'cp', x: 590, y: 36, w: 198, h: 70, z: 'pve', t: 'Control planes ×3', s: 'etcd · apiserver · KubePrism :7445', f: 'boot day2' },
+    { id: 'wk', x: 590, y: 150, w: 198, h: 80, z: 'pve', t: 'Workers ×5', s: 'runc default · Kata installed · iSCSI storage plane', f: 'boot day2' },
+    { id: 'cil', x: 590, y: 278, w: 198, h: 62, z: 'pve', t: 'Cilium', s: 'KPR · Gateway API · BGP (unconfigured at T2)', f: 'boot day2' },
+    { id: 'gitops', x: 590, y: 380, w: 198, h: 66, z: 'pve', t: 'GitOps (T3)', s: 'private repo · adopts Cilium · RuntimeClass', f: 'day2' },
+    { id: 'svc', x: 378, y: 400, w: 190, h: 70, z: 'pve', t: 'hoomlab service', s: 'Helm · reads the same HCL · owns itself', f: 'release day2', plan: 1 },
+    { id: 'gh', x: 818, y: 36, w: 165, h: 66, z: 'ext', t: 'GitHub', s: 'PR label → release train', f: 'release' },
+    { id: 'fac', x: 818, y: 150, w: 165, h: 66, z: 'ext', t: 'Image Factory', s: 'schematic → kernel, initramfs, installer', f: 'boot day2' },
+    { id: 'ghcr', x: 818, y: 270, w: 165, h: 66, z: 'ext', t: 'ghcr.io', s: 'image + chart (OCI) · cosign · SLSA', f: 'release' },
+    { id: 'le', x: 818, y: 390, w: 165, h: 66, z: 'ext', t: "Let's Encrypt", s: 'DNS-01 via Cloudflare', f: 'boot' }],
+  edges: [
+    ['hcl', 'cli', 'load + validate', 'boot day2'], ['cli', 'pveapi', 'pve form/storage/certs', 'boot'], ['pveapi', 'le', 'ACME', 'boot'],
+    ['cli', 'fac', 'schematic POST', 'boot'], ['cli', 'out', 'talos emit', 'boot'], ['out', 'booty', 'rsync + restart', 'boot'],
+    ['cli', 'vms', 'talos vms', 'boot'], ['vms', 'booty', 'PXE', 'boot'], ['dhcp', 'vms', 'lease', 'boot'], ['fac', 'vms', 'installer', 'boot'],
+    ['vms', 'cp', 'install + join', 'boot'], ['cli', 'cp', 'etcd bootstrap · health', 'boot'], ['cp', 'cil', 'inline Job', 'boot'],
+    ['gitops', 'cil', 'adopt', 'day2'], ['gitops', 'wk', 'RuntimeClass kata', 'day2'],
+    ['hcl', 'apply', '', 'day2', 1], ['apply', 'cp', 'ApplyConfiguration', 'day2', 1], ['apply', 'wk', '', 'day2', 1],
+    ['gh', 'ghcr', 'release.yml', 'release'], ['gh', 'cli', 'tools-release', 'release'], ['ghcr', 'svc', 'helm install', 'release', 1], ['svc', 'pveapi', 'reconcile', 'day2', 1]]
+};
+const AI = {
+  hcl: ['bootstrap.hcl', 'One <code>cluster</code> block with <code>pve</code>, <code>acme</code> and <code>talos</code> inside. Secrets are <code>env("HOOMLAB_…")</code> references resolved at load, never values. The operator injects them with a secret-manager <code>run</code> wrapper. Anything the future service needs goes here; CLI-only concerns are flags.'],
+  cli: ['bootstrap CLI', 'An out-of-cluster, operator-run CLI: the permanent answer to building a cluster from outside it. Each stage is a subcommand made of steps that Check, then Apply only the delta. <code>--dry-run</code> surveys without writing. Released as <code>tools/bootstrap/vX.Y.Z</code> binaries.'],
+  out: ['bootstrap-out/', '<code>booty/</code> holds the catalog (<code>00-variables</code>, <code>10-profiles</code>, <code>20-groups</code>), secret-bearing per-role templates, <code>embed.ipxe</code>, <code>booty-run.sh</code>, and boot assets per schematic. <code>out/</code> holds talosconfig and kubeconfig (0600, never overwritten). <code>secrets.yaml</code> sits next to the config, is written once, and must be backed up.'],
+  apply: ['talos apply ' + ST('planned'), 'IMPL-0004 Phase 3. It renders each node\'s config exactly as booty would and diffs it, normalised and document by document, against the live <code>MachineConfig</code>, then sends <code>NO_REBOOT</code>. It never reboots and never re-images; it prints the <code>talosctl upgrade --image</code> to run instead. The first dry-run across the fleet must report 0.'],
+  booty: ['booty', 'A PXE server run as a container outside the cluster. It answers proxyDHCP, serves an iPXE chain, and returns <code>/machine-config?mac=</code> from the emitted templates. Its contract is the <code>booty-run.sh</code> flag table. Machine configs travel as unauthenticated plaintext, which is the standard Talos metal trade-off, so the boot segment must be trusted.'],
+  dhcp: ['DHCP', 'booty never hands out addresses. A real DHCP service holds a reservation per primary MAC, and <code>talos.endpoint</code> must resolve to the first control plane, not a post-bootstrap VIP.'],
+  pveapi: ['PVE cluster', '<code>pve form</code> creates the cluster on the primary and joins the rest serially as <code>root@pam</code>, because tokens don\'t survive a join. <code>pve storage</code> declares entries with <code>nodes</code> restrictions. <code>pve certs</code> registers an ACME account and DNS-01 plugin, and renews any certificate with under 30 days left.'],
+  vms: ['Talos VMs', 'Created with every load-bearing setting pinned (see <a href="#vmcontract">the boot contract</a>). Boot order is disk first, then the primary NIC, so re-imaging is "wipe the disk, reboot". A PXE install takes about 90 seconds per node.'],
+  cp: ['Control planes', 'Three, one per PVE host. <code>talos bootstrap</code> runs the one-time etcd bootstrap and writes credentials. <code>talos health</code> waits for etcd quorum and every node Ready, which is tier T2. They stay minimal: Kata on a control-plane profile is a validation error.'],
+  wk: ['Workers', 'Five: three at 8 cores/16 GiB and two large ones at 16/32. All carry the worker schematic (qemu-guest-agent, iscsi-tools, util-linux-tools, kata-containers). runc is the default; a pod opts into Kata with <code>runtimeClassName: kata</code>.'],
+  cil: ['Cilium', 'The CNI by policy (DESIGN-0002): kube-proxy replacement, Gateway API, BGP control plane. It is delivered in machine config as an inline values ConfigMap plus an install Job, so it installs itself at bootstrap, and GitOps adopts it afterwards. Validation enforces KPR, KubePrism <code>localhost:7445</code>, and no null top-level keys.'],
+  gitops: ['GitOps (T3)', 'A private repo, outside this one. It adopts Cilium, configures BGP, pools and Gateways, and owns workloads, including the <code>kata</code> RuntimeClass and the Buildkite controller config. The boundary: anything expressible as a Kubernetes object on a running cluster belongs here.'],
+  svc: ['hoomlab service ' + ST('planned'), 'RFC-0001 Phase 2: a resident reconciler, Helm-delivered onto the cluster bootstrap built, consuming the same HCL. That is "self-ownership". Today the binary is a stub, and the chart already defines its contract.'],
+  gh: ['GitHub', 'Every PR carries exactly one of <code>major</code>, <code>minor</code>, <code>patch</code> or <code>dont-release</code>. Merging to main lets <code>bump-version</code> push the tag. Nobody pushes tags by hand.'],
+  fac: ['Image Factory', 'A schematic is the sha256 of its posted body: a content-addressed extension set. Emit POSTs one per unique profile set and downloads its kernel and initramfs (trust-on-first-use sha256 sidecar). Upgrades use <code>factory.talos.dev/installer/&lt;schematic&gt;:&lt;version&gt;</code>.'],
+  ghcr: ['ghcr.io', 'The image <code>ghcr.io/donaldgifford/hoomlab:&lt;v&gt;</code> (amd64 and arm64, cosign-signed, SLSA3) and the chart <code>oci://ghcr.io/donaldgifford/charts/hoomlab</code> at the same version.'],
+  le: ["Let's Encrypt", 'Per-node PVE UI certificates through DNS-01 with Cloudflare, the only DNS provider. Run staging first. The checks are CA-aware, so flipping staging to production re-orders.']
+};
+function drawArch(filter) {
+  const svg = $('#archSvg'); svg.innerHTML = ''; markers(svg);
+  A.zones.forEach(z => { el('rect', { x: z.x, y: z.y, width: z.w, height: z.h, rx: 12, fill: ZC[z.z][0], stroke: ZC[z.z][1], 'stroke-dasharray': '5 5', opacity: .55 }, svg); txt(svg, z.x + 10, z.y + z.h - 8, z.label, 11, '#8b96a8'); });
+  const by = {}; A.nodes.forEach(n => by[n.id] = n);
+  const on = f => filter === 'all' || f.split(' ').includes(filter);
+  A.edges.forEach(([a, b, label, f, plan], i) => {
+    const P = by[a], Q = by[b], vis = on(f);
+    const [x1, y1] = edgePoint(P, Q.x + Q.w / 2, Q.y + Q.h / 2), [x2, y2] = edgePoint(Q, P.x + P.w / 2, P.y + P.h / 2);
+    const dd = `M${x1},${y1} L${x2},${y2}`;
+    el('path', { d: dd, stroke: plan ? '#c792ea' : '#3a4a60', 'stroke-width': 1.6, fill: 'none', 'marker-end': `url(#m${plan ? 'p' : 'a'}archSvg)`, class: plan ? 'flow' : '', opacity: vis ? 1 : .12 }, svg);
+    if (label && vis && filter !== 'all') txt(svg, (x1 + x2) / 2 + 4, (y1 + y2) / 2 - 4, label, 10.5, plan ? '#c792ea' : '#8b96a8');
+    if (vis && !plan && filter !== 'all') { const c = el('circle', { r: 3.5, fill: '#5fd38d' }, svg); el('animateMotion', { dur: (Math.hypot(x2 - x1, y2 - y1) / 90).toFixed(2) + 's', repeatCount: 'indefinite', path: dd, begin: (i * .37 % 2).toFixed(2) + 's' }, c); }
+  });
+  A.nodes.forEach(n => {
+    const g = el('g', { class: 'node', opacity: on(n.f) ? 1 : .25 }, svg);
+    el('rect', { class: 'box', x: n.x, y: n.y, width: n.w, height: n.h, rx: 9, fill: '#141a23', stroke: n.plan ? '#c792ea' : ZC[n.z][1], 'stroke-width': 1.6, 'stroke-dasharray': n.plan ? '5 4' : '' }, g);
+    txt(g, n.x + 10, n.y + 21, n.t, 14, '#e6edf3', { 'font-weight': 600 });
+    wrapText(g, n.x + 10, n.y + 39, n.s, 11.5, '#9aa5b5', Math.floor(n.w / 6.6));
+    g.addEventListener('click', () => { $$('#archSvg rect.box').forEach(r => r.setAttribute('stroke-width', 1.6)); g.querySelector('rect.box').setAttribute('stroke-width', 3); const [h, p] = AI[n.id]; $('#archInfo').innerHTML = `<h4>${h}</h4><p>${p}</p>`; });
+  });
+}
+btnGroup('#archBtns', d => drawArch(d.f));
+
+/* ---------------- CONCEPTS ---------------- */
+stepper($('#conceptStepper'), [
+  { t: 'Simple, not easy', b: '<p>RFC-0001: the framing error in homelab tooling is conflating <i>simple</i> with <i>easy</i>. Panels and one-click installers are easy, and they hide complexity. hoomlab aims for few concepts, one way to do each thing, and every opinion traced to an ADR, at the cost of asking the operator to understand what they run.</p><p class="small">Shows up as: no meta-command, explicit stages, and lettered open questions in every design.</p>' },
+  { t: 'Invoked vs resident', b: '<p>Terraform plus Ansible at home is <i>invoked</i>: it runs and exits, and nothing reconciles in between, so the world drifts. The end state is a <i>resident</i> reconciler (the hoomlab service). Until then, the CLI is built so that re-running it is the reconcile.</p>' },
+  { t: 'Converge, with no state file', b: '<p>ADR-0001: "the configuration files and the world are the only two truths." Each step reads actual state, and its Check is the idempotency proof. An interrupted run is re-run, not repaired. The acceptance test for every release is a full pass that applies <b>0</b>.</p><pre><code>for stage in pve form, pve storage, pve certs, talos secrets,\n             talos emit, talos ipxe, talos vms, talos bootstrap, talos health:\n  assert applied == 0</code></pre>' },
+  { t: 'Out-of-cluster actor', b: '<p>Something has to build the cluster from outside it, and that something must still work when the cluster is down. The CLI and booty both live outside the cluster, permanently. INV-0005 uses the same argument to rule out an in-cluster upgrade controller: recovery can\'t depend on itself.</p>' },
+  { t: 'Self-ownership', b: '<p>The service will consume the same HCL the CLI did, and take over the resources bootstrap built. It is the defined end state of bootstrap, not a separate migration. This is why the HCL carries no CLI concerns and no secret values.</p>' },
+  { t: 'Primitives first, XOR over precedence', b: '<p>DESIGN-0004: inline attributes are the ground truth, and named abstractions (planes, profiles) sit on top. You can always use the primitive. Setting both forms is an <b>error, never an override</b>. Hidden defaults are avoided: there is no implicit default network, and the image-verification policy must end with an explicit <code>*</code> rule.</p>' },
+  { t: 'Raw → resolver → resolved', b: '<p>HCL decodes into raw, pointer-optional types, where "absent" is data. A resolver turns them into fully explicit resolved forms (<code>ResolvedInterface</code>, and soon resolved labels and runtimes). Renderers read only the resolved form, so they never know how a fact arrived. That is also what makes the Talos 1.14 renderer swap a renderer-only change.</p>' },
+  { t: 'The ownership boundary', b: '<p>DESIGN-0002: if it must be decided at image-build or machine-config time, bootstrap owns it; if it is a Kubernetes object on a running cluster, GitOps owns it. Cilium <i>installation</i> is the one deliberate boundary-crosser: delivered by machine config, then adopted by GitOps. See <a href="#tiers">tiers</a>.</p>' },
+  { t: 'Findings fold back', b: '<p>Every drill or investigation ends by folding its deviations back into code, tests and docs, with dated amendments rather than rewrites. INV-0001 recorded 14 deviations and closed all 14, each fix with a regression test proven failing first. DESIGN-0005 gained a "Stage 1 findings" table before Stage 2 was built.</p>' },
+]);
+
+/* ---------------- DOC TRAIL ---------------- */
+const DOCS = [
+  { id: 'RFC-0001', t: 'RFC', x: 20, r: 0, st: 'Draft', title: 'A self-hosted cloud for homelab environments', d: '2026-08-17', s: 'The why. Two deliverables in order (the bootstrap CLI, then the service that owns itself), on Proxmox and Talos with HCL and Go. Phases: 1 bootstrap, 2 service, 3 platform features.' },
+  { id: 'ADR-0001', t: 'ADR', x: 140, r: 0, st: 'Accepted', title: 'Bootstrap CLI', d: '2026-08-17', s: 'Build the CLI first in <code>tools/bootstrap</code>. Convergent, with no state file. Booty is consumed by artifact emission ("our config in, booty\'s files out"). Tools release on their own train.' },
+  { id: 'DESIGN-0001', t: 'DESIGN', x: 140, r: 1, st: 'Implemented', title: 'Bootstrap CLI', d: '2026-08-17', s: 'Command tree, Step engine, HCL schema, booty gaps the CLI owns (secrets, ACME plugin, etcd bootstrap, embedded iPXE), the load-bearing VM settings, and <code>env()</code> secrets.' },
+  { id: 'IMPL-0001', t: 'IMPL', x: 140, r: 2, st: 'Completed', title: 'Bootstrap CLI', d: '2026-08-20', s: 'Six phases: config and validate → engine and pve form → certs → secrets and emit → ipxe and vms → bootstrap, health and the drill. Released v0.1.0.' },
+  { id: 'INV-0001', t: 'INV', x: 260, r: 3, st: 'Concluded', title: 'Hardware acceptance drill', d: '2026-08-21', s: 'Ran the runbook literally on real hardware. 12/12 rows passed, then a second full pass applied 0. 14 deviations in four classes (mock parity, VM config, iPXE delivery, probes), all folded back.' },
+  { id: 'IMPL-0002', t: 'IMPL', x: 260, r: 2, st: 'Completed', title: 'Hardware acceptance drill', d: '2026-08-22', s: 'The work plan for the drill: prepare, form and certify, artifacts and booty, cluster creation, convergence and fold-back, release.' },
+  { id: 'DESIGN-0002', t: 'DESIGN', x: 380, r: 1, st: 'Implemented', title: 'Talos cluster completion scope', d: '2026-08-26', s: 'Defines done as T2. Cilium installs itself from machine config. Profiles flatten into schematics. Topology labels. The ownership boundary with GitOps.' },
+  { id: 'DESIGN-0003', t: 'DESIGN', x: 500, r: 1, st: 'Draft', title: 'Nested test environment', d: '2026-08-28', s: 'Requirements capture for re-running the drill unattended on nested PVE. Five open questions; not built.' },
+  { id: 'INV-0002', t: 'INV', x: 500, r: 3, st: 'Concluded', title: 'Storage plane: second NIC and iSCSI', d: '2026-08-31', s: 'Could v0.2.0 add a storage NIC with no code? Every no-code path is "achievable today, unreproducible tomorrow". Option C: a hand layer now, then the config surface, then prove rebirth.' },
+  { id: 'DESIGN-0004', t: 'DESIGN', x: 620, r: 1, st: 'Implemented', title: 'Network planes and interfaces', d: '2026-08-31', s: 'Named <code>network</code> planes plus per-node <code>network_interface</code>, the XOR rule, a resolver into <code>ResolvedInterface</code>, and 13 validation rules.' },
+  { id: 'IMPL-0003', t: 'IMPL', x: 620, r: 2, st: 'Completed', title: 'Talos storage plane', d: '2026-08-31', s: 'util-linux-tools, a hand layer, the config surface, the VM and emit surface, v0.3.0, then two new workers joined from config alone. Jumbo frames end to end.' },
+  { id: 'INV-0003', t: 'INV', x: 740, r: 3, st: 'In Progress', title: 'Platform reuse for hoomlab', d: '2026-10-10', s: 'What to reuse from a sibling AWS project: ~340 lines of utilities, a testable <code>cmd/</code> seam, explainable dry-run diffs. Found that T3 already exists in private GitOps.' },
+  { id: 'INV-0004', t: 'INV', x: 860, r: 3, st: 'Concluded', title: 'Talos 1.14 / Kubernetes 1.37 with isolation', d: '2026-10-11', s: 'In place, no rebuild. 1.13.11 first. Kubernetes 1.37 gated on Cilium 1.21. A three-tier runtime model with runc as the default and Kata for untrusted work.' },
+  { id: 'DESIGN-0005', t: 'DESIGN', x: 860, r: 1, st: 'Approved', title: 'Talos 1.13.11 + Kata + cluster options', d: '2026-10-11', s: 'This branch. Stage 1 findings; the apply stage; node labels; Kata per workload with one RuntimeClass; Talos options; add-ons. All open questions resolved 2026-10-19.' },
+  { id: 'IMPL-0004', t: 'IMPL', x: 860, r: 2, st: 'In Progress', title: 'Talos 1.13.11 + Kata + cluster options', d: '2026-10-11', s: 'Phases 0–2 done: re-image, Kata test kit, Kubernetes 1.36.5, design gate. Next is Phase 3, the apply stage.' },
+  { id: 'DESIGN-0006', t: 'DESIGN', x: 980, r: 1, st: 'Draft', title: 'Talos 1.14 multi-document migration', d: '2026-10-11', s: 'Requirements holder: the field → document inventory, hazards H1–H4, contract steps (bump, then flip), and the sandboxd spike.' },
+  { id: 'INV-0005', t: 'INV', x: 980, r: 3, st: 'Open', title: 'Rolling node upgrades managed by hoomlab', d: '2026-10-11', s: 'Who owns rolling upgrades. Eight observations from the re-image: PDBs, drain timing, the no-cordon pod storm, "installed, not rebooted".' },
+];
+const DEDGES = [['RFC-0001', 'ADR-0001'], ['ADR-0001', 'DESIGN-0001'], ['DESIGN-0001', 'IMPL-0001'], ['IMPL-0001', 'INV-0001'], ['INV-0001', 'IMPL-0002'], ['IMPL-0002', 'DESIGN-0002'], ['IMPL-0002', 'DESIGN-0003'], ['INV-0001', 'DESIGN-0003'], ['INV-0002', 'DESIGN-0004'], ['INV-0002', 'IMPL-0003'], ['DESIGN-0004', 'IMPL-0003'], ['DESIGN-0002', 'INV-0003'], ['RFC-0001', 'INV-0003'], ['INV-0003', 'INV-0004'], ['IMPL-0003', 'INV-0004'], ['INV-0004', 'DESIGN-0005'], ['INV-0004', 'DESIGN-0006'], ['DESIGN-0005', 'IMPL-0004'], ['DESIGN-0005', 'DESIGN-0006'], ['IMPL-0004', 'INV-0005']];
+const DCOL = st => /Implemented|Completed|Concluded|Accepted/.test(st) ? '#5fd38d' : /Approved|In Progress/.test(st) ? '#6cb6ff' : '#f0b84a';
+const DFILE = { 'RFC-0001': 'rfc/0001-hoomlab-a-self-hosted-cloud-for-homelab-environments.md', 'ADR-0001': 'adr/0001-bootstrap-cli-and-service.md', 'DESIGN-0001': 'design/0001-bootstrap-cli.md', 'DESIGN-0002': 'design/0002-talos-cluster-completion-scope-for-bootstrap.md', 'DESIGN-0003': 'design/0003-nested-test-environment-for-the-bootstrap-cli.md', 'DESIGN-0004': 'design/0004-network-planes-and-interfaces-for-the-bootstrap-cli.md', 'DESIGN-0005': 'design/0005-talos-11311-upgrade-with-kata-ci-isolation-and-cluster-options.md', 'DESIGN-0006': 'design/0006-talos-114-multi-document-migration-requirements.md', 'IMPL-0001': 'impl/0001-bootstrap-cli.md', 'IMPL-0002': 'impl/0002-hardware-acceptance-drill-for-the-bootstrap-cli.md', 'IMPL-0003': 'impl/0003-talos-storage-plane.md', 'IMPL-0004': 'impl/0004-talos-11311-upgrade-with-kata-ci-isolation-and-cluster-options.md', 'INV-0001': 'investigation/0001-bootstrap-cli-hardware-acceptance-drill.md', 'INV-0002': 'investigation/0002-talos-storage-plane-second-nic-and-iscsi-readiness.md', 'INV-0003': 'investigation/0003-platform-reuse-for-hoomlab.md', 'INV-0004': 'investigation/0004-talos-114-and-kubernetes-137-upgrade-with-workload-isolation.md', 'INV-0005': 'investigation/0005-rolling-node-upgrades-managed-by-hoomlab.md' };
+let docType = 'all', docSel = null;
+function reach(start, fwd) { const seen = new Set([start]); const q = [start]; while (q.length) { const c = q.shift(); DEDGES.forEach(([a, b]) => { const [f, t] = fwd ? [a, b] : [b, a]; if (f === c && !seen.has(t)) { seen.add(t); q.push(t); } }); } seen.delete(start); return seen; }
+function drawDocs() {
+  const svg = $('#docSvg'); svg.innerHTML = ''; markers(svg);
+  ['RFC · ADR', 'DESIGN', 'IMPL', 'INV'].forEach((l, i) => txt(svg, 4, 16 + i * 100, l, 10.5, '#5d6778', { 'letter-spacing': '.08em' }));
+  const W = 104, H = 46, Y = r => 24 + r * 100, by = {}; DOCS.forEach(d => by[d.id] = d);
+  const down = docSel ? reach(docSel, true) : new Set(), up = docSel ? reach(docSel, false) : new Set();
+  DEDGES.forEach(([a, b]) => {
+    const P = by[a], Q = by[b]; const p = { x: P.x, y: Y(P.r), w: W, h: H }, q = { x: Q.x, y: Y(Q.r), w: W, h: H };
+    const [x1, y1] = edgePoint(p, q.x + W / 2, q.y + H / 2), [x2, y2] = edgePoint(q, p.x + W / 2, p.y + H / 2);
+    const isDown = docSel && (a === docSel || down.has(a)) && down.has(b), isUp = docSel && (b === docSel || up.has(b)) && up.has(a);
+    const c = isDown ? '#5fd38d' : isUp ? '#f0b84a' : '#3a4a60';
+    el('path', { d: `M${x1},${y1} L${x2},${y2}`, stroke: c, 'stroke-width': isDown || isUp ? 2.2 : 1.3, fill: 'none', 'marker-end': `url(#m${isDown ? 'g' : isUp ? 'o' : 'a'}docSvg)`, opacity: docSel && !isDown && !isUp ? .25 : 1 }, svg);
+  });
+  DOCS.forEach(d => {
+    const dim = (docType !== 'all' && d.t !== docType) || (docSel && d.id !== docSel && !down.has(d.id) && !up.has(d.id));
+    const g = el('g', { class: 'node', opacity: dim ? .28 : 1 }, svg);
+    el('rect', { class: 'box', x: d.x, y: Y(d.r), width: W, height: H, rx: 8, fill: '#141a23', stroke: d.id === docSel ? '#fff' : DCOL(d.st), 'stroke-width': d.id === docSel ? 2.6 : 1.5 }, g);
+    txt(g, d.x + 8, Y(d.r) + 18, d.id, 12.5, '#e6edf3', { 'font-weight': 600 });
+    txt(g, d.x + 8, Y(d.r) + 35, d.st, 10.5, DCOL(d.st));
+    g.addEventListener('click', () => { docSel = docSel === d.id ? null : d.id; drawDocs(); $('#docInfo').innerHTML = docSel ? `<h4>${d.id}: ${d.title}</h4><p class="small">${d.st} · created ${d.d}</p><p>${d.s}</p><p class="small">Leads to: ${[...down].join(', ') || '—'}<br>Comes from: ${[...up].join(', ') || '—'}</p><p><a href="${DFILE[d.id]}">open the doc ↗</a></p>` : '<h4>Click a document</h4>'; });
+  });
+}
+btnGroup('#docBtns', d => { docType = d.t; drawDocs(); });
+
+/* ---------------- TIERS ---------------- */
+const TIERS = [
+  ['T1', 'PVE ready', 'Cluster quorate, storage declared, production certificates. Verified when <code>pve form</code>, <code>storage</code> and <code>certs</code> apply 0.', 'bootstrap', 40],
+  ['T2', 'Talos cluster up', 'Every VM PXE-booted and joined, CNI up, nodes Ready, credentials written. Verified by <code>talos health</code> and a no-op re-run. <b>Bootstrap\'s definition of done.</b>', 'bootstrap', 70],
+  ['T3', 'Platform ready', 'BGP advertised, Gateways serving, GitOps reconciling, DNS, certs and CSI live. Verified by the IaC layers\' own checks.', 'GitOps / IaC', 100]];
+const tl = $('#tierList');
+TIERS.forEach(([k, n, b, o, w], i) => {
+  const d = document.createElement('div'); d.className = 'wave';
+  d.innerHTML = `<span class="w">${k}</span><span>${n}<br><span class="small">${o}</span></span><div><div class="bar" style="width:${w}%;${i == 2 ? 'background:linear-gradient(90deg,var(--purple),#7a5aa8)' : ''}"></div><div class="small t" style="margin-top:6px"></div></div>`;
+  d.addEventListener('click', () => { $$('.wave', tl).forEach(x => { x.classList.remove('on'); $('.t', x).innerHTML = ''; }); d.classList.add('on'); $('.t', d).innerHTML = b; });
+  tl.appendChild(d); if (i == 1) d.click();
+});
+const OWN = [
+  ['Talos extensions (Kata, iSCSI)', 'bootstrap', 'Image-build time: they live in the schematic, and changing them is a re-image.'],
+  ['kube-proxy disabled', 'bootstrap', 'Machine-config time. It can\'t be deferred without a flannel → cilium migration.'],
+  ['Cilium installation', 'both', 'The deliberate boundary-crosser: machine config installs it (inline Job), and GitOps adopts the release afterwards.'],
+  ['Cilium BGP peers and LB pools', 'gitops', 'Kubernetes objects on a running cluster. Left unconfigured at T2.'],
+  ['Node labels (hoomlab.io/size)', 'bootstrap', '<code>machine.nodeLabels</code> in machine config, delivered live by <code>talos apply</code> (DESIGN-0005 Phase 3).'],
+  ['RuntimeClass kata', 'gitops', 'A Kubernetes object. Bootstrap only provides the capability (extension) and the label it selects on (DESIGN-0005 OQ-9).'],
+  ['Buildkite pod-spec-patch', 'gitops', 'Workload config. It sets <code>runtimeClassName: kata</code> and the size preference.'],
+  ['Registry mirror', 'bootstrap', 'A machine-config document (<code>RegistryMirrorConfig</code>), DESIGN-0005 Phase 5.'],
+  ['metrics-server / KEDA', 'both', 'Kubernetes objects, so normally GitOps. DESIGN-0005 OQ-18 adds an opt-in post-T2 <code>cluster addons</code> stage for self-bootstrap and testing.'],
+  ['cert-approver', 'bootstrap', 'Paired with <code>rotate-server-certificates</code>. Without it, kubelet serving certs never get signed, so it ships via <code>extraManifests</code>.']];
+const oc = $('#ownChips');
+OWN.forEach(([n, o, w]) => { const c = document.createElement('span'); c.className = 'chip'; c.textContent = n; c.onclick = () => { $$('.chip', oc).forEach(x => x.classList.remove('on')); c.classList.add('on'); const lab = { bootstrap: '<b class="warn">bootstrap</b>', gitops: '<b style="color:var(--purple)">GitOps / IaC</b>', both: '<b class="ok">both, deliberately</b>' }[o]; $('#ownOut').innerHTML = `${n} → ${lab}. ${w}`; }; oc.appendChild(c); });
+
+/* ---------------- STAGES ---------------- */
+const STAGE = (steps, chk) => `<p><b>Steps:</b> ${steps}</p><p><b>"Done" means:</b> ${chk}</p>`;
+stepper($('#stageStepper'), [
+  { n: 0, t: 'Operator prerequisites', b: '<p>Proxmox installed on every host; joiners guest-free (a join replaces their <code>/etc/pve</code> wholesale); a PVE API token plus the <code>root@pam</code> password; a Cloudflare DNS-edit token; a trusted boot network; a booty host with docker; DHCP reservations for every VM MAC. Secrets are exported as <code>HOOMLAB_*</code>.</p>' },
+  { t: '<code>bootstrap validate</code>', s: 'built', b: '<p>Parse, resolve <code>env()</code>, resolve interfaces, run every validator. It reports all violations together, with file:line for decode errors.</p><pre><code>✓ bootstrap.hcl: cluster "lab" is valid (3 pve nodes, 8 talos nodes)</code></pre>' },
+  { t: '<code>pve form</code>', s: 'built', b: STAGE('<code>create-cluster</code> → <code>join-&lt;node&gt;</code>… → <code>cluster-quorate</code>', 'each node is in the cluster config, the cluster name is pinned, and the cluster is quorate.') + '<p class="small">Writes are fire-and-poll (no task ID comes back), so the membership and quorum polls are the task wait. corosync link0 is each node\'s <code>address</code>.</p>' },
+  { t: '<code>pve storage</code>', s: 'built', b: STAGE('<code>storage-&lt;name&gt;</code> per block', 'the declared fields match (lists compared as sets). Undeclared fields are never touched, and a type or path mismatch is an error, never a delete.') + '<p class="small">Added after the drill, when the stock <code>local-zfs</code> spread to boot disks that must not hold VMs.</p>' },
+  { t: '<code>pve certs</code>', s: 'built', b: STAGE('<code>acme-account</code> → <code>acme-plugin-cloudflare</code> → <code>acme-config-&lt;node&gt;</code> / <code>acme-cert-&lt;node&gt;</code>', 'an ACME cert covers the node FQDN with more than 30 days left. Re-running is the renewal path, and a rotated token reopens the plugin step.') },
+  { t: '<code>talos secrets</code>', s: 'built', b: STAGE('one bundle', 'the file exists. It is never overwritten, it is mode 0600, and you must back it up: a full rebuild keeps the PKI because this file survives.') },
+  { t: '<code>talos emit</code>', s: 'built', b: STAGE('<code>emit-artifacts</code> → <code>boot-assets</code>', 'the on-disk tree byte-equals a fresh render, and assets are present and match their TOFU sha256.') + '<p>It renders the booty catalog, secret-bearing per-role (per-class) templates, <code>embed.ipxe</code> and <code>booty-run.sh</code>, and POSTs one schematic per unique profile set. Any change ends with "restart the booty container".</p>' },
+  { t: '<code>talos ipxe</code>', s: 'built', b: STAGE('<code>ipxe-build</code>', 'the <code>ipxe.efi</code> embed stamp equals the sha256 of a fresh <code>embed.ipxe</code>. In practice only a changed <code>booty.url</code> rebuilds it.') + '<p class="small">A stock iPXE loops forever against booty\'s proxyDHCP, so the CLI builds its own in a pinned debian container (amd64).</p>' },
+  { n: '·', t: 'Start booty (operator)', b: '<p>Copy the tree to the booty host and run <code>booty-run.sh</code>, or an equivalent compose service that keeps its flag table. Verify with curl: <code>/boot.ipxe</code>, <code>/ipxe?mac=</code>, <code>/machine-config?mac=</code> (no <code>{{ }}</code> left), an unknown MAC returns 404, and the logs show <code>profiles=N groups=M</code>.</p><p class="small">Multi-homed host? Pin a <code>255.255.255.255/32</code> route on the boot NIC, or the firmware shows <code>PXE-E16</code>.</p>' },
+  { t: '<code>talos vms</code>', s: 'built', b: STAGE('<code>vm-create-&lt;node&gt;</code> → <code>vm-start-&lt;node&gt;</code>', 'the VM exists and is running. An existing VM is left alone; a stopped one is only started.') + '<p>Each VM PXE-boots, installs Talos, and reboots from disk in about 90 seconds.</p>' },
+  { t: '<code>talos bootstrap</code>', s: 'built', b: STAGE('<code>write-talosconfig</code> → <code>etcd-bootstrap</code> → <code>write-kubeconfig</code>', 'the credential files are present (each talosconfig carries a fresh cert, so they\'re never byte-diffed), and an etcd member list answers. AlreadyExists counts as success.') + '<p class="small">Cilium installs itself here, via its inline Job.</p>' },
+  { t: '<code>talos health</code>', s: 'built', b: '<p>Blocks, up to <code>--wait</code> (10m), until etcd, the control plane and every node are healthy. <code>kube-proxy: SKIP</code> is expected under Cilium. Then <code>kubectl get nodes</code> shows everything Ready: tier <b>T2</b>.</p>' },
+  { n: '∞', t: 'Convergence pass', s: 'built', b: '<p>Re-run every stage. Each must report <b>0 applied</b>; anything else is a convergence bug. This loop is the acceptance gate for every release and every hand change.</p>' },
+  { n: '+', t: '<code>talos apply</code>', s: 'planned', b: '<p>Day-2: render, diff, then <code>NO_REBOOT</code> apply to live nodes. IMPL-0004 Phase 3. See <a href="#apply">the apply stage</a>.</p>' },
+  { n: '+', t: '<code>cluster addons</code>', s: 'planned', b: '<p>An opt-in post-T2 stage that server-side-applies pinned upstream manifests (metrics-server, KEDA) with field manager <code>hoomlab-bootstrap</code>. IMPL-0004 Phase 7.</p>' },
+  { n: '?', t: '<code>talos upgrade</code>', s: 'proposed', b: '<p>The INV-0005 hypothesis: one step per node that cordons, drains, upgrades, reboots and verifies. See <a href="#upgrade">rolling upgrades</a>.</p>' },
+]);
+
+/* ---------------- ENGINE SIM ---------------- */
+const ENG = { steps: ['create-cluster', 'join-node2', 'join-node3', 'cluster-quorate'], world: [false, false, false, false] };
+function engRender(state) { $('#engSteps').innerHTML = ENG.steps.map((s, i) => { const st = state[i] || (ENG.world[i] ? 'done' : 'pending'); const cls = { done: 'skip', applied: 'run', pending: 'plan', failed: 'warn', 'not run': 'skip' }[st]; const ic = { done: '✓', applied: '✓', pending: '…', failed: '!', 'not run': '–' }[st]; return `<div class="step ${cls}"><span class="ic">${ic}</span><div><div class="t"><code>${s}</code></div><div class="n">${st}</div></div></div>`; }).join(''); }
+function engRun(mode) {
+  const log = [], state = {};
+  if (mode === 'reset') { ENG.world = [false, false, false, false]; engRender({}); $('#engLog').textContent = 'world reset: three fresh PVE nodes, no cluster.'; return; }
+  if (mode === 'drift') { ENG.world[1] = false; ENG.world[3] = false; engRender({}); $('#engLog').textContent = 'someone removed node2 from the cluster by hand.\nThe world drifted; the config did not.\nRun "bootstrap pve form" again.'; return; }
+  if (mode === 'dry') {
+    let p = 0; ENG.steps.forEach((s, i) => { const d = ENG.world[i]; if (!d) p++; log.push(`${(d ? 'done' : 'pending').padEnd(10)} ${s}`); state[i] = d ? 'done' : 'pending'; });
+    log.push(`dry-run: ${p} of ${ENG.steps.length} steps pending, nothing applied`);
+  } else {
+    let applied = 0;
+    for (let i = 0; i < ENG.steps.length; i++) {
+      const s = ENG.steps[i];
+      if (ENG.world[i]) { log.push(`INFO step already done, skipping step=${s}`); state[i] = 'done'; continue; }
+      if (mode === 'fail' && s === 'join-node3') { log.push(`ERROR apply ${s}: join: node3 unreachable (timeout)`); state[i] = 'failed'; for (let j = i + 1; j < ENG.steps.length; j++) state[j] = 'not run'; log.push(`\n${applied} applied before the failure. Fix the cause and re-run:\nfinished steps will check as done.`); engRender(state); $('#engLog').textContent = log.join('\n'); return; }
+      log.push(`INFO applying step=${s}`); ENG.world[i] = true; state[i] = 'applied'; applied++;
+    }
+    log.push(applied ? `✓ pve form: ${applied} step(s) applied\nnext: bootstrap pve storage` : '✓ pve form: 0 steps applied (already converged)\nnext: bootstrap pve storage');
+  }
+  engRender(state); $('#engLog').textContent = log.join('\n');
+}
+$$('#engBtns button').forEach(b => b.addEventListener('click', () => engRun(b.dataset.a)));
+engRun('reset');
+
+/* ---------------- HCL ---------------- */
+const P = s => ST(s);
+pickTree('#hclTree', '#hclInfo', [
+  ['cluster "<name>" {', 'cluster ' + P('built'), 'Exactly one. Its label is the PVE cluster name, and the Talos cluster name too unless <code>talos.name</code> is set.'],
+  ['  pve {', 'pve', '<code>token_id</code>, <code>token_secret</code>, <code>root_password</code>, all <code>env()</code> references. The token covers reads and non-formation writes; root@pam covers create, join, and ACME account registration. <b>Consumed by:</b> <code>pve form/storage/certs</code>, <code>talos vms</code>.'],
+  ['    node "<pve>" { endpoint, address?, primary? }', 'pve.node', 'Exactly one <code>primary</code>; the cluster is created there. <code>address</code> becomes corosync link0. The endpoint must be an absolute https URL.'],
+  ['    storage "<id>" { type, pool|path, nodes, … }', 'pve.storage ' + P('built'), '<code>zfspool</code> needs <code>pool</code>; <code>dir</code> needs <code>path</code>. <code>nodes</code> restricts where it\'s active. Once any storage block exists, every talos node\'s <code>storage</code> must name one.'],
+  ['  acme { email, domain, dns, token, directory? }', 'acme', '<code>dns</code> must be <code>cloudflare</code>. Certificates go to <code>&lt;node&gt;.&lt;domain&gt;</code>. Point <code>directory</code> at LE staging while drilling.'],
+  ['  talos { version, endpoint, kubernetes_version?', 'talos', '<code>version</code> also selects the machinery <i>contract</i>, so 1.13 output stays 1.13-shaped even on newer machinery (DESIGN-0006\'s lever). <code>schematic_id</code> XOR <code>profile</code> blocks.'],
+  ['    cluster { cni, cilium { … } }', 'talos.cluster ' + P('built'), 'Its presence enables the completion surface: topology labels, kubelet serving-cert rotation plus the approver, and with <code>cni = "cilium"</code>, CNI none, kube-proxy off, Gateway API CRDs, and the inline values plus install Job. The values file is validated at load.'],
+  ['      image_verification { rule { … } }', 'image_verification ' + P('planned'), '→ <code>ImageVerificationConfig</code>. Exactly one action per rule; keyless takes issuer plus <code>subject</code> XOR <code>subject_regex</code>. <b>The last rule must be <code>image = "*"</code></b>, which makes "unmatched is allowed" visible. DESIGN-0005 Phase 5, applied last (it can block pulls).'],
+  ['      logging { destination{…} kernel "<n>"{…} }', 'logging ' + P('planned'), '→ <code>machine.logging.destinations</code> plus <code>KmsgLogConfig</code>. <code>format = "json_lines"</code> is required. The receiver is an Alloy listener on a fixed LB IP.'],
+  ['      etcd_metrics { listen_url }', 'etcd_metrics ' + P('planned'), '→ <code>cluster.etcd.extraArgs.listen-metrics-urls</code>, control-plane template only. Plain HTTP on :2381, which survives 1.14\'s move to 2383. Applied first: lowest blast radius.'],
+  ['      registry_mirror "<registry>" { … }', 'registry_mirror ' + P('planned'), '→ <code>RegistryMirrorConfig</code> documents, never the deprecated <code>machine.registries</code>. <code>skip_fallback</code> is required. The mirror runs off-cluster so the cluster can pull during its own recovery.'],
+  ['    network "<plane>" { dhcp, vlan?, cidr?, mtu? }', 'talos.network ' + P('built'), 'A plane: shared facts. <code>cidr</code> is required if and only if <code>dhcp = false</code>. At most one primary, and it must be DHCP. An unreferenced plane is an error. See <a href="#planes">planes</a>.'],
+  ['    profile "<name>" { extensions = [...] }', 'talos.profile ' + P('built'), 'Named extension sets. A node\'s profiles flatten into a sorted, deduped set, which becomes one schematic. An unreferenced profile is an error. Kata lives in a <code>kata</code> profile on workers only.'],
+  ['    booty { url, version? }', 'talos.booty', 'Where nodes reach booty; it is baked into <code>embed.ipxe</code>. Changing it is the one thing that rebuilds iPXE.'],
+  ['    node "<name>" { role, pve_node, vmid, … }', 'talos.node ' + P('built'), '<code>role</code> is controlplane or worker. Also <code>cores</code>, <code>memory</code> (MiB), <code>disk_gb</code>, <code>storage</code>, <code>profiles</code>. VMIDs are unique and ≥ 100.'],
+  ['      labels = { "hoomlab.io/size" = "large" }', 'node labels ' + P('planned'), '→ <code>machine.nodeLabels</code>, applied live on workers through the kubelet. Validated as qualified names; NodeRestriction-restricted prefixes are rejected <i>at load</i> rather than found as a 12-second retry loop. Splits template classes. DESIGN-0005 Phase 3; taints are deferred.'],
+  ['      network_interface "netN" { … }', 'network_interface ' + P('built'), '<code>mac</code> and <code>bridge</code>, plus either <code>network = "&lt;plane&gt;"</code> or inline <code>vlan/dhcp/primary/cidr/mtu</code> (XOR). <code>address</code> for static planes. Exactly one primary per node. See <a href="#xor">XOR</a>.'],
+  ['  addon "<name>" { version }', 'addon ' + P('planned'), 'A closed set (metrics-server, keda) mapped to pinned upstream manifests. It feeds the opt-in <code>cluster addons</code> stage. Declaring one that GitOps already owns is an operator error, made visible by the field manager.'],
+]);
+
+/* ---------------- XOR ---------------- */
+$('#pipeLine').innerHTML = ['HCL parse<br><span class="small">hclkit · env()</span>', 'decode<br><span class="small">gohcl → raw (pointers)</span>', 'resolve<br><span class="small">→ ResolvedInterface</span>', 'validate<br><span class="small">all errors at once</span>', 'cilium values<br><span class="small">KPR · KubePrism · no nulls</span>', 'render<br><span class="small">VMSpec · catalog · templates</span>'].map((s, i) => `<span class="fs ${i == 2 ? 'hl' : ''}">${s}</span>`).join('<span class="ar">→</span>');
+const XOR = {
+  ref: ['network "storage" { dhcp = false, cidr = "192.0.2.0/24", mtu = 9000 }\n\nnode "work01" {\n  network_interface "net1" {\n    network = "storage"\n    mac     = "02:00:00:00:14:01"\n    bridge  = "storbr0"\n    address = "192.0.2.61/24"\n  }\n}', '<h4 class="ok">✓ resolves</h4><pre>ResolvedInterface{\n  Slot: net1, MAC: 02:00:00:00:14:01, Bridge: storbr0,\n  VLAN: 0, DHCP: false, Primary: false,\n  Address: 192.0.2.61/24, CIDR: 192.0.2.0/24, MTU: 9000 }</pre><p class="small">The plane supplies the facts and the interface supplies the identity. Renders as <code>virtio,bridge=storbr0,macaddr=…,firewall=0,mtu=9000</code>, plus a <code>deviceSelector.hardwareAddr</code> entry in the template.</p>'],
+  inline: ['node "work01" {\n  network_interface "net1" {\n    mac     = "02:00:00:00:14:01"\n    bridge  = "storbr0"\n    dhcp    = false\n    cidr    = "192.0.2.0/24"\n    mtu     = 9000\n    address = "192.0.2.61/24"\n  }\n}', '<h4 class="ok">✓ resolves to the same thing</h4><p>The primitive. Consumers can\'t tell whether a fact came from a plane or inline, because the <code>ResolvedInterface</code> is identical.</p>'],
+  both: ['network_interface "net1" {\n  network = "storage"\n  mtu     = 1500        # "just override it here"\n  mac     = "02:00:00:00:14:01"\n  bridge  = "storbr0"\n}', '<h4 class="bad">✗ error</h4><pre>node "work01" interface "net1": network = "storage"\nconflicts with inline mtu; set one or the other</pre><p class="small">(Messages here are paraphrased.)</p><p>An error, never an override. Precedence rules are hidden behaviour, and XOR keeps every fact in exactly one place.</p>'],
+  neither: ['network_interface "net1" {\n  mac    = "02:00:00:00:14:01"\n  bridge = "storbr0"\n}', '<h4 class="bad">✗ error</h4><pre>node "work01" interface "net1": set network = "&lt;plane&gt;"\nor the inline dhcp attribute</pre><p>There is no implicit default network. Omitting the facts is a mistake to name, not a default to guess.</p>'],
+  addr: ['network "storage" { dhcp = false, cidr = "192.0.2.0/24" }\n\nnetwork_interface "net1" {\n  network = "storage"\n  mac     = "02:00:00:00:14:01"\n  bridge  = "storbr0"\n  address = "198.51.100.61/24"\n}', '<h4 class="bad">✗ error</h4><pre>node "work01" interface "net1": address 198.51.100.61/24\nis outside plane "storage" cidr 192.0.2.0/24</pre><p>Rule 6: on a static plane, <code>address</code> is required, must be in CIDR form, inside the governing CIDR, with the same prefix length. On DHCP it is forbidden.</p>'],
+};
+btnGroup('#xorBtns', d => { const [h, o] = XOR[d.x]; $('#xorHcl').textContent = h; $('#xorOut').innerHTML = o; });
+
+/* ---------------- PROFILES → CLASSES ---------------- */
+const PROF = { base: ['siderolabs/qemu-guest-agent'], iscsi: ['siderolabs/iscsi-tools', 'siderolabs/util-linux-tools'], kata: ['siderolabs/kata-containers'] };
+const PN = [['ctrl01', 'controlplane'], ['ctrl02', 'controlplane'], ['ctrl03', 'controlplane'], ['work01', 'worker'], ['work02', 'worker'], ['work03', 'worker'], ['work04', 'worker'], ['work05', 'worker']].map(([n, r]) => ({ n, r, p: { base: true, iscsi: true, kata: r === 'worker' }, large: n === 'work04' || n === 'work05' }));
+function hash8(s) { let h = 2166136261; for (const c of s) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; } return h.toString(16).padStart(8, '0'); }
+function drawProf() {
+  const t = $('#profMatrix');
+  t.innerHTML = '<tr><th>node</th><th>role</th>' + Object.keys(PROF).map(p => `<th>profile ${p}</th>`).join('') + '<th>label size=large</th></tr>' +
+    PN.map((n, i) => `<tr><td><code>${n.n}</code></td><td>${n.r}</td>` + Object.keys(PROF).map(p => `<td><input type="checkbox" data-i="${i}" data-p="${p}" ${n.p[p] ? 'checked' : ''}></td>`).join('') + `<td><input type="checkbox" data-i="${i}" data-l="1" ${n.large ? 'checked' : ''}></td></tr>`).join('');
+  $$('input', t).forEach(c => c.addEventListener('change', () => { const n = PN[c.dataset.i]; if (c.dataset.l) n.large = c.checked; else n.p[c.dataset.p] = c.checked; drawProf(); }));
+  const errs = [], warns = [], used = new Set();
+  const sch = {}, cls = {};
+  PN.forEach(n => {
+    const ps = Object.keys(PROF).filter(p => n.p[p]); ps.forEach(p => used.add(p));
+    if (!ps.length) errs.push(`node "${n.n}": profiles is empty — vanilla schematic would need schematic_id`);
+    if (n.r === 'controlplane' && n.p.kata) errs.push(`node "${n.n}": kata extension on a controlplane profile (control planes stay minimal)`);
+    if (n.r === 'controlplane' && n.large) warns.push(`node "${n.n}": valid, but control planes are tainted against workloads, so the label attracts nothing`);
+    const ext = [...new Set(ps.flatMap(p => PROF[p]))].sort(); const id = hash8(ext.join(','));
+    (sch[id] = sch[id] || { ext, nodes: [] }).nodes.push(n.n);
+    const labels = (n.p.kata && n.r === 'worker' ? ['runtime.hoomlab.io/kata=true'] : []).concat(n.large ? ['hoomlab.io/size=large'] : []);
+    const key = `${n.r}|${id}|${n.large ? 'large' : ''}`;
+    (cls[key] = cls[key] || { r: n.r, id, labels, nodes: [] }).nodes.push(n.n);
+  });
+  Object.keys(PROF).forEach(p => { if (!used.has(p)) errs.push(`profile "${p}" is declared but no node references it`); });
+  const byRole = {}; Object.values(cls).forEach(c => byRole[c.r] = (byRole[c.r] || 0) + 1);
+  $('#profOut').innerHTML = `<h4>${Object.keys(sch).length} schematic(s) · ${Object.keys(cls).length} template class(es)</h4>` +
+    Object.entries(sch).map(([id, s]) => `<p><code>${id}…</code> ← ${s.nodes.join(', ')}<br><span class="small">${s.ext.map(e => e.replace('siderolabs/', '')).join(' · ')}</span></p>`).join('') +
+    '<hr style="border-color:var(--border)">' + Object.values(cls).map(c => { const name = byRole[c.r] > 1 ? `${c.r}-${c.id.slice(0, 6)}${c.labels.some(l => l.startsWith('hoomlab.io')) ? '-' + hash8(c.labels.join()).slice(0, 4) : ''}` : c.r; return `<p><code>${name}.yaml.tmpl</code> ← ${c.nodes.join(', ')}${c.labels.length ? `<br><span class="small">nodeLabels: ${c.labels.join(', ')}</span>` : ''}</p>`; }).join('') +
+    '<p class="small">Class names are derived only when a role splits, so a config with one class per role keeps today\'s names and bytes. The derived runtime label is the same on every Kata worker, so it never splits a role by itself.</p>';
+  const w = warns.map(e => `<p class="warn">! ${e}</p>`).join('');
+  $('#profVal').innerHTML = errs.length ? '<h4 class="bad">bootstrap validate</h4>' + errs.map(e => `<p class="bad">✗ ${e}</p>`).join('') + w : '<h4 class="ok">bootstrap validate</h4><p class="ok">✓ valid</p>' + w + '<p class="small">Try: tick kata on ctrl01, untick kata on every worker (the profile becomes unreferenced), or give work01 the size label and watch the worker role split into another class.</p>';
+}
+drawProf();
+
+/* ---------------- VM CONTRACT ---------------- */
+const VMC = [
+  ['bios=ovmf + efidisk, pre-enrolled-keys=0', 'UEFI with Secure Boot keys enrolled refuses the unsigned iPXE: the VM sits at the firmware screen.'],
+  ['machine=q35', 'The OVMF and PCIe layout the rest assumes. On i440fx the NIC and RNG ordering drift and PXE gets unreliable.'],
+  ['cpu=host', 'Talos needs x86-64-v2, and Kata needs <code>vmx</code> passed through. With kvm64 the kernel panics early, and <code>/dev/kvm</code> never appears for Kata.'],
+  ['rng0 (VirtIO RNG)', 'Post-PixieFail EDK2 firmware drops PXE without an entropy source: "no offer" with no obvious cause.'],
+  ['scsihw=virtio-scsi-single', 'Talos has no driver for the API-default LSI controller, so the installer finds no disk (INV-0001 deviation 12).'],
+  ['agent=enabled=1', 'The qemu-guest-agent extension needs the channel. Without it, PVE shows no IP, and graceful shutdown from PVE hangs (deviation 14).'],
+  ['netN firewall=0', 'The PVE firewall on the NIC eats proxyDHCP and TFTP.'],
+  ['serial0', 'Talos logs to the serial console. Without it, a failed boot is invisible from <code>qm terminal</code>.'],
+  ['boot=order=scsi0;&lt;primary&gt;', 'Disk first, PXE as fallback. Re-imaging is "wipe the disk, reboot", and a healthy node never re-PXEs. Only the primary NIC is in boot order.'],
+];
+const vmState = VMC.map(() => true);
+function drawVM() {
+  $('#vmList').innerHTML = VMC.map(([k], i) => `<label class="step ${vmState[i] ? 'run' : 'warn'}" style="cursor:pointer"><span class="ic">${vmState[i] ? '✓' : '✗'}</span><div class="t"><input type="checkbox" data-i="${i}" ${vmState[i] ? 'checked' : ''} style="display:none"><code>${k}</code></div></label>`).join('');
+  $$('#vmList input').forEach(c => c.addEventListener('change', () => { vmState[c.dataset.i] = c.checked; drawVM(); }));
+  const bad = VMC.filter((_, i) => !vmState[i]);
+  $('#vmOut').innerHTML = bad.length ? `<h4 class="bad">VM "looks fine, never boots"</h4>` + bad.map(([k, w]) => `<p><code>${k}</code> missing: ${w}</p>`).join('') : '<h4 class="ok">PXE → install → reboot from disk (~90 s)</h4><p>Every load-bearing setting is pinned, and <code>talos vms</code> tests each one. Click a setting to drop it.</p>';
+}
+drawVM();
+
+/* ---------------- PLANES ---------------- */
+(function () {
+  const svg = $('#planeSvg'); markers(svg);
+  const info = {
+    host: ['PVE host', 'Each host carries a VLAN-aware guest bridge (primary plane) and a dedicated storage bridge on storage-only switch ports. The storage ports have a native VLAN and block all tagged traffic.'],
+    p: ['Primary plane', '<code>network "lan" { primary = true, dhcp = true, vlan = … }</code>. It carries PXE, DHCP leases (reserved per MAC), node and pod traffic, and the API endpoint. MTU 1500. It is the only plane in boot order.'],
+    s: ['Storage plane', '<code>network "storage" { dhcp = false, cidr = …, mtu = 9000 }</code>. Static addresses, with no gateway, routes or DNS: unroutable by construction, so the unroutability <i>is</i> the access boundary. Jumbo frames are proven with <code>ping -M do -s 8972</code>. One lesson: Talos runs DHCP on any unconfigured link, so the "L2-only" network had silently been handing out leases until DHCP was turned off at the router.'],
+    n0: ['net0', 'The primary NIC. Its MAC is the booty identity: the catalog selects the node by primary MAC. <code>boot=order=scsi0;net0</code>.'],
+    n1: ['net1', 'A storage NIC, hot-plugged with <code>qm set --net1</code> during the hand layer, then reproduced from config. In machineconfig it is selected by <code>deviceSelector.hardwareAddr</code>, and a single-NIC node emits no interfaces block at all (byte-identical).'],
+    san: ['iSCSI target', 'democratic-csi provisions RWO volumes over iSCSI on the storage plane. Under Kata, the host mounts the volume and shares it into the guest over virtio-fs (Stage 1, T3).'],
+  };
+  const box = (id, x, y, w, h, t, s, c) => { const g = el('g', { class: 'node' }, svg); el('rect', { class: 'box', x, y, width: w, height: h, rx: 9, fill: '#141a23', stroke: c, 'stroke-width': 1.6 }, g); txt(g, x + 10, y + 20, t, 13.5, '#e6edf3', { 'font-weight': 600 }); if (s) wrapText(g, x + 10, y + 37, s, 11, '#9aa5b5', Math.floor(w / 6.4)); g.onclick = () => { const [h2, p] = info[id]; $('#planeInfo').innerHTML = `<h4>${h2}</h4><p>${p}</p>`; }; return g; };
+  el('rect', { x: 10, y: 10, width: 470, height: 340, rx: 12, fill: '#11201a', stroke: '#284a3a', 'stroke-dasharray': '5 5', opacity: .55 }, svg);
+  txt(svg, 20, 342, 'PVE host (one of three)', 11, '#8b96a8');
+  box('n0', 40, 60, 170, 70, 'Talos VM · net0', 'virtio · primary · DHCP · MTU 1500', '#2b4a6b');
+  box('n1', 40, 200, 170, 70, 'Talos VM · net1', 'virtio · static /24 · MTU 9000', '#285a3d');
+  box('host', 270, 60, 180, 70, 'guest bridge', 'VLAN-aware · tagged per plane', '#3a4a60');
+  box('host', 270, 200, 180, 70, 'storage bridge', 'dedicated NIC · storage-only ports', '#3a4a60');
+  const pl = (id, x, y, w, t, c) => { const g = el('g', { class: 'node' }, svg); el('rect', { class: 'box', x, y, width: w, height: 40, rx: 20, fill: c + '22', stroke: c, 'stroke-width': 1.6 }, g); txt(g, x + 16, y + 25, t, 13, c, { 'font-weight': 600 }); g.onclick = () => { const [h2, p] = info[id]; $('#planeInfo').innerHTML = `<h4>${h2}</h4><p>${p}</p>`; }; };
+  pl('p', 520, 75, 360, 'primary plane — PXE · DHCP · nodes · API', '#6cb6ff');
+  pl('s', 520, 215, 360, 'storage plane — unroutable · jumbo', '#5fd38d');
+  box('san', 700, 280, 180, 60, 'iSCSI target', 'democratic-csi · RWO', '#285a3d');
+  [[210, 95, 270, 95], [210, 235, 270, 235], [450, 95, 520, 95], [450, 235, 520, 235], [790, 255, 790, 280]].forEach(([a, b, c, d]) => el('path', { d: `M${a},${b} L${c},${d}`, stroke: '#5d6778', 'stroke-width': 1.6, 'marker-end': 'url(#maplaneSvg)' }, svg));
+  txt(svg, 520, 150, 'booty · DHCP · router · the API endpoint', 11, '#8b96a8');
+  txt(svg, 520, 168, 'live on the primary plane', 11, '#8b96a8');
+})();
+
+/* ---------------- DESIGN-0005 TIMELINE ---------------- */
+const PH = [
+  ['0', 'Stage 1: record fix, 1.13.11, Kata in image', 1, '<p>Fixed the <code>setInterfaces</code> rationale. Bumped machinery to v1.13.11. Added a <code>kata</code> profile to every worker. Rolled all 8 nodes one at a time with an operator script (cordon → drain → upgrade → post-checks), workers first. Then ran the hand-applied Kata test kit, T1–T8.</p><p class="small">Lessons: <code>talosctl upgrade</code> doesn\'t rewrite the stored <code>install.image</code>; the live configs are multi-document, so hand patches must be strategic-merge; single-instance PDBs block drains; never reboot without a cordon.</p>'],
+  ['1', 'Kubernetes 1.36.5', 1, '<p><code>talosctl upgrade-k8s --to 1.36.5</code> after an etcd snapshot. Control-plane components rolled one node at a time, then the kubelets, then CoreDNS v1.14.7. The HCL is pinned to <code>kubernetes_version = "1.36.5"</code>, and the closing emit dry-run reports 0.</p>'],
+  ['2', 'Design gate', 1, '<p>Amended DESIGN-0005 with a Stage 1 findings table and in-place corrections. Phase 3 became labels only, and Phase 4 became Kata per workload with one class. All open questions were answered <b>a</b>, and the design moved to Approved. IMPL Phases 3–7 were re-cut.</p>'],
+  ['3', 'talos apply stage', 0, '<p>Client calls (members, MachineConfig read, <code>ApplyConfiguration</code>, extensions), node addressing via Talos members, a renderer shared with emit, multi-document normalisation, one Step per node, and a schematic check. <b>Success:</b> <code>--dry-run</code> across all 8 nodes reports 0, followed by a tools release.</p>'],
+  ['4', 'Node labels', 0, '<p>Add <code>labels</code> to <code>TalosNode</code>, with qualified-name validation, NodeRestriction prefix rejection and completion-label collisions. They render to <code>machine.nodeLabels</code>, and templates key by (role, label set). Byte-identity holds for configs without labels. <b>Live:</b> <code>hoomlab.io/size=large</code> on work04/05 via <code>talos apply</code>.</p>'],
+  ['5', 'Kata label, Cilium rule, Buildkite', 0, '<p>A runtime table, the derived <code>runtime.hoomlab.io/kata=true</code>, Kata-on-control-plane as an error, and the Cilium <code>hostNamespaceOnly</code> and bandwidth-manager checks. <b>GitOps:</b> the <code>kata</code> class replaces the test class; the Buildkite privileged controller gets <code>pod-spec-patch</code> and <code>prohibit-kubernetes-plugin</code>; then a week of green builds. <b>PVE:</b> turn off automatic live migration for workers.</p>'],
+  ['6', 'Talos-side options', 0, '<p>Each option is its own PR, enabled on one node before the fleet, in order of ascending blast radius: etcd metrics → logging → registry mirror → image verification (control planes last; talos#13342).</p>'],
+  ['7', 'Cluster add-ons', 0, '<p>A <code>client-go</code> dependency (reusable by the INV-0005 drain stage), the <code>addon</code> blocks, and <code>bootstrap cluster addons</code> with server-side apply. metrics-server, then KEDA with a Temporal <code>ScaledObject</code> in GitOps (<code>minReplicaCount: 1</code>).</p>'],
+  ['8', 'Close', 0, '<p>README, runbook and examples current. DESIGN-0005 → Implemented, with an as-built note. DESIGN-0006\'s surfaces table pointed at the as-built forms. IMPL-0004 → Completed.</p>'],
+];
+(function () {
+  const line = $('#d5Line');
+  PH.forEach(([k, t, done, b], i) => {
+    const d = document.createElement('div'); d.className = 'ph ' + (done ? 'done' : 'todo');
+    d.innerHTML = `<span class="k">P${k}</span> ${done ? ST('built') : ST('planned')}<div class="bar"></div>${t}`;
+    d.onclick = () => { $$('.ph', line).forEach(x => x.classList.remove('on')); d.classList.add('on'); $('#d5Info').innerHTML = `<h4>Phase ${k}: ${t}</h4>${b}`; };
+    line.appendChild(d); if (i === 3) d.click();
+  });
+})();
+
+/* ---------------- FINDINGS CHARTS ---------------- */
+function memChart(lines) {
+  const svg = $('#memChart'); svg.innerHTML = '';
+  txt(svg, 14, 22, 'Host memory per Kata pod (MB, measured T7)', 13, '#e6edf3', { 'font-weight': 600 });
+  const X0 = 150, SC = 0.75, bars = [
+    ['idle pod', [['cloud-hypervisor', 150, '#6cb6ff'], ['shim', 44, '#c792ea'], ['virtiofsd', 5, '#5ccfe6']]],
+    ['build VM (DinD)', [['VM', 320, '#6cb6ff'], ['virtiofsd', 95, '#5ccfe6']]]];
+  bars.forEach(([lab, segs], i) => {
+    const y = 60 + i * 90; txt(svg, 14, y + 24, lab, 12.5, '#c9d1d9'); let x = X0;
+    segs.forEach(([n, v, c]) => { const w = v * SC; el('rect', { x, y, width: w, height: 36, rx: 4, fill: c, opacity: .85, stroke: '#0b0e13' }, svg); if (w > 34) txt(svg, x + 5, y + 22, `${n} ${v}`, 10.5, '#0b0e13', { 'font-weight': 700 }); x += w; });
+    txt(svg, x + 6, y + 23, `≈${segs.reduce((a, s) => a + s[1], 0)}`, 12, '#e6edf3');
+  });
+  if (lines) [['README 130Mi', 136, '#f07178'], ['chosen 250Mi', 262, '#5fd38d']].forEach(([l, v, c], i) => { const x = X0 + v * SC; el('path', { d: `M${x},45 L${x},250`, stroke: c, 'stroke-width': 2, 'stroke-dasharray': '5 4' }, svg); txt(svg, x - 30, 268 + i * 16, l, 11, c); });
+  txt(svg, 14, 292, 'Build pods carry the rest of the margin in their own requests.', 10.5, '#8b96a8');
+}
+function coldChart() {
+  const svg = $('#coldChart'); svg.innerHTML = '';
+  txt(svg, 14, 22, 'Cold start, cached image (s)', 13, '#e6edf3', { 'font-weight': 600 });
+  [['runc', 1, '#5fd38d'], ['kata', 3, '#c792ea']].forEach(([n, v, c], i) => {
+    const y = 60 + i * 70; txt(svg, 14, y + 24, n, 13, '#c9d1d9');
+    el('rect', { x: 80, y, width: v * 120, height: 36, rx: 4, fill: c, opacity: .85 }, svg);
+    txt(svg, 88 + v * 120, y + 24, v + ' s', 13, '#e6edf3');
+  });
+  [['T1 kernel', 'guest 6.18.35 ≠ host 6.18.54', 1], ['T2 network', 'DNS · ClusterIP · cross-node', 1], ['T3 PVC', 'iSCSI → host → virtio-fs', 1], ['T4/T5 builds', 'DinD + BuildKit (sidecar)', 1], ['T6 placement', 'kept off control planes', 1], ['T8 reboot', 'recovers after a cordon', 1]].forEach(([a, b], i) => { const x = 14 + (i % 2) * 250, y = 210 + Math.floor(i / 2) * 26; txt(svg, x, y, '✓ ' + a, 11.5, '#5fd38d', { 'font-weight': 600 }); txt(svg, x + 92, y, b, 10.5, '#8b96a8'); });
+}
+btnGroup('#memBtns', d => memChart(d.m === '1')); coldChart();
+$('#findTable').innerHTML = '<tr><th>Area</th><th>Finding</th><th>Consequence in the design</th></tr>' + [
+  ['Exec', '<code>kubectl exec</code> into a container whose process nests cgroups (dockerd, buildkitd) fails: the agent\'s <code>cgroup.procs</code> write returns EBUSY.', 'Daemons run as sidecars, driven from a client container.'],
+  ['Storage', 'An iSCSI PVC mounts on the host and reaches the guest via virtio-fs.', 'It works; weigh it for I/O-heavy workloads.'],
+  ['Networking', 'Works with <code>hostNamespaceOnly</code> in effect (forced today by Gateway API); the cilium#48420 check passed after every reboot.', 'Make it explicit and validated (OQ-8).'],
+  ['Reboot', 'A reboot <i>without</i> a cordon caused a NodeShutdown storm: 93 recreated pods in ~90 s.', 'The apply stage never reboots; reboots go cordon → drain.'],
+  ['Upgrade', '<code>talosctl upgrade</code> doesn\'t rewrite the stored <code>install.image</code>; configs are 3 documents per node; JSON6902 patches are refused.', 'The apply stage compares document by document; a stale <code>install.image</code> is ordinary drift.'],
+  ['Drains', 'Single-instance CNPG and OpenBao PDBs (<code>maxUnavailable: 0</code>) blocked every drain.', 'Fixed at the workloads; INV-0005 wants the tool to refuse and report.']].map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('');
+
+/* ---------------- KATA LAYERS ---------------- */
+$('#kataLayers').innerHTML = [
+  ['Default runtime', 'runc, always. Not configurable.', 'Talos'],
+  ['Capability: which runtimes a node can run', 'The extensions in the node\'s profiles, fixed at image-build time. The derived label <code>runtime.hoomlab.io/kata=true</code> states it for schedulers.', 'bootstrap'],
+  ['Use: which pods run under Kata', '<code>runtimeClassName: kata</code> in the pod spec. The class\'s hard <code>nodeSelector</code> keeps them on capable nodes.', 'GitOps'],
+  ['Placement preference', 'Node labels (<code>hoomlab.io/size=large</code>) plus the workload\'s own <code>preferredDuringScheduling</code> affinity. A RuntimeClass can\'t carry soft constraints.', 'bootstrap (labels) · GitOps (affinity)']].map(([a, b, c]) => `<div class="layer"><b>${a}</b><span class="w">${b}</span><span class="o">${c}</span></div>`).join('');
+
+/* ---------------- PLACEMENT ---------------- */
+const NODES = [['ctrl01', 'cp', '4c · 8 GiB'], ['ctrl02', 'cp', '4c · 8 GiB'], ['ctrl03', 'cp', '4c · 8 GiB'], ['work01', 'w', '8c · 16 GiB'], ['work02', 'w', '8c · 16 GiB'], ['work03', 'w', '8c · 16 GiB'], ['work04', 'wl', '16c · 32 GiB'], ['work05', 'wl', '16c · 32 GiB']];
+let pod = 'runc', phase = 'done';
+function place() {
+  const kataPod = pod === 'kata' || pod === 'bk', prefer = pod === 'big' || pod === 'bk';
+  const labelsLive = phase === 'done' || phase === 'drain';
+  let anyOk = false, anyPref = false;
+  const html = NODES.map(([n, k, sz]) => {
+    const labels = []; const isW = k !== 'cp';
+    if (isW) labels.push(`extensions.talos.dev/kata-containers=${phase === 'bump' ? '3.33.0' : '3.32.0'}`);
+    if (isW && labelsLive) labels.push('runtime.hoomlab.io/kata=true');
+    if (k === 'wl' && labelsLive) labels.push('hoomlab.io/size=large');
+    if (!isW) labels.push('taint: control-plane:NoSchedule');
+    let v = 'ok', why = 'eligible';
+    if (!isW) { v = 'no'; why = kataPod ? 'no Kata extension + control-plane taint' : 'control-plane taint'; }
+    else if (phase === 'drain' && n === 'work04') { v = 'no'; why = 'cordoned (drained)'; }
+    else if (kataPod && phase === 'bump') { v = 'no'; why = 'class selects …=3.32.0; node says 3.33.0'; }
+    else if (prefer && k === 'wl' && labelsLive) { v = 'pref'; why = 'eligible + preferred (size=large)'; }
+    if (v === 'ok') anyOk = true; if (v === 'pref') anyPref = true;
+    return `<div class="nd ${v}"><h5>${n}</h5><div class="sz">${sz}</div><div class="lb">${labels.join('<br>')}</div><div class="vd">${why}</div></div>`;
+  }).join('');
+  $('#nodeGrid').innerHTML = html;
+  const mem = { runc: 'requests only', kata: 'requests + 250Mi / 250m overhead', big: 'requests only', bk: 'requests + 250Mi / 250m overhead (+ build-VM margin in requests)', bku: 'requests only' }[pod];
+  let msg = { runc: 'A plain service: runc, any worker.', kata: 'Opt-in isolation: <code>runtimeClassName: kata</code>. The class adds a hard <code>nodeSelector</code>.', big: 'A big runc service with preferred affinity on <code>hoomlab.io/size=large</code>.', bk: 'A Buildkite job from the <b>privileged</b> controller. <code>pod-spec-patch</code> sets <code>runtimeClassName: kata</code> plus the size preference, and <code>prohibit-kubernetes-plugin</code> stops a pipeline stripping it. Namespace PSA stays <code>privileged</code>.', bku: 'A Buildkite job from the <b>unprivileged</b> controller: stays on runc (OQ-22), and its namespace is <code>baseline</code>.' }[pod];
+  if (phase === 'now' && kataPod) msg += ' <span class="warn">Today the test class selects the versioned Talos label, which works until Kata is bumped.</span>';
+  if (phase === 'bump' && kataPod) msg += ' <b class="bad">Every Kata pod is Pending.</b> This is why bootstrap derives a version-free label (OQ-7).';
+  if (prefer && !labelsLive) msg += ' <span class="warn">No size label yet: the preference matches nothing, so placement is free.</span>';
+  if (phase === 'drain' && prefer) msg += ' With work04 drained, the scheduler still prefers work05 and falls back to the small workers. A preference never strands a pod.';
+  if (!anyOk && !anyPref) msg += ' <b class="bad">Unschedulable.</b>';
+  $('#placeOut').innerHTML = msg + `<br><span class="small">Budget: ${mem}.</span>`;
+}
+btnGroup('#podBtns', d => { pod = d.p; place(); });
+btnGroup('#phaseBtns', d => { phase = d.s; place(); });
+
+/* ---------------- APPLY STAGE ---------------- */
+stepper($('#applyStepper'), [
+  { t: 'Resolve the node', b: '<p>List cluster members through the configured endpoint and match by hostname (IMPL OQ-7 a). A config node with no member is an error naming it. <code>--node work04</code> scopes the run to one node.</p>' },
+  { t: 'Render', b: '<p>Class template plus node vars, through the same <code>text/template</code> and <code>.Vars</code> contract booty uses at install. The var assembly is shared with <code>internal/emit/catalog.go</code>, so emit and apply can\'t diverge.</p>' },
+  { t: 'Read live', b: '<p>Read the node\'s <code>MachineConfig</code> resource over the Talos API with <code>out/talosconfig</code> (never overwritten).</p>' },
+  { t: 'Normalise and diff', b: '<p>Decode both sides through machinery\'s loader and re-encode, so formatting and comments don\'t count. The configs are multi-document (3 documents per node), compared by kind and name with order ignored. <code>--dry-run</code> prints a unified diff with secrets redacted.</p><pre><code>apply-work04   differs\n  v1alpha1/machine.nodeLabels:\n+   hoomlab.io/size: large\ndry-run: 1 of 8 steps pending, nothing applied</code></pre>' },
+  { t: 'Schematic check', b: '<p>If the rendered <code>install.image</code> names a different schematic than the node\'s running extensions, that is an image change, not config. The stage prints the exact <code>talosctl upgrade --image factory.talos.dev/installer/&lt;schematic&gt;:v1.13.11</code> and never re-images itself. A merely <i>stale</i> stored <code>install.image</code> (the Stage 1 case) is ordinary drift and is applied.</p>' },
+  { t: 'Apply NO_REBOOT', b: '<p><code>ApplyConfiguration(mode = NO_REBOOT)</code> with the whole rendered config, so there is no patch format to get wrong. If Talos refuses because the change needs a reboot, the step errors, naming the node and the change, and tells you to reboot through cordon → drain. It never runs a bare <code>talosctl reboot</code>.</p>' },
+  { t: 'Re-run: 0 to apply', b: '<p>The Check now reports equal. The first fleet-wide dry-run must report <b>0 of 8</b> before any option is enabled: proof that render equals live after three rounds of hand patches.</p>' },
+]);
+
+/* ---------------- UPGRADE ---------------- */
+const UP = {
+  ok: [['run', 'Pre-flight', 'resolve node, role, target schematic'], ['run', 'cordon', 'kubectl cordon'], ['run', 'drain', 'PDB-respecting, 120 s'], ['run', 'delete leftovers', 'controller-owned pods only, graceful; bare pods abort the run'], ['run', 'wait until empty', 'up to 2400 s (CNPG stopDelay is 1800 s)'], ['run', 'settle', 'nothing Pending or Terminating'], ['run', 'talosctl upgrade', 'install is server-side (~1.6 s); reboot is client-side'], ['run', 'post-checks', 'version + Ready · extensions incl. kata · /dev/kvm · vhost-net · vhost-vsock · 11 cil_sock hooks · host-net ClusterIP curl'], ['run', 'uncordon', 'next node']],
+  cp: [['run', 'Pre-flight', 'control plane: one at a time'], ['inf', 'etcd snapshot', 'talosctl etcd snapshot → backups/'], ['inf', 'etcd 3/3', 'refuse if not all members are healthy'], ['run', 'cordon · drain · settle', ''], ['run', 'talosctl upgrade', ''], ['run', 'post-checks', '+ etcd back to 3/3'], ['run', 'uncordon', '']],
+  pdb: [['run', 'cordon', ''], ['warn', 'drain', 'Cannot evict pod: would violate PodDisruptionBudget (retries forever)'], ['skip', 'talosctl upgrade', 'never reached']],
+  nocordon: [['skip', 'cordon', 'skipped'], ['warn', 'talosctl reboot', 'graceful node shutdown evicts pods, ignoring PDBs'], ['warn', 'scheduler', 'still binds new pods to the dying node'], ['warn', 'kubelet', 'rejects each one: NodeShutdown'], ['warn', 'result', '93 pods of one tolerant operator in ~90 s, plus Failed debris to clean up']],
+  abandon: [['run', 'cordon', ''], ['run', 'talosctl upgrade', 'installed server-side: new UKI staged as the default boot entry'], ['warn', 'drain', 'hangs on a PDB; the operator Ctrl-Cs'], ['warn', 'state', '"installed, not rebooted": invisible over the API'], ['warn', 'later', 'any reboot (power blip, unrelated change) upgrades the node unattended']]};
+const UPM = {
+  ok: '<h4 class="ok">Upgraded</h4><p>"Upgraded" is a per-role checklist, not a version string. Most of these checks derive from config; the Cilium, CNPG and OpenBao facts need a home of their own.</p>',
+  cp: '<h4 class="ok">Control plane upgraded</h4><p>Snapshot first, quorum checked before and after. Workers first, then control planes one at a time (IMPL-0004 OQ-3).</p>',
+  pdb: '<h4 class="bad">Blocked by a zero-disruption PDB</h4><p>Ten PDBs never allowed a disruption: nine single-instance CNPG primaries plus OpenBao at <code>maxUnavailable: 0</code>. The fix was at the workloads: <code>enablePDB: false</code> on single-instance clusters, no OpenBao PDB at 1 replica, and a lower <code>smartShutdownTimeout</code>. Never use <code>--force</code>, which risks double-attaching an iSCSI volume.</p>',
+  nocordon: '<h4 class="bad">Pod storm (Observation 8)</h4><p>A reboot without a cordon is an unbudgeted drain. This is why the apply stage never reboots and why the test kit\'s reboot test now cordons first.</p>',
+  abandon: '<h4 class="warn">Installed, not rebooted (Observation 1)</h4><p>The install already happened; only the client-driven reboot didn\'t. A future <code>talos upgrade</code> step must be safe to re-run from any interruption, including this one, and detecting it is still unsolved.</p>'};
+btnGroup('#upBtns', d => { $('#upSteps').innerHTML = UP[d.u].map(([c, t, n]) => `<div class="step ${c}"><span class="ic">${{ run: '✓', inf: 'i', warn: '!', skip: '–' }[c]}</span><div><div class="t">${t}</div><div class="n">${n}</div></div></div>`).join(''); $('#upOut').innerHTML = UPM[d.u]; });
+
+/* ---------------- DECISIONS ---------------- */
+const OQ = [
+  [1, 'ver', 'Record-fix scope', 'Comment and IMPL-0003 note only, done first'], [2, 'ver', 'Kubernetes patch', '1.36.5 after Stage 1, pinned in HCL (done)'], [3, 'kata', 'Runtimes now', 'Kata only; gVisor, crun and NVIDIA deferred'],
+  [4, 'kata', 'Taints', 'Deferred: labels only; return as registerWithTaints + drift report'], [5, 'cli', 'Sugar', 'None: `labels` only'], [6, 'kata', 'Key prefix', '`hoomlab.io/`, one constant'],
+  [7, 'kata', 'Derived runtime label', '`runtime.hoomlab.io/kata=true` from the profile'], [8, 'kata', 'Cilium rule', 'Explicit `hostNamespaceOnly` required with Kata; bandwidth manager is an error'],
+  [9, 'kata', 'RuntimeClass owner', 'GitOps, against the documented contract'], [10, 'kata', 'Kata handler', 'Only `kata` (Cloud Hypervisor) exists'],
+  [11, 'kata', 'Placement without a CI pool', '`hoomlab.io/size=large` on work04/05 + preferred affinity'], [12, 'cli', 'Day-2 delivery', 'A new `talos apply` stage, multi-document aware'],
+  [13, 'opt', 'Where options live', 'Inside `talos.cluster`'], [14, 'opt', 'etcd metrics', 'Plain HTTP :2381 on control planes'], [15, 'opt', 'Log receiver', 'Alloy on a fixed LB IP (component to confirm)'],
+  [16, 'opt', 'Pull-through mirror', 'Off-cluster, on the booty host'], [17, 'opt', 'Image verification', 'siderolabs + factory keyless; terminal `*` skip'], [18, 'opt', 'metrics-server / KEDA', 'Opt-in `cluster addons` stage'],
+  [19, 'opt', 'Temporal scaler', 'Per-workload ScaledObject in GitOps'], [20, 'ver', 'When Kata enters the image', 'In the 1.13.11 re-image (done)'], [21, 'kata', 'RuntimeClasses', 'One `kata` class, 250Mi / 250m'], [22, 'kata', 'Unprivileged Buildkite', 'Stays on runc']];
+btnGroup('#oqBtns', d => { $('#oqTable').innerHTML = '<tr><th>OQ</th><th>Question</th><th>Answer</th></tr>' + OQ.filter(o => d.g === 'all' || o[1] === d.g).map(([n, g, q, a]) => `<tr><td>${n}</td><td>${q}</td><td>${a.replace(/`([^`]+)`/g, '<code>$1</code>')}</td></tr>`).join(''); });
+
+/* ---------------- ENV COLLISION ---------------- */
+const RESERVED = ['LISTEN_ADDR', 'METRICS_ADDR', 'LOG_LEVEL', 'POD_NAME'];
+function envCheck() { const k = $('#envIn').value.trim(), src = $('#envSrc').value; if (!k) { $('#envOut').textContent = ''; return; } $('#envOut').innerHTML = RESERVED.includes(k) ? `<span class="bad">Error: execution error at (hoomlab/templates/deployment.yaml):\nchart-managed env vars are shadowed: ${k} (reserved: ${RESERVED.join(' ')})</span>` : `<span class="ok">✓ renders: ${k} arrives via ${src === 'extraEnv' ? 'env (appended after the chart-managed list)' : 'envFrom'}</span>`; }
+$('#envIn').addEventListener('input', envCheck); $('#envSrc').addEventListener('change', envCheck); envCheck();
+
+/* ---------------- RELEASE SIM ---------------- */
+const RP = [['cmd/hoomlab/main.go', 'go'], ['go.mod', 'go'], ['Dockerfile', 'docker'], ['charts/hoomlab/values.yaml', 'helm'], ['tools/bootstrap/internal/emit/x.go', 'tools'], ['docs/design/0005-….md', 'docs'], ['.github/workflows/release.yml', 'wf']];
+const relOn = new Set(['cmd/hoomlab/main.go']); let relLabel = 'patch';
+const rc = $('#relPaths'); RP.forEach(([p]) => { const c = document.createElement('span'); c.className = 'chip' + (relOn.has(p) ? ' on' : ''); c.textContent = p; c.onclick = () => { relOn.has(p) ? relOn.delete(p) : relOn.add(p); c.classList.toggle('on'); relSim(); }; rc.appendChild(c); });
+function relSim() {
+  const k = new Set(RP.filter(([p]) => relOn.has(p)).map(([, t]) => t));
+  const S = (on, t, n, cls) => `<div class="step ${on ? (cls || 'run') : 'skip'}"><span class="ic">${on ? '✓' : '–'}</span><div><div class="t">${t}</div><div class="n">${on ? n : 'path-gated: not touched'}</div></div></div>`;
+  const go = k.has('go') || k.has('wf');
+  $('#relPR').innerHTML = [S(true, '<code>pr-labels</code>', `exactly one semver label: ${relLabel}`, 'inf'), S(true, '<code>changelog</code> drift check', 'git-cliff regenerated = committed', 'inf'),
+    S(go, '<code>ci.yml</code> lint · test-go · security · build', 'golangci-lint, go test -race, govulncheck'), S(k.has('docker') || go, '<code>ci.yml</code> docker-build', 'bake ci target (amd64), pushes :dev-ci'),
+    S(k.has('helm') || k.has('wf'), '<code>ci.yml</code> helm-unittest · ct lint/install', '8 suites on a kind cluster'), S(k.has('tools'), '<code>tools-ci.yml</code>', 'lint, test, build, govulncheck in tools/bootstrap'),
+    S(true, 'CodeQL · licenses · TruffleHog', 'always', 'inf')].join('');
+  const cur = [1, 4, 2], nx = relLabel === 'major' ? [cur[0] + 1, 0, 0] : relLabel === 'minor' ? [cur[0], cur[1] + 1, 0] : [cur[0], cur[1], cur[2] + 1];
+  const tag = 'v' + nx.join('.'), rel = relLabel !== 'dont-release';
+  const M = (t, n) => S(rel, t, rel ? n : 'skipped: no tag (dont-release)');
+  $('#relMain').innerHTML = [M('<code>bump-version</code>', `pushes tag <b>${tag}</b>`), M('<code>binary</code>', `goreleaser: hoomlab_${tag.slice(1)}_{linux,darwin}_{amd64,arm64}.tar.gz + SBOMs + checksums`), M('<code>image</code> + <code>image-slsa</code>', `bake release → ghcr.io/donaldgifford/hoomlab:${tag.slice(1)} (+ ${nx[0]}.${nx[1]}, latest) · cosign · SLSA3`), M('<code>chart</code> + <code>chart-slsa</code>', `helm package --version ${tag.slice(1)} --app-version ${tag} → oci://ghcr.io/donaldgifford/charts/hoomlab · cosign`),
+    S(true, '<code>changelog-regen</code>', 'commits CHANGELOG.md if changed', 'inf'),
+    k.has('tools') ? `<div class="step warn"><span class="ic">!</span><div><div class="t">tools/bootstrap changed</div><div class="n">${rel ? 'A tools-only PR should merge with <b>dont-release</b>; the main train would cut a service release for nothing.' : 'Correct: the main train stays inert. Ship the tool with <code>tools-release.yml</code> → tools/bootstrap/vX.Y.Z.'}</div></div></div>` : ''].join('');
+}
+btnGroup('#relLabel', d => { relLabel = d.l; relSim(); });
+
+/* ---------------- WORKFLOWS ---------------- */
+$('#wfTable').innerHTML = '<tr><th>Workflow</th><th>Trigger</th><th>What it gates or publishes</th></tr>' + [
+  ['ci.yml', 'push/PR to main', 'Path-gated (root module only): lint, race tests → Codecov, govulncheck, build, bake ci image, helm-unittest, ct lint + install on kind'],
+  ['tools-ci.yml', 'push/PR touching tools/**', 'golangci-lint, unit tests, build, govulncheck per tool'],
+  ['release.yml', 'push to main · dispatch (tag, dry_run)', 'bump-version → binary (goreleaser) · image (bake, cosign, SLSA) · chart (helm push, cosign, SLSA). Each is idempotent: it skips if the release already exists'],
+  ['tools-release.yml', 'dispatch (tool, version)', 'tests, cross-builds 4 archives + checksums, annotated tag tools/&lt;tool&gt;/vX.Y.Z, GitHub release'],
+  ['pr-labels.yml', 'PR', 'exactly one of major / minor / patch / dont-release'],
+  ['changelog.yml', 'PR', 'git-cliff drift check'], ['changelog-regen.yml', 'push to main', 'regenerates and commits CHANGELOG.md (loop-guarded on chore(changelog))'],
+  ['codeql.yml', 'push/PR · weekly', 'Go CodeQL'], ['security.yml', 'push · weekly', 'govulncheck → SARIF'], ['license-check.yml', 'push/PR', 'go-licenses allowlist'],
+  ['trufflehog.yml', 'push/PR', 'secret scan'], ['dependabot-severity-label.yml', 'PR target', 'labels Dependabot PRs by severity']].map(r => `<tr><td><code>${r[0]}</code></td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('');
+
+/* ---------------- ROADMAP ---------------- */
+(function () {
+  const svg = $('#roadSvg'); markers(svg);
+  const R = [['P0', 'DESIGN-0005', 'done, on 1.13.11', 8, 30, 'Everything in Part 4 lands first: the apply stage is the 1.14 rollout mechanism.'],
+    ['P1', 'Nodes 1.14', 'config unchanged', 146, 30, '<code>talosctl upgrade</code> per node, 1.13.11 → 1.14.2, Kubernetes stays 1.36. 1.13-shaped config still works on 1.14 nodes, because deprecated fields remain supported. A 1.14 <code>talosctl</code> is required, <code>--mode=reboot</code> is gone, and etcd metrics move to 2383.'],
+    ['P2', 'Machinery', 'v1.14, contract 1.13', 284, 30, 'Bump the module only. <code>RoleTemplates</code> derives the contract from <code>talos.version</code>, so output must be byte-identical. Proof: a zero diff.'],
+    ['P3', 'Contract', '1.14 multi-document', 422, 30, 'Set <code>talos.version = v1.14.x</code>. Completion moves wholesale onto documents (H3: a field and its document are mutually exclusive). An explicit <code>workload_isolation</code> setting and an explicit KubeProxyConfig avoid hazards H1/H2. The primary needs its own DHCPv4Config.'],
+    ['P4', 'Live apply', 'workers, then CPs', 560, 30, 'A full config replace through <code>talos apply</code>, never an additive patch: dry-run diff, one worker, the remaining workers, then control planes one at a time.'],
+    ['P5', 'sandboxd', 'spike on one worker', 698, 30, 'democratic-csi uses <code>hostPID</code> + <code>nsenter</code> into the host\'s <code>iscsiadm</code>. Spike attach, detach, resize, reschedule and reboot, for runc and Kata pods.'],
+    ['P6', 'Isolation on', 'if iSCSI survives', 852, 0, 'Enable workload isolation fleet-wide.'], ['P7', 'Isolation off', 'if it breaks', 852, 70, 'Keep it explicitly off, and say why.'],
+    ['K', 'Cilium 1.21 GA', '→ upgrade-k8s 1.37', 284, 150, 'In parallel after P1: Kubernetes 1.37 is gated on Cilium 1.21 being GA (1.20 is tested to 1.36). Secondary checks: KEDA and democratic-csi.']];
+  const by = {}; R.forEach(([k, t, s, x, y, b]) => {
+    const n = { x, y: y + 20, w: 134, h: 58 }; by[k] = n; const g = el('g', { class: 'node' }, svg);
+    el('rect', { class: 'box', x, y: n.y, width: 134, height: 58, rx: 9, fill: '#141a23', stroke: k === 'P0' ? '#5fd38d' : k === 'K' ? '#f0b84a' : '#c792ea', 'stroke-width': 1.6, 'stroke-dasharray': k === 'P0' ? '' : '5 4' }, g);
+    txt(g, x + 8, n.y + 18, `${k} · ${t}`, 11, '#e6edf3', { 'font-weight': 600 }); txt(g, x + 8, n.y + 36, s, 10.5, '#9aa5b5');
+    g.onclick = () => { $('#roadInfo').innerHTML = `<h4>${k}: ${t}</h4><p>${b}</p>`; };
+  });
+  [['P0', 'P1'], ['P1', 'P2'], ['P2', 'P3'], ['P3', 'P4'], ['P4', 'P5'], ['P5', 'P6'], ['P5', 'P7'], ['P1', 'K']].forEach(([a, b]) => { const p = by[a], q = by[b]; const [x1, y1] = edgePoint(p, q.x + 67, q.y + 29), [x2, y2] = edgePoint(q, p.x + 67, p.y + 29); el('path', { d: `M${x1},${y1} L${x2},${y2}`, stroke: '#c792ea', 'stroke-width': 1.6, fill: 'none', class: 'flow', 'marker-end': 'url(#mproadSvg)' }, svg); });
+})();
+
+/* ---------------- SOURCES ---------------- */
+$('#srcGrid').innerHTML = DOCS.map(d => `<div class="card"><h4><a href="${DFILE[d.id]}">${d.id}</a></h4><p>${d.title}</p><p class="small">${d.st}</p></div>`).join('') +
+  '<div class="card"><h4><a href="runbook/bootstrap-cluster.md">Runbook</a></h4><p>Bare Proxmox nodes → healthy Talos cluster</p></div><div class="card"><h4><a href="../tools/bootstrap/README.md">tools/bootstrap README</a></h4><p>Stages, flags, HCL, outputs</p></div><div class="card"><h4><a href="../charts/hoomlab/values.yaml">Chart values</a></h4><p>The deployment contract (values.yaml + schema)</p></div>';
+
+/* ---------------- NAV HIGHLIGHT ---------------- */
+const links = $$('nav a'); const secs = links.map(a => $(a.getAttribute('href')));
+addEventListener('scroll', () => { let i = secs.findIndex(s => s && s.getBoundingClientRect().top > 80) - 1; if (i < 0) i = secs.length - 1; links.forEach((a, j) => a.classList.toggle('active', j === Math.max(0, i))); });
+</script>
+</body></html>
