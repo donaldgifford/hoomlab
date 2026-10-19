@@ -549,17 +549,31 @@ After Phase 0 is complete (DESIGN-0005 OQ-2).
 
 #### Tasks
 
-- [ ] `talosctl -n <cp-ip> upgrade-k8s --to 1.36.5 --dry-run`, and
+- [x] `talosctl -n <cp-ip> upgrade-k8s --to 1.36.5 --dry-run`, and
       review it.
-- [ ] `talosctl -n <cp-ip> upgrade-k8s --to 1.36.5`.
-- [ ] Verify:
+      *(2026-10-19: all 8 nodes compatible; apiserver, controller-manager,
+      scheduler and kubelet v1.36.3 → 1.36.5; kube-proxy a no-op, since
+      Cilium replaces it; the only manifest change was CoreDNS v1.14.6 →
+      v1.14.7. `cilium-install`, the Cilium values and the Gateway API
+      CRDs were unchanged. No deprecations flagged.)*
+- [x] `talosctl -n <cp-ip> upgrade-k8s --to 1.36.5`.
+      *(2026-10-19: etcd snapshot first
+      (`~/drill/backups/etcd-pre-k8s-1.36.5.db`). Control-plane
+      components rolled one node at a time, then kubelets on all 8
+      (a kubelet restart, not a node shutdown, so no evictions), then
+      CoreDNS. Ended with `done`.)*
+- [x] Verify:
       - `kubectl get nodes` shows v1.36.5 everywhere;
       - `talosctl health` is green;
       - CI and CSI workloads are healthy.
+
+      *(2026-10-19: all 8 nodes Ready on v1.36.5; both CoreDNS replicas
+      Running on the new ReplicaSet; no pod in the cluster other than
+      Running or Completed.)*
 - [ ] Set `kubernetes_version = "1.36.5"` in `~/drill/bootstrap.hcl`.
       Run `talos emit --dry-run` (kubelet and control-plane image refs
       change), then `talos emit`, and sync and restart booty.
-- [ ] Update the example's commented `kubernetes_version` hint to
+- [x] Update the example's commented `kubernetes_version` hint to
       1.36.5 (code, on the Phase 0 branch if it is still open,
       otherwise the next PR).
 

@@ -84,7 +84,7 @@ cluster "homelab" {
     # Optional: pins the Kubernetes version the machineconfigs
     # install. Omitted means the default of the Talos machinery this
     # CLI was built against.
-    # kubernetes_version = "1.36.3"
+    # kubernetes_version = "1.36.5"
 
     # Optional: pin one Image Factory schematic ID for every node's
     # boot assets and installer image. Omitted means the vanilla
