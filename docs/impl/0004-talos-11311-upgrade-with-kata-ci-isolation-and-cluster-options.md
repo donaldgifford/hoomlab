@@ -670,13 +670,14 @@ DESIGN-0005 Phase 2. Every later live change depends on it.
       `.Vars` contract booty uses. Share the var assembly with
       `internal/emit/catalog.go`, so emit and apply can't diverge.
       *(2026-10-19: `Emitter.NodeConfigs` in `internal/emit/nodeconfig.go`; `groupVars` is now the one source of per-node vars for both the catalog groups and the render, and the goldens are byte-identical.)*
-- [ ] Normalisation:
+- [x] Normalisation:
       - decode live and rendered configs through machinery's config
         loader and re-encode, then compare;
       - the configs are **multi-document** (3 documents per node
         today), so compare documents by kind and name, ignoring order;
       - print a unified diff of the normalised YAML in `--dry-run`,
         with secrets redacted.
+      *(2026-10-19: `internal/talos/normalize.go` — per-document normal form keyed by kind/name and sorted; `configsEqual` for Check, `configDiff` (LCS, 2 lines context, secrets redacted via `RedactSecrets`) for dry-run output.)*
 - [ ] One `Step` per node, `apply-<node>`:
       - `Check` reports equal or differs;
       - `Apply` sends the whole rendered config with `NO_REBOOT`;
