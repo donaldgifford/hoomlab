@@ -125,12 +125,16 @@ this IMPL.
 | ---- | ----- |
 | Control-plane schematic (`base` + `iscsi`) | `88d1f7a5c4f1d3aba7df787c448c1d3d008ed29cfb34af53fa0df4336a56040b` (unchanged: schematic IDs depend on extensions, not version) |
 | Worker schematic (`base` + `iscsi` + `kata`) | `95025911f4700432cab85474232840e2e25477bf0c9e0db8f24bd8c396cc8a56` (iscsi-tools, kata-containers, qemu-guest-agent, util-linux-tools; resolved 2026-10-11) |
-| Kata extension version | *(from `talosctl get extensions`; expected 3.32.0)* |
-| Talos | v1.13.8 → *v1.13.11* |
+| Kata extension version | 3.32.0 (`kata` handler, Cloud Hypervisor); guest kernel 6.18.35 |
+| Talos | v1.13.8 → v1.13.11 (all 8 nodes, 2026-10-13; kernel 6.18.54) |
 | Kubernetes | v1.36.3 → *v1.36.5* |
-| CI workers | `work04`, `work05` (OQ-4) |
-| Label and taint key | `hoomlab.io/workload=ci` (DESIGN-0005 OQ-6) |
+| CI workers | ~~`work04`, `work05` (OQ-4)~~ none: no CI pool (DESIGN-0005 direction change, 2026-10-17). Kata test node: work05 |
+| Label and taint key | ~~`hoomlab.io/workload=ci`~~ unused; the `hoomlab.io/` prefix stands for later labels |
 | bootstrap release with the apply stage | *(Phase 3)* |
+| Kata cost per idle pod | ~200 MB host RSS (`cloud-hypervisor` ~150, shim ~44, `virtiofsd` ~5); MemAvailable −165 to −177 MiB. Build VMs: ~310–330 MB plus `virtiofsd` ~95 MB. RuntimeClass `overhead.podFixed` should be ~250Mi (the test used 130Mi) |
+| Kata cold start (cached images) | runc 1s, Kata 3s |
+| Kata storage path | iSCSI PVC mounted on the host, shared into the guest as `virtiofs` |
+| Kata + privileged builds | DinD (overlayfs on memory `emptyDir`) and privileged BuildKit both build. Drive them from a client container: `kubectl exec` into the daemon's own container fails (agent `cgroup.procs` EBUSY) |
 
 ## Implementation Phases
 
@@ -393,7 +397,7 @@ renders 1.13.11 configs, because the contract derives from
       label. The CI pool was never tainted on this cluster; this step
       creates it. Until then, ARC runners schedule on every worker.)*
 
-- [ ] Apply a test RuntimeClass `kata`:
+- [x] Apply a test RuntimeClass `kata`:
       - `handler: kata`;
       - `overhead.podFixed` 130Mi / 250m;
       - `scheduling.nodeSelector`
@@ -404,7 +408,7 @@ renders 1.13.11 configs, because the contract derives from
       `uname -r` differs from the host's.
       *(2026-10-18, pass on work05: host and runc pod `6.18.54-talos`,
       Kata guest `6.18.35`.)*
-- [ ] **T2 networking:** from the Kata pod, `nslookup
+- [x] **T2 networking:** from the Kata pod, `nslookup
       kubernetes.default` works, and an HTTP request to a ClusterIP
       Service and to a pod IP on another node both work.
       *(2026-10-18, pass: DNS resolves `kubernetes.default` to
@@ -412,7 +416,7 @@ renders 1.13.11 configs, because the contract derives from
       ClusterIP 200, and the podinfo pod IP on work01 200. With
       `bpf-lb-sock-hostns-only=true`, Service translation for the
       guest's traffic happens at tc, as designed.)*
-- [ ] **T3 storage:** a pod with a democratic-csi PVC (`iscsi-ssd-*`
+- [x] **T3 storage:** a pod with a democratic-csi PVC (`iscsi-ssd-*`
       class) under `kata` writes, reads, and survives a pod delete and
       recreate. Note the mount path (virtio-fs or block).
       *(2026-10-18, pass: write/read survived a pod delete and
@@ -421,7 +425,7 @@ renders 1.13.11 configs, because the contract derives from
       virtiofsd, not passed through as a block device. The host
       therefore still holds the filesystem, and I/O goes through
       virtiofsd; Phase 2 should weigh both.)*
-- [ ] **T4 privileged DinD:** a privileged `docker:dind` pod under
+- [x] **T4 privileged DinD:** a privileged `docker:dind` pod under
       `kata`, with `/var/lib/docker` on `emptyDir` `medium: Memory`,
       runs `docker build` of a small Dockerfile. Repeat with a
       loop-mounted ext4 image if `emptyDir` fails.
@@ -436,6 +440,11 @@ renders 1.13.11 configs, because the contract derives from
       sidecar. Re-run pending. Finding for Phase 2: under Kata, never
       exec into a container whose process manages cgroups; CI job
       specs must use the client-sidecar shape.)*
+      *(2026-10-18, re-run: pass. From the client container, `docker
+      info` shows dockerd on overlayfs (on the memory `emptyDir`,
+      inside the guest), cgroupfs driver, cgroup v2, guest kernel
+      6.18.35. `docker build` ran the `RUN` step (`kata-ci-test`) and
+      tagged `t4:latest`. No ext4 fallback needed.)*
 - [x] **T5 BuildKit:** `buildkitd`, privileged or rootless (record
       which), under `kata` builds the same image.
       *(2026-10-18, first run: the same exec EBUSY as T4; buildkitd
@@ -476,11 +485,49 @@ renders 1.13.11 configs, because the contract derives from
       `virtiofsd` 2–6 MB, about 200 MB. The DinD and BuildKit VMs:
       `cloud-hypervisor` 308–329 MB, `virtiofsd` 92–99 MB. Phase 5's
       RuntimeClass overhead should be about 250Mi.)*
-- [ ] **T8 reboot:** reboot the test node (work05), without a drain. Kata pods come back, and the
-      cilium#48420 check passes.
-- [ ] Write the findings into the [record table](#the-record-table)
+- [x] **T8 reboot:** reboot the test node (work05). Kata pods come
+      back, and the cilium#48420 check passes.
+      *(2026-10-19, pass: after the reboot, the pinned `kata-probe` and
+      `kata-storage` were Running on work05 again, with the PVC
+      reattached, and work05 had 11 socket-LB hooks. Finding: the run
+      used a plain `talosctl reboot` with no cordon. Kubelet graceful
+      node shutdown terminated work05's pods rather than letting them
+      restart in place, so the unpinned ones (atlantis, zot,
+      bazel-cache, `kata-anywhere`) were rescheduled to work04. While
+      the node shut down, its kubelet rejected new pods with
+      `NodeShutdown`, and the single cilium-operator replica (which
+      tolerates every taint) was recreated and bound back to work05
+      93 times in about 90 seconds, until the node returned. Its pods
+      are harmless debris, but a reboot must cordon first. The kit's T8
+      now cordons, and `upgrade-node.sh` always did. Recorded for
+      INV-0005.)*
+- [x] Write the findings into the [record table](#the-record-table)
       and a Phase 0 findings note under this phase. Clean up the test
       pods. Keep the test RuntimeClass until Phase 5 (OQ-6).
+
+**Phase 0 findings (for the Phase 2 gate)**
+
+- Kata works for what we need: kernel boundary (T1), Service and
+  cross-node networking (T2), iSCSI PVCs (T3, through virtiofs),
+  privileged DinD (T4) and privileged BuildKit (T5), placement through
+  the RuntimeClass (T6), and recovery after a reboot (T8).
+- **Exec constraint:** never `kubectl exec` into a Kata container whose
+  process nests cgroups (dockerd, buildkitd). Run builds from a client
+  container in the same pod, which is the shape Buildkite job pods
+  already use.
+- **Overhead:** ~200 MB per idle Kata pod, ~400 MB for a build VM.
+  Set the Phase 5 RuntimeClass `overhead.podFixed` to ~250Mi.
+- **Storage path:** volumes reach the guest through `virtiofsd` on the
+  host. Fine for CI caches, but weigh it for I/O-heavy workloads.
+- **Drains:** single-instance CNPG and OpenBao PDBs blocked every drain
+  until fixed at the workloads (`enablePDB: false`, no OpenBao PDB).
+- **Reboots:** always cordon first. A reboot without a cordon caused a
+  `NodeShutdown` pod storm (93 cilium-operator pods).
+- **Stored config:** `talosctl upgrade` does not update
+  `install.image`. The live configs are multi-document, so hand patches
+  must be strategic-merge.
+- **Direction:** no CI pool, no taints. Kata is opt-in per workload;
+  CI (the Buildkite privileged controller) is only the first user.
 
 #### Success Criteria
 

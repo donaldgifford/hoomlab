@@ -24,6 +24,7 @@ created: 2026-10-11
   - [Observation 5: the bootstrap step model already fits a node upgrade](#observation-5-the-bootstrap-step-model-already-fits-a-node-upgrade)
   - [Observation 6: the upgrade exposed data-safety gaps the tool should gate on](#observation-6-the-upgrade-exposed-data-safety-gaps-the-tool-should-gate-on)
   - [Observation 7: the blockers are defaults, and the workloads can fix them](#observation-7-the-blockers-are-defaults-and-the-workloads-can-fix-them)
+  - [Observation 8: a reboot without a cordon is an unbudgeted drain plus a pod storm](#observation-8-a-reboot-without-a-cordon-is-an-unbudgeted-drain-plus-a-pod-storm)
 - [Conclusion](#conclusion)
 - [Recommendation](#recommendation)
 - [References](#references)
@@ -286,9 +287,31 @@ tool's job from working around workloads to verifying them: a dry-run
 lists any PDB that can never allow a disruption as a finding to fix,
 not as something to delete.
 
+### Observation 8: a reboot without a cordon is an unbudgeted drain plus a pod storm
+
+IMPL-0004 0.5's T8 rebooted work05 with a plain `talosctl reboot`, no
+cordon and no drain, expecting its pods to restart in place. They did
+not. Kubelet graceful node shutdown terminated them, and their
+controllers replaced the unpinned ones on other nodes: atlantis, zot
+and bazel-cache moved to work04. This is effectively a drain that
+ignores PDBs.
+
+Worse, the node stayed schedulable while it shut down. The kubelet
+rejected every new pod with `NodeShutdown` ("Pod was rejected as the
+node is shutting down"), but the scheduler kept binding replacements to
+it. The single-replica cilium-operator, which tolerates every taint, was
+recreated 93 times in about 90 seconds, until the node came back. The
+upgrades in 0.4 had no such storm, because `talosctl upgrade` and the
+operator script both cordon first.
+
+So any owner that reboots a node must cordon it first, even when it
+deliberately skips the drain, and must clean up `NodeShutdown` pods
+afterwards: they stay as `Failed` debris until the pod GC threshold.
+"No drain" is never "pods restart in place".
+
 ## Conclusion
 
-**Answer:** Inconclusive (Open). Observations 1–7 establish the
+**Answer:** Inconclusive (Open). Observations 1–8 establish the
 requirements. Approach steps 2–6 are still to do: the machinery API
 split, the eviction-policy decision, existing tools, the step sketch,
 and the Kubernetes client.
