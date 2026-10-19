@@ -685,11 +685,12 @@ DESIGN-0005 Phase 2. Every later live change depends on it.
         the change. It tells the operator to reboot through cordon →
         drain (INV-0005), never a bare `talosctl reboot`.
       *(2026-10-19: `Applier.Steps` in `internal/talos/apply.go` resolves every address up front, then one `apply-<node>` step each; Check prints the redacted diff to `Out`; a `FailedPrecondition`/reboot refusal names the node and points at cordon → drain.)*
-- [ ] Schematic check: a mismatch between the rendered `install.image`
+- [x] Schematic check: a mismatch between the rendered `install.image`
       and the running extensions is reported with the exact
       `talosctl upgrade --image` command. It is never applied. A stored
       `install.image` that is merely stale (the Stage 1 case) is
       ordinary config drift and is applied.
+      *(2026-10-19: `Applier.checkSchematic` runs first in each Check — the running `schematic` extension version vs the ID parsed from the rendered installer ref; a mismatch fails with the exact `talosctl -n <addr> upgrade --image <img>` command and never applies.)*
 - [ ] `cmd/talos.go`: add `bootstrap talos apply [--dry-run] [--node
       NAME]`. It is not part of any default chain, and it reads
       `out/talosconfig`.

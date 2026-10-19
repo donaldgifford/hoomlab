@@ -153,6 +153,9 @@ func (a *Applier) Steps(ctx context.Context) ([]steps.Step, error) {
 // printing the redacted diff when it doesn't.
 func (a *Applier) check(n RenderedNode, addr string) func(context.Context) (bool, error) {
 	return func(ctx context.Context) (bool, error) {
+		if err := a.checkSchematic(ctx, n, addr); err != nil {
+			return false, err
+		}
 		live, err := a.Client.MachineConfig(ctx, addr)
 		if err != nil {
 			return false, fmt.Errorf("read %s machine config: %w", n.Name, err)
@@ -172,6 +175,44 @@ func (a *Applier) check(n RenderedNode, addr string) func(context.Context) (bool
 		}
 		return false, nil
 	}
+}
+
+// checkSchematic fails when the node runs a different Image Factory
+// schematic than its rendered install.image names. Changing the
+// running image is an upgrade, not a config apply, so the stage never
+// does it: the error carries the exact command for the operator. A
+// stored install.image that is merely stale while the schematic
+// matches is ordinary config drift, left to the diff and applied.
+func (a *Applier) checkSchematic(ctx context.Context, n RenderedNode, addr string) error {
+	exts, err := a.Client.Extensions(ctx, addr)
+	if err != nil {
+		return fmt.Errorf("read %s extensions: %w", n.Name, err)
+	}
+	running := "none"
+	for _, e := range exts {
+		if e.Name == schematicExtension {
+			running = e.Version
+			break
+		}
+	}
+	if want := imageSchematic(n.InstallImage); running != want {
+		return fmt.Errorf("talos node %s runs schematic %s but renders %s — that is an upgrade, which this stage never applies; run:\n"+
+			"  talosctl -n %s upgrade --image %s",
+			n.Name, running, want, addr, n.InstallImage)
+	}
+	return nil
+}
+
+// schematicExtension is the extension Image Factory images carry,
+// versioned by the schematic ID they were built from.
+const schematicExtension = "schematic"
+
+// imageSchematic extracts the schematic ID from an Image Factory
+// installer reference, factory.talos.dev/installer/<id>:<version>.
+func imageSchematic(image string) string {
+	ref := image[strings.LastIndex(image, "/")+1:]
+	id, _, _ := strings.Cut(ref, ":")
+	return id
 }
 
 // apply sends the whole rendered config in NO_REBOOT mode. A change
