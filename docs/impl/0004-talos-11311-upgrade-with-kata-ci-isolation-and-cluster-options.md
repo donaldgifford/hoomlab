@@ -695,11 +695,12 @@ DESIGN-0005 Phase 2. Every later live change depends on it.
       NAME]`. It is not part of any default chain, and it reads
       `out/talosconfig`.
       *(2026-10-19: `newTalosApplyCmd` — renders via `Emitter.NodeConfigs`, narrows with `--node`, dials `<output>/out/talosconfig` through `NewClientFromTalosconfig`, runs `Applier.Steps`; in no chain.)*
-- [ ] Tests:
+- [x] Tests:
       - table tests with the mock client for equal, differs, apply,
         refusal, unresolvable node, schematic mismatch, and document
         reordering (no drift);
       - a render round-trip that machinery `Validate` accepts.
+      *(2026-10-19: `internal/talos/apply_test.go` (mock client: equal, reordering, differs dry-run + apply, reboot refusal, other apply errors, schematic mismatch in both modes, unresolvable node, `NodeAddresses` plane skip / IPv6 fallback); `normalize_internal_test.go`; `internal/emit/nodeconfig_test.go` asserts `NodeConfigs` is byte-identical to what booty serves and passes metal-mode `Validate`.)*
 - [ ] Docs: a README stage section, a runbook section ("day-2 apply"),
       and an example invocation.
 - [ ] Release (OQ-9 a): the operator runs `tools-release.yml` once the
