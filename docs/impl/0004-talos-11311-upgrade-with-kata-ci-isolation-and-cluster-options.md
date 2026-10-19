@@ -691,9 +691,10 @@ DESIGN-0005 Phase 2. Every later live change depends on it.
       `install.image` that is merely stale (the Stage 1 case) is
       ordinary config drift and is applied.
       *(2026-10-19: `Applier.checkSchematic` runs first in each Check — the running `schematic` extension version vs the ID parsed from the rendered installer ref; a mismatch fails with the exact `talosctl -n <addr> upgrade --image <img>` command and never applies.)*
-- [ ] `cmd/talos.go`: add `bootstrap talos apply [--dry-run] [--node
+- [x] `cmd/talos.go`: add `bootstrap talos apply [--dry-run] [--node
       NAME]`. It is not part of any default chain, and it reads
       `out/talosconfig`.
+      *(2026-10-19: `newTalosApplyCmd` — renders via `Emitter.NodeConfigs`, narrows with `--node`, dials `<output>/out/talosconfig` through `NewClientFromTalosconfig`, runs `Applier.Steps`; in no chain.)*
 - [ ] Tests:
       - table tests with the mock client for equal, differs, apply,
         refusal, unresolvable node, schematic mismatch, and document

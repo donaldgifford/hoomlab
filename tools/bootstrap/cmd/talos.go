@@ -20,7 +20,7 @@ import (
 func newTalosCmd(opts *rootOptions) *cobra.Command {
 	root := &cobra.Command{
 		Use:   "talos",
-		Short: "Talos cluster stages: secrets, artifacts, VMs, and bootstrap",
+		Short: "Talos cluster stages: secrets, artifacts, VMs, bootstrap, and day-2 apply",
 	}
 	root.AddCommand(
 		newTalosSecretsCmd(opts),
@@ -29,6 +29,7 @@ func newTalosCmd(opts *rootOptions) *cobra.Command {
 		newTalosVMsCmd(opts),
 		newTalosBootstrapCmd(opts),
 		newTalosHealthCmd(opts),
+		newTalosApplyCmd(opts),
 	)
 	return root
 }
@@ -136,6 +137,99 @@ prove itself.`,
 	cmd.Flags().DurationVar(&wait, "wait", 10*time.Minute,
 		"how long the cluster gets to become healthy")
 	return cmd
+}
+
+func newTalosApplyCmd(opts *rootOptions) *cobra.Command {
+	var node string
+	cmd := &cobra.Command{
+		Use:   "apply",
+		Short: "Converge running nodes to the machine configs booty serves",
+		Long: `apply is the day-2 stage: it renders each node's machine config exactly
+as booty would serve it at install, compares it against the config the
+node is running, and applies the rendered config in NO_REBOOT mode where
+they differ. Comparison is per document after normalisation, so
+formatting, comments, and document order never count as drift; with
+--dry-run every differing node prints its diff, secrets redacted.
+
+It never reboots and never upgrades. A change Talos can only take with a
+reboot is refused and reported — take that reboot through cordon → drain.
+A node running a different Image Factory schematic than it renders is
+reported with the talosctl upgrade command to run.
+
+Node addresses come from Talos discovery, dialed with the credentials in
+<output>/out/talosconfig. apply is not part of any default chain; run it
+after editing the config, once the cluster is up.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			cluster, err := loadCluster(cmd, opts)
+			if err != nil {
+				return err
+			}
+			bundle, err := talos.LoadSecretsBundle(opts.secretsPath())
+			if errors.Is(err, talos.ErrSecretsMissing) {
+				return fmt.Errorf("%w\nrun: bootstrap talos secrets", err)
+			}
+			if err != nil {
+				return err
+			}
+			emitter := &emit.Emitter{Cluster: cluster, Bundle: bundle}
+			rendered, err := emitter.NodeConfigs(cmd.Context())
+			if err != nil {
+				return err
+			}
+			if rendered, err = selectNode(rendered, node); err != nil {
+				return err
+			}
+
+			client, err := talos.NewClientFromTalosconfig(cmd.Context(),
+				filepath.Join(opts.output, "out", "talosconfig"))
+			if err != nil {
+				return fmt.Errorf("%w\nrun: bootstrap talos bootstrap", err)
+			}
+			defer client.Close() //nolint:errcheck // read-side close on command exit
+
+			applier := &talos.Applier{
+				Cluster: cluster,
+				Client:  client,
+				Nodes:   rendered,
+				Out:     cmd.OutOrStdout(),
+			}
+			stage, err := applier.Steps(cmd.Context())
+			if err != nil {
+				return fmt.Errorf("talos apply: %w", err)
+			}
+			runner := steps.Runner{DryRun: opts.dryRun, Out: cmd.OutOrStdout()}
+			res, err := runner.Run(cmd.Context(), stage)
+			if err != nil {
+				return fmt.Errorf("talos apply: %w", err)
+			}
+			if opts.dryRun {
+				return nil
+			}
+			if _, err := fmt.Fprintf(cmd.OutOrStdout(),
+				"✓ %d talos nodes match their rendered configs (%d applied)\n",
+				len(stage), res.Applied); err != nil {
+				return fmt.Errorf("write summary: %w", err)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&node, "node", "", "converge only this node (default: every node)")
+	return cmd
+}
+
+// selectNode narrows the rendered nodes to the one --node names; an
+// empty name keeps them all.
+func selectNode(nodes []talos.RenderedNode, name string) ([]talos.RenderedNode, error) {
+	if name == "" {
+		return nodes, nil
+	}
+	for _, n := range nodes {
+		if n.Name == name {
+			return []talos.RenderedNode{n}, nil
+		}
+	}
+	return nil, fmt.Errorf("--node %q: no such talos node in the config", name)
 }
 
 func newTalosIPXECmd(opts *rootOptions) *cobra.Command {
