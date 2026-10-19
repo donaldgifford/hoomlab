@@ -127,7 +127,7 @@ this IMPL.
 | Worker schematic (`base` + `iscsi` + `kata`) | `95025911f4700432cab85474232840e2e25477bf0c9e0db8f24bd8c396cc8a56` (iscsi-tools, kata-containers, qemu-guest-agent, util-linux-tools; resolved 2026-10-11) |
 | Kata extension version | 3.32.0 (`kata` handler, Cloud Hypervisor); guest kernel 6.18.35 |
 | Talos | v1.13.8 → v1.13.11 (all 8 nodes, 2026-10-13; kernel 6.18.54) |
-| Kubernetes | v1.36.3 → *v1.36.5* |
+| Kubernetes | v1.36.3 → v1.36.5 (all 8 nodes, 2026-10-19; CoreDNS v1.14.7) |
 | CI workers | ~~`work04`, `work05` (OQ-4)~~ none: no CI pool (DESIGN-0005 direction change, 2026-10-17). Kata test node: work05 |
 | Label and taint key | ~~`hoomlab.io/workload=ci`~~ unused; the `hoomlab.io/` prefix stands for later labels |
 | bootstrap release with the apply stage | *(Phase 3)* |
@@ -573,6 +573,17 @@ After Phase 0 is complete (DESIGN-0005 OQ-2).
 - [ ] Set `kubernetes_version = "1.36.5"` in `~/drill/bootstrap.hcl`.
       Run `talos emit --dry-run` (kubelet and control-plane image refs
       change), then `talos emit`, and sync and restart booty.
+      *(2026-10-19: set; the `emit --dry-run` had `emit-artifacts`
+      pending and `boot-assets` done, as expected, since boot images
+      key on the Talos version and schematic only. After `talos emit`,
+      the closing dry-run is 0 of 2. Booty sync and restart: pending
+      operator confirmation. Follow-up for the CLI, outside this IMPL:
+      `--output` defaults to `./bootstrap-out` relative to the working
+      directory, while `--secrets` resolves next to the config. An
+      emit dry-run from another directory reports every step pending
+      instead of saying the output root doesn't exist. Default
+      `--output` next to the config, or have the dry-run name the
+      missing root.)*
 - [x] Update the example's commented `kubernetes_version` hint to
       1.36.5 (code, on the Phase 0 branch if it is still open,
       otherwise the next PR).
