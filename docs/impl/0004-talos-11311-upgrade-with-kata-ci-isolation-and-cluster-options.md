@@ -706,8 +706,10 @@ DESIGN-0005 Phase 2. Every later live change depends on it.
       *(2026-10-19: README "Day-2: `bootstrap talos apply`" section; runbook §16 "Day-2 apply" with the dry-run → apply invocation and the two stop conditions; `talos` and `emit` package docs updated.)*
 - [ ] Release (OQ-9 a): the operator runs `tools-release.yml` once the
       PR merges.
+      *(Deferred — human required: the operator runs `tools-release.yml` after merge.)*
 - [ ] **Live (operator):** `bootstrap talos apply --dry-run` across all
       8 nodes.
+      *(Deferred — human required: operator runs the live dry-run with the released binary; expect 0 pending.)*
 
 #### Success Criteria
 
