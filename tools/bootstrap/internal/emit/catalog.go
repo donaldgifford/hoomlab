@@ -47,19 +47,16 @@ type catalogProfile struct {
 	InstallImage string
 }
 
-// catalogGroup binds one VM to a profile by MAC. ExtraVars carries
-// the per-node interface identity (each slot's MAC, static slots'
-// addresses) the multi-interface machineconfig templates consume —
-// empty on single-interface nodes, whose templates read only
-// hostname (DESIGN-0004 OQ-2).
+// catalogGroup binds one VM to a profile by MAC. Vars are the
+// per-node template vars, from groupVars.
 type catalogGroup struct {
-	Name      string
-	Profile   string
-	MAC       string
-	ExtraVars []catalogVar
+	Name    string
+	Profile string
+	MAC     string
+	Vars    []catalogVar
 }
 
-// catalogVar is one rendered group var beside hostname.
+// catalogVar is one rendered group var.
 type catalogVar struct {
 	Key   string
 	Value string
@@ -127,10 +124,10 @@ func renderCatalog(cluster *config.Cluster, perNode []string) (map[string]File, 
 			return nil, fmt.Errorf("renderCatalog: node %q has no resolved primary interface", n.Name)
 		}
 		data.Nodes = append(data.Nodes, catalogGroup{
-			Name:      n.Name,
-			Profile:   profileNames[class{role: n.Role, schematic: perNode[i]}],
-			MAC:       nic.MAC,
-			ExtraVars: interfaceVars(n),
+			Name:    n.Name,
+			Profile: profileNames[class{role: n.Role, schematic: perNode[i]}],
+			MAC:     nic.MAC,
+			Vars:    groupVars(n),
 		})
 	}
 
@@ -147,6 +144,14 @@ func renderCatalog(cluster *config.Cluster, perNode []string) (map[string]File, 
 		out[path] = File{Data: rendered}
 	}
 	return out, nil
+}
+
+// groupVars is the per-node half of the template vars — what a
+// catalog group carries and what the apply stage's per-node render
+// uses (NodeConfigs), assembled here once so the two can't diverge:
+// hostname first, then the interface identity.
+func groupVars(n *config.TalosNode) []catalogVar {
+	return append([]catalogVar{{Key: talos.HostnameVarKey, Value: n.Name}}, interfaceVars(n)...)
 }
 
 // interfaceVars builds the per-node group vars a multi-interface
@@ -275,8 +280,7 @@ group "{{ .Name }}" {
     mac = "{{ .MAC }}"
   }
   vars = {
-    hostname = "{{ .Name }}"
-{{- range .ExtraVars }}
+{{- range .Vars }}
     {{ .Key }} = "{{ .Value }}"
 {{- end }}
   }

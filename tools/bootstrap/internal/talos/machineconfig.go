@@ -49,6 +49,14 @@ const (
 	InstallImageVar = `{{ index .Vars "install_image" }}`
 )
 
+// The template var keys the booty catalog defines: hostname per node
+// (group var), role and install_image per class (profile vars).
+const (
+	HostnameVarKey     = "hostname"
+	RoleVarKey         = "role"
+	InstallImageVarKey = "install_image"
+)
+
 // MACVarKey names the per-node catalog group var carrying one slot's
 // MAC. The machineconfig templates and the emitted groups both derive
 // the name from here, so the two sides agree by construction.

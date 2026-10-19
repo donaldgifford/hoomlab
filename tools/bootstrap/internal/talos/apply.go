@@ -96,3 +96,12 @@ func dialAddress(addresses []string, skip []netip.Prefix) (string, bool) {
 	}
 	return fallback, fallback != ""
 }
+
+// RenderedNode is one node's complete machine config as booty would
+// serve it, and the installer image its class renders — the input the
+// apply stage compares against the live node.
+type RenderedNode struct {
+	Name         string
+	Config       []byte
+	InstallImage string
+}

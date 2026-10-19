@@ -665,10 +665,11 @@ DESIGN-0005 Phase 2. Every later live change depends on it.
       configured endpoint and match each config node by hostname. A
       config node with no member is an error naming it.
       *(2026-10-19: `NodeAddresses` in `internal/talos/apply.go`; skips addresses inside static-plane prefixes (the storage plane is unroutable from the workstation) and prefers IPv4.)*
-- [ ] Renderer: a per-node config is the class template plus the
+- [x] Renderer: a per-node config is the class template plus the
       node's vars, rendered with the same `text/template` and
       `.Vars` contract booty uses. Share the var assembly with
       `internal/emit/catalog.go`, so emit and apply can't diverge.
+      *(2026-10-19: `Emitter.NodeConfigs` in `internal/emit/nodeconfig.go`; `groupVars` is now the one source of per-node vars for both the catalog groups and the render, and the goldens are byte-identical.)*
 - [ ] Normalisation:
       - decode live and rendered configs through machinery's config
         loader and re-encode, then compare;
