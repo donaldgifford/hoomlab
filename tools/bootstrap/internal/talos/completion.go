@@ -112,7 +112,15 @@ func applyCompletion(cfg *v1alpha1.Config, cluster *config.Cluster) error {
 			return err
 		}
 		cfg.ClusterConfig.ClusterNetwork.CNI = &v1alpha1.CNIConfig{CNIName: constants.NoneCNI}
-		cfg.ClusterConfig.ProxyConfig = &v1alpha1.ProxyConfig{Disabled: pointer.To(true)}
+		// Disable kube-proxy on the generated block rather than replacing
+		// it: the generator pins the control plane's proxy image, and so
+		// does talosctl upgrade-k8s even with the proxy off. Dropping it
+		// would make every upgraded control plane read as drift to the
+		// apply stage.
+		if cfg.ClusterConfig.ProxyConfig == nil {
+			cfg.ClusterConfig.ProxyConfig = &v1alpha1.ProxyConfig{}
+		}
+		cfg.ClusterConfig.ProxyConfig.Disabled = pointer.To(true)
 		cfg.ClusterConfig.ExtraManifests = append(
 			gatewayAPICRDURLs(tc.Cilium.GatewayAPIVersion),
 			cfg.ClusterConfig.ExtraManifests...)
