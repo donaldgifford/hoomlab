@@ -137,6 +137,14 @@ func TestCompletionCilium(t *testing.T) {
 		if got := dig(t, doc, "cluster", "proxy", "disabled"); got != true {
 			t.Errorf("%s: proxy disabled = %v, want true", name, got)
 		}
+		if name == "controlplane" {
+			// The generator's image pin survives the disable — live
+			// control planes carry it (talosctl upgrade-k8s keeps it
+			// current), so dropping it reads as drift to talos apply.
+			if got, _ := dig(t, doc, "cluster", "proxy", "image").(string); !strings.HasPrefix(got, "registry.k8s.io/kube-proxy:v") {
+				t.Errorf("controlplane: proxy image = %q, want the generator's kube-proxy pin", got)
+			}
+		}
 
 		// Cilium 1.20's required CRD set: 7 standard-channel files
 		// (TLSRoute and BackendTLSPolicy graduated there in Gateway
