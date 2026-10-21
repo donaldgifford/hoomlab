@@ -1,6 +1,6 @@
 module github.com/donaldgifford/hoomlab/tools/bootstrap
 
-go 1.26.9
+go 1.26.10
 
 require (
 	github.com/cosi-project/runtime v1.16.3
