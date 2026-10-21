@@ -704,12 +704,12 @@ DESIGN-0005 Phase 2. Every later live change depends on it.
 - [x] Docs: a README stage section, a runbook section ("day-2 apply"),
       and an example invocation.
       *(2026-10-19: README "Day-2: `bootstrap talos apply`" section; runbook §16 "Day-2 apply" with the dry-run → apply invocation and the two stop conditions; `talos` and `emit` package docs updated.)*
-- [ ] Release (OQ-9 a): the operator runs `tools-release.yml` once the
+- [x] Release (OQ-9 a): the operator runs `tools-release.yml` once the
       PR merges.
-      *(Deferred — human required: the operator runs `tools-release.yml` after merge.)*
-- [ ] **Live (operator):** `bootstrap talos apply --dry-run` across all
+      *(2026-10-20: `tools/bootstrap/v0.4.0` cut after #22; `v0.4.1` after #23, the kube-proxy fix below.)*
+- [x] **Live (operator):** `bootstrap talos apply --dry-run` across all
       8 nodes.
-      *(Deferred — human required: operator runs the live dry-run with the released binary; expect 0 pending.)*
+      *(2026-10-21: the first v0.4.0 survey had 3 of 8 pending. (1) All three control planes lacked `cluster.proxy.image` in the render: Cilium completion replaced the generated proxy block with `{disabled: true}`, dropping the pin that `talosctl upgrade-k8s` keeps current. That was a render bug, fixed in #23 / v0.4.1 by disabling the proxy on the generated block. (2) One control plane listed its storage address twice, which was real live drift; `talos apply --node` removed it with `NO_REBOOT`. After re-emit and a booty restart, the v0.4.1 survey reports 0 of 8 pending.)*
 
 #### Success Criteria
 
