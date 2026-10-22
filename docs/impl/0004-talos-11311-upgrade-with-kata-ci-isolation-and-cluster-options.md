@@ -746,11 +746,13 @@ OQ-4), and there is no sugar (OQ-5).
         naming NodeRestriction;
       - collisions with the completion labels.
       *(2026-10-22: `internal/config/labels.go` (`validateLabels`, run from `ValidateAndNormalize`): qualified-name syntax for keys and values; the kubelet `IsKubeletLabel` allow-list, so any other `kubernetes.io`/`k8s.io` key (incl. `node-role.` and `node-restriction.`) fails naming NodeRestriction; collisions with region/zone (with a cluster block) and the control-plane LB exclusion. The completion label keys now live in `config` and `talos` reads them from there.)*
-- [ ] `internal/talos/completion.go`: labels go to `machine.nodeLabels`,
+- [x] `internal/talos/completion.go`: labels go to `machine.nodeLabels`,
       merged with the completion labels.
-- [ ] `internal/talos/machineconfig.go` and `internal/emit/catalog.go`:
+      *(2026-10-22: `applyLabels` merges a class's labels into `machine.nodeLabels` after the completion labels; validation guarantees no overwrite.)*
+- [x] `internal/talos/machineconfig.go` and `internal/emit/catalog.go`:
       key templates by (role, label set). Class names are derived only
       when a role splits; single-class roles keep today's names.
+      *(2026-10-22: `RoleTemplates` → `ClassTemplates`, one template per (role, label set) with `Templates.For` lookup; a role with no nodes still gets its unlabelled class. Emit names a class with `labelSuffix` (`-` + 8 hex of sha256 over `LabelSetKey`) only when the role splits by labels **and** the set is non-empty, so unlabelled nodes of a split role (work01–03) keep today's template and profile names. Existing goldens are unchanged.)*
 - [ ] Tests:
       - load tests per rule, with positive controls;
       - goldens for a split worker role (plain and `size=large`);

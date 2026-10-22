@@ -94,7 +94,7 @@ what DESIGN-0005 adds, against its 1.14 home:
 
 | Field written today | Written by | 1.14 replacement | Notes |
 | ------------------- | ---------- | ---------------- | ----- |
-| `machine.install.image`, `.disk` (via `generate.WithInstallImage/Disk`) | `RoleTemplates` | `UnattendedInstallConfig` | Installer image is a templated var; the substitution target moves documents. Confirm `factory.talos.dev/installer/` vs `metal-installer/` for 1.14. |
+| `machine.install.image`, `.disk` (via `generate.WithInstallImage/Disk`) | `ClassTemplates` | `UnattendedInstallConfig` | Installer image is a templated var; the substitution target moves documents. Confirm `factory.talos.dev/installer/` vs `metal-installer/` for 1.14. |
 | hostname | `setHostname` | `HostnameConfig` | Already a document today — no change. |
 | `machine.nodeLabels` (region, zone, exclude-from-LB) | `applyCompletion` | `KubeNodeConfig` | Zone carries the hostname placeholder. DESIGN-0005 labels land here too. |
 | `machine.kubelet.extraConfig.registerWithTaints` (DESIGN-0005) | new | `KubeletConfig` | Not `machine.nodeTaints` — NodeRestriction blocks kubelet-applied taints on workers; the restriction carries over to `KubeNodeConfig`. |
@@ -114,7 +114,7 @@ what DESIGN-0005 adds, against its 1.14 home:
 
 ### The version-contract lever
 
-`RoleTemplates` already derives the machinery contract from
+`ClassTemplates` already derives the machinery contract from
 `talos.version` (`ParseContractFromVersion` →
 `generate.WithVersionContract`). That separates two changes the
 upgrade would otherwise couple:

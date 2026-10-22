@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"text/template"
 
-	"github.com/donaldgifford/hoomlab/tools/bootstrap/internal/config"
 	"github.com/donaldgifford/hoomlab/tools/bootstrap/internal/talos"
 )
 
 // NodeConfigs renders every node's complete machine config exactly as
-// booty serves it at install: the node's class template (per role)
+// booty serves it at install: the node's class template (per role
+// and label set)
 // executed with the node's template vars — the class's role and
 // install_image, plus the per-node group vars — through the same
 // text/template .Vars contract booty uses. It is the "render" half of
@@ -24,16 +24,16 @@ func (e *Emitter) NodeConfigs(ctx context.Context) ([]talos.RenderedNode, error)
 	if err != nil {
 		return nil, err
 	}
-	templates, err := talos.RoleTemplates(e.Bundle, e.Cluster)
+	templates, err := talos.ClassTemplates(e.Bundle, e.Cluster)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]talos.RenderedNode, 0, len(e.Cluster.Talos.Nodes))
 	for i := range e.Cluster.Talos.Nodes {
 		n := &e.Cluster.Talos.Nodes[i]
-		tmpl := templates.Worker
-		if n.Role == config.RoleControlPlane {
-			tmpl = templates.ControlPlane
+		tmpl, ok := templates.For(n.Role, n.ResolvedLabels())
+		if !ok {
+			return nil, fmt.Errorf("talos node %q: no template for its role and labels", n.Name)
 		}
 		image := talos.InstallImage(perNode[i], e.Cluster.Talos.Version)
 		vars := map[string]string{

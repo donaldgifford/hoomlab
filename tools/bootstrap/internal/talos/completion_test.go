@@ -90,9 +90,9 @@ func dig(t *testing.T, m map[string]any, path ...string) any {
 // without a cluster block emits exactly the legacy machinery shape —
 // no manifests, no rotation, no topology labels.
 func TestCompletionAbsentWithoutClusterBlock(t *testing.T) {
-	tmpl, err := talos.RoleTemplates(testBundle(t), testCluster())
+	tmpl, err := talos.ClassTemplates(testBundle(t), testCluster())
 	if err != nil {
-		t.Fatalf("RoleTemplates: %v", err)
+		t.Fatalf("ClassTemplates: %v", err)
 	}
 	// Machinery serializes empty extraManifests/inlineManifests lists
 	// even on legacy configs, so absence is asserted by content, not
@@ -104,7 +104,7 @@ func TestCompletionAbsentWithoutClusterBlock(t *testing.T) {
 		"gateway-api",
 		"cert-approver",
 	} {
-		if bytes.Contains(tmpl.ControlPlane, []byte(marker)) {
+		if bytes.Contains(controlPlaneOf(t, tmpl), []byte(marker)) {
 			t.Errorf("legacy controlplane template unexpectedly contains %q", marker)
 		}
 	}
@@ -117,17 +117,17 @@ func TestCompletionAbsentWithoutClusterBlock(t *testing.T) {
 // the topology labels with the zone riding the hostname expression.
 func TestCompletionCilium(t *testing.T) {
 	cluster := ciliumCluster(t)
-	tmpl, err := talos.RoleTemplates(testBundle(t), cluster)
+	tmpl, err := talos.ClassTemplates(testBundle(t), cluster)
 	if err != nil {
-		t.Fatalf("RoleTemplates: %v", err)
+		t.Fatalf("ClassTemplates: %v", err)
 	}
 	if len(tmpl.Warnings) != 0 {
 		t.Errorf("validation warnings: %q", tmpl.Warnings)
 	}
 
 	for name, data := range map[string][]byte{
-		"controlplane": tmpl.ControlPlane,
-		"worker":       tmpl.Worker,
+		"controlplane": controlPlaneOf(t, tmpl),
+		"worker":       workerOf(t, tmpl),
 	} {
 		doc := v1alpha1Doc(t, data)
 
@@ -223,13 +223,13 @@ func TestCompletionCilium(t *testing.T) {
 // proving the completion surface (zone label value included) survives
 // substitution as a loadable, valid metal config.
 func TestCompletionCiliumRoundTrip(t *testing.T) {
-	tmpl, err := talos.RoleTemplates(testBundle(t), ciliumCluster(t))
+	tmpl, err := talos.ClassTemplates(testBundle(t), ciliumCluster(t))
 	if err != nil {
-		t.Fatalf("RoleTemplates: %v", err)
+		t.Fatalf("ClassTemplates: %v", err)
 	}
 
 	image := talos.InstallImage("", talosVersion)
-	rendered := strings.ReplaceAll(string(tmpl.ControlPlane), talos.HostnameVar, "cp-01")
+	rendered := strings.ReplaceAll(string(controlPlaneOf(t, tmpl)), talos.HostnameVar, "cp-01")
 	rendered = strings.ReplaceAll(rendered, talos.InstallImageVar, image)
 
 	provider, err := configloader.NewFromBytes([]byte(rendered))
@@ -253,12 +253,12 @@ func TestCompletionCiliumRoundTrip(t *testing.T) {
 func TestCompletionCNINone(t *testing.T) {
 	cluster := testCluster()
 	cluster.Talos.Cluster = &config.TalosCluster{CNI: config.CNINone}
-	tmpl, err := talos.RoleTemplates(testBundle(t), cluster)
+	tmpl, err := talos.ClassTemplates(testBundle(t), cluster)
 	if err != nil {
-		t.Fatalf("RoleTemplates: %v", err)
+		t.Fatalf("ClassTemplates: %v", err)
 	}
 
-	doc := v1alpha1Doc(t, tmpl.Worker)
+	doc := v1alpha1Doc(t, workerOf(t, tmpl))
 	if got := dig(t, doc, "cluster", "network", "cni", "name"); got != "none" {
 		t.Errorf("cni name = %v, want none", got)
 	}
@@ -269,20 +269,20 @@ func TestCompletionCNINone(t *testing.T) {
 	if proxy, ok := clusterSection["proxy"].(map[string]any); ok && proxy["disabled"] == true {
 		t.Error("cni none disabled kube-proxy — that choice belongs to the operator's CNI")
 	}
-	if !bytes.Contains(tmpl.Worker, []byte("rotate-server-certificates")) {
+	if !bytes.Contains(workerOf(t, tmpl), []byte("rotate-server-certificates")) {
 		t.Error("completion knobs missing under cni none")
 	}
 }
 
 // TestCompletionMissingValuesFile pins the direct-call path: Load
-// normally validates the file exists, but RoleTemplates must still
+// normally validates the file exists, but ClassTemplates must still
 // fail loudly rather than seal an empty ConfigMap.
 func TestCompletionMissingValuesFile(t *testing.T) {
 	cluster := ciliumCluster(t)
 	cluster.Talos.Cluster.Cilium.Values = filepath.Join(t.TempDir(), "nope.yaml")
-	_, err := talos.RoleTemplates(testBundle(t), cluster)
+	_, err := talos.ClassTemplates(testBundle(t), cluster)
 	if err == nil || !strings.Contains(err.Error(), "read cilium values") {
-		t.Errorf("RoleTemplates error = %v, want a read cilium values failure", err)
+		t.Errorf("ClassTemplates error = %v, want a read cilium values failure", err)
 	}
 }
 
@@ -292,16 +292,16 @@ func TestCompletionMissingValuesFile(t *testing.T) {
 func TestCompletionDeterministic(t *testing.T) {
 	cluster := ciliumCluster(t)
 	bundle := testBundle(t)
-	first, err := talos.RoleTemplates(bundle, cluster)
+	first, err := talos.ClassTemplates(bundle, cluster)
 	if err != nil {
-		t.Fatalf("first RoleTemplates: %v", err)
+		t.Fatalf("first ClassTemplates: %v", err)
 	}
 	for i := range 3 {
-		again, err := talos.RoleTemplates(bundle, cluster)
+		again, err := talos.ClassTemplates(bundle, cluster)
 		if err != nil {
-			t.Fatalf("RoleTemplates round %d: %v", i, err)
+			t.Fatalf("ClassTemplates round %d: %v", i, err)
 		}
-		if !bytes.Equal(first.ControlPlane, again.ControlPlane) || !bytes.Equal(first.Worker, again.Worker) {
+		if !bytes.Equal(controlPlaneOf(t, first), controlPlaneOf(t, again)) || !bytes.Equal(workerOf(t, first), workerOf(t, again)) {
 			t.Fatalf("templates differ between renders (round %d)", i)
 		}
 	}

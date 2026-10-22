@@ -33,6 +33,26 @@ func testCluster() *config.Cluster {
 	}
 }
 
+// controlPlaneOf and workerOf return a role's unlabelled class
+// template — the one every node of a label-free config renders from.
+func controlPlaneOf(t *testing.T, tmpl talos.Templates) []byte {
+	t.Helper()
+	data, ok := tmpl.For(config.RoleControlPlane, nil)
+	if !ok {
+		t.Fatal("no unlabelled controlplane template")
+	}
+	return data
+}
+
+func workerOf(t *testing.T, tmpl talos.Templates) []byte {
+	t.Helper()
+	data, ok := tmpl.For(config.RoleWorker, nil)
+	if !ok {
+		t.Fatal("no unlabelled worker template")
+	}
+	return data
+}
+
 func testBundle(t *testing.T) *secrets.Bundle {
 	t.Helper()
 	contract, err := machcfg.ParseContractFromVersion(talosVersion)
@@ -64,33 +84,33 @@ func TestInstallImage(t *testing.T) {
 func TestTalosNameFlowsToClusterName(t *testing.T) {
 	bundle := testBundle(t)
 
-	inherited, err := talos.RoleTemplates(bundle, testCluster())
+	inherited, err := talos.ClassTemplates(bundle, testCluster())
 	if err != nil {
-		t.Fatalf("RoleTemplates (inherited): %v", err)
+		t.Fatalf("ClassTemplates (inherited): %v", err)
 	}
-	if !bytes.Contains(inherited.ControlPlane, []byte("clusterName: homelab")) {
+	if !bytes.Contains(controlPlaneOf(t, inherited), []byte("clusterName: homelab")) {
 		t.Error("without talos name, clusterName must inherit the cluster label")
 	}
 
 	named := testCluster()
 	named.Talos.Name = "fartlab"
-	tmpl, err := talos.RoleTemplates(bundle, named)
+	tmpl, err := talos.ClassTemplates(bundle, named)
 	if err != nil {
-		t.Fatalf("RoleTemplates (named): %v", err)
+		t.Fatalf("ClassTemplates (named): %v", err)
 	}
-	if !bytes.Contains(tmpl.ControlPlane, []byte("clusterName: fartlab")) {
+	if !bytes.Contains(controlPlaneOf(t, tmpl), []byte("clusterName: fartlab")) {
 		t.Error("talos name set: clusterName must carry it")
 	}
-	if bytes.Contains(tmpl.ControlPlane, []byte("clusterName: homelab")) {
+	if bytes.Contains(controlPlaneOf(t, tmpl), []byte("clusterName: homelab")) {
 		t.Error("talos name set: the PVE label leaked into clusterName")
 	}
 }
 
-func TestRoleTemplates(t *testing.T) {
+func TestClassTemplates(t *testing.T) {
 	bundle := testBundle(t)
-	tmpl, err := talos.RoleTemplates(bundle, testCluster())
+	tmpl, err := talos.ClassTemplates(bundle, testCluster())
 	if err != nil {
-		t.Fatalf("RoleTemplates: %v", err)
+		t.Fatalf("ClassTemplates: %v", err)
 	}
 	if len(tmpl.Warnings) != 0 {
 		t.Errorf("unexpected validation warnings: %q", tmpl.Warnings)
@@ -98,8 +118,8 @@ func TestRoleTemplates(t *testing.T) {
 
 	image := talos.InstallImage("", talosVersion)
 	for name, data := range map[string][]byte{
-		"controlplane": tmpl.ControlPlane,
-		"worker":       tmpl.Worker,
+		"controlplane": controlPlaneOf(t, tmpl),
+		"worker":       workerOf(t, tmpl),
 	} {
 		if !bytes.Contains(data, []byte(talos.HostnameVar)) {
 			t.Errorf("%s template is missing the hostname expression", name)
@@ -114,29 +134,29 @@ func TestRoleTemplates(t *testing.T) {
 			t.Errorf("%s template baked in the real installer image", name)
 		}
 	}
-	if !bytes.Contains(tmpl.ControlPlane, []byte("type: controlplane")) {
+	if !bytes.Contains(controlPlaneOf(t, tmpl), []byte("type: controlplane")) {
 		t.Error("controlplane template is missing type: controlplane")
 	}
-	if !bytes.Contains(tmpl.Worker, []byte("type: worker")) {
+	if !bytes.Contains(workerOf(t, tmpl), []byte("type: worker")) {
 		t.Error("worker template is missing type: worker")
 	}
 }
 
-// TestRoleTemplatesRoundTrip renders each template the way booty
+// TestClassTemplatesRoundTrip renders each template the way booty
 // would — substituting real values for the two expressions — and
 // re-validates the result with machinery's own loader in metal mode.
-func TestRoleTemplatesRoundTrip(t *testing.T) {
+func TestClassTemplatesRoundTrip(t *testing.T) {
 	bundle := testBundle(t)
 	cluster := testCluster()
-	tmpl, err := talos.RoleTemplates(bundle, cluster)
+	tmpl, err := talos.ClassTemplates(bundle, cluster)
 	if err != nil {
-		t.Fatalf("RoleTemplates: %v", err)
+		t.Fatalf("ClassTemplates: %v", err)
 	}
 
 	image := talos.InstallImage("", talosVersion)
 	for name, data := range map[string][]byte{
-		"controlplane": tmpl.ControlPlane,
-		"worker":       tmpl.Worker,
+		"controlplane": controlPlaneOf(t, tmpl),
+		"worker":       workerOf(t, tmpl),
 	} {
 		rendered := strings.ReplaceAll(string(data), talos.HostnameVar, "cp-01")
 		rendered = strings.ReplaceAll(rendered, talos.InstallImageVar, image)
@@ -195,19 +215,19 @@ func multiNICCluster(t *testing.T) *config.Cluster {
 	return c
 }
 
-// TestRoleTemplatesInterfaces pins the multi-interface machineconfig
+// TestClassTemplatesInterfaces pins the multi-interface machineconfig
 // shape (DESIGN-0004): every slot declared by deviceSelector with a
 // per-node MAC expression, the static slot carrying its address
 // expression and mtu, no placeholder identity leaked, and no routes —
 // a secondary plane must never attract the default route.
-func TestRoleTemplatesInterfaces(t *testing.T) {
-	tmpl, err := talos.RoleTemplates(testBundle(t), multiNICCluster(t))
+func TestClassTemplatesInterfaces(t *testing.T) {
+	tmpl, err := talos.ClassTemplates(testBundle(t), multiNICCluster(t))
 	if err != nil {
-		t.Fatalf("RoleTemplates: %v", err)
+		t.Fatalf("ClassTemplates: %v", err)
 	}
 	for name, data := range map[string][]byte{
-		"controlplane": tmpl.ControlPlane,
-		"worker":       tmpl.Worker,
+		"controlplane": controlPlaneOf(t, tmpl),
+		"worker":       workerOf(t, tmpl),
 	} {
 		s := string(data)
 		for _, want := range []string{
@@ -233,16 +253,16 @@ func TestRoleTemplatesInterfaces(t *testing.T) {
 	}
 }
 
-// TestRoleTemplatesSingleNICByteIdentical is the OQ-2 back-compat
+// TestClassTemplatesSingleNICByteIdentical is the OQ-2 back-compat
 // proof at the template layer: nodes with only their primary
 // interface produce templates byte-identical to a cluster that
 // declares no interfaces at all — no machine.network section, exactly
 // the v0.2.0 artifact.
-func TestRoleTemplatesSingleNICByteIdentical(t *testing.T) {
+func TestClassTemplatesSingleNICByteIdentical(t *testing.T) {
 	bundle := testBundle(t)
-	bare, err := talos.RoleTemplates(bundle, testCluster())
+	bare, err := talos.ClassTemplates(bundle, testCluster())
 	if err != nil {
-		t.Fatalf("RoleTemplates (no nodes): %v", err)
+		t.Fatalf("ClassTemplates (no nodes): %v", err)
 	}
 
 	single := testCluster()
@@ -256,27 +276,27 @@ func TestRoleTemplatesSingleNICByteIdentical(t *testing.T) {
 	if diags := single.ResolveInterfaces(); diags.HasErrors() {
 		t.Fatalf("resolve: %s", diags.Error())
 	}
-	got, err := talos.RoleTemplates(bundle, single)
+	got, err := talos.ClassTemplates(bundle, single)
 	if err != nil {
-		t.Fatalf("RoleTemplates (single NIC): %v", err)
+		t.Fatalf("ClassTemplates (single NIC): %v", err)
 	}
 
-	if !bytes.Equal(bare.ControlPlane, got.ControlPlane) {
+	if !bytes.Equal(controlPlaneOf(t, bare), controlPlaneOf(t, got)) {
 		t.Error("single-interface controlplane template differs from the v0.2.0 shape")
 	}
-	if !bytes.Equal(bare.Worker, got.Worker) {
+	if !bytes.Equal(workerOf(t, bare), workerOf(t, got)) {
 		t.Error("single-interface worker template differs from the v0.2.0 shape")
 	}
-	if bytes.Contains(got.ControlPlane, []byte("deviceSelector")) {
+	if bytes.Contains(controlPlaneOf(t, got), []byte("deviceSelector")) {
 		t.Error("single-interface template declares interfaces; OQ-2 says it must not")
 	}
 }
 
-// TestRoleTemplatesShapeDivergenceErrors pins the one-template-per-
+// TestClassTemplatesShapeDivergenceErrors pins the one-template-per-
 // role constraint: two nodes of a role with different interface
 // shapes cannot share a template, and the error names both sides
 // rather than emitting a template that silently fits only one.
-func TestRoleTemplatesShapeDivergenceErrors(t *testing.T) {
+func TestClassTemplatesShapeDivergenceErrors(t *testing.T) {
 	c := multiNICCluster(t)
 	dhcp, primary := true, true
 	c.Talos.Nodes = append(c.Talos.Nodes, config.TalosNode{
@@ -289,9 +309,9 @@ func TestRoleTemplatesShapeDivergenceErrors(t *testing.T) {
 		t.Fatalf("resolve: %s", diags.Error())
 	}
 
-	_, err := talos.RoleTemplates(testBundle(t), c)
+	_, err := talos.ClassTemplates(testBundle(t), c)
 	if err == nil {
-		t.Fatal("RoleTemplates accepted divergent shapes within a role")
+		t.Fatal("ClassTemplates accepted divergent shapes within a role")
 	}
 	for _, want := range []string{"work02", "work01", "shape"} {
 		if !strings.Contains(err.Error(), want) {
@@ -300,20 +320,20 @@ func TestRoleTemplatesShapeDivergenceErrors(t *testing.T) {
 	}
 }
 
-// TestRoleTemplatesMultiNICRoundTrip renders the multi-interface
+// TestClassTemplatesMultiNICRoundTrip renders the multi-interface
 // template the way booty would — real values for every expression —
 // and re-validates the result with machinery's own loader in metal
 // mode. The rendered interfaces block is the shape the live fleet
 // carries (IMPL-0003 Phase 2), by construction.
-func TestRoleTemplatesMultiNICRoundTrip(t *testing.T) {
+func TestClassTemplatesMultiNICRoundTrip(t *testing.T) {
 	cluster := multiNICCluster(t)
-	tmpl, err := talos.RoleTemplates(testBundle(t), cluster)
+	tmpl, err := talos.ClassTemplates(testBundle(t), cluster)
 	if err != nil {
-		t.Fatalf("RoleTemplates: %v", err)
+		t.Fatalf("ClassTemplates: %v", err)
 	}
 	image := talos.InstallImage("", talosVersion)
 
-	rendered := string(tmpl.Worker)
+	rendered := string(workerOf(t, tmpl))
 	for expr, value := range map[string]string{
 		talos.HostnameVar:                  "work01",
 		talos.InstallImageVar:              image,
@@ -349,43 +369,43 @@ func TestRoleTemplatesMultiNICRoundTrip(t *testing.T) {
 	}
 }
 
-// TestRoleTemplatesDeterministic pins the emit stage's byte-stable
+// TestClassTemplatesDeterministic pins the emit stage's byte-stable
 // invariant at its source: the same secrets bundle must always yield
 // byte-identical templates, or the emit diff-Check would report
 // permanent drift.
-func TestRoleTemplatesDeterministic(t *testing.T) {
+func TestClassTemplatesDeterministic(t *testing.T) {
 	bundle := testBundle(t)
 	cluster := testCluster()
 
-	first, err := talos.RoleTemplates(bundle, cluster)
+	first, err := talos.ClassTemplates(bundle, cluster)
 	if err != nil {
-		t.Fatalf("first RoleTemplates: %v", err)
+		t.Fatalf("first ClassTemplates: %v", err)
 	}
-	second, err := talos.RoleTemplates(bundle, cluster)
+	second, err := talos.ClassTemplates(bundle, cluster)
 	if err != nil {
-		t.Fatalf("second RoleTemplates: %v", err)
+		t.Fatalf("second ClassTemplates: %v", err)
 	}
-	if !bytes.Equal(first.ControlPlane, second.ControlPlane) {
+	if !bytes.Equal(controlPlaneOf(t, first), controlPlaneOf(t, second)) {
 		t.Error("controlplane template differs between renders")
 	}
-	if !bytes.Equal(first.Worker, second.Worker) {
+	if !bytes.Equal(workerOf(t, first), workerOf(t, second)) {
 		t.Error("worker template differs between renders")
 	}
 }
 
-func TestRoleTemplatesSchematicPin(t *testing.T) {
+func TestClassTemplatesSchematicPin(t *testing.T) {
 	cluster := testCluster()
 	cluster.Talos.SchematicID = "abc123"
-	tmpl, err := talos.RoleTemplates(testBundle(t), cluster)
+	tmpl, err := talos.ClassTemplates(testBundle(t), cluster)
 	if err != nil {
-		t.Fatalf("RoleTemplates: %v", err)
+		t.Fatalf("ClassTemplates: %v", err)
 	}
 	// The pinned image is still swapped for the expression — the pin
 	// changes the catalog's install_image var, not the template.
-	if bytes.Contains(tmpl.ControlPlane, []byte("abc123")) {
+	if bytes.Contains(controlPlaneOf(t, tmpl), []byte("abc123")) {
 		t.Error("pinned schematic leaked into the template")
 	}
-	if !bytes.Contains(tmpl.ControlPlane, []byte(talos.InstallImageVar)) {
+	if !bytes.Contains(controlPlaneOf(t, tmpl), []byte(talos.InstallImageVar)) {
 		t.Error("template is missing the install_image expression")
 	}
 }
