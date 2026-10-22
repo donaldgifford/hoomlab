@@ -753,12 +753,13 @@ OQ-4), and there is no sugar (OQ-5).
       key templates by (role, label set). Class names are derived only
       when a role splits; single-class roles keep today's names.
       *(2026-10-22: `RoleTemplates` → `ClassTemplates`, one template per (role, label set) with `Templates.For` lookup; a role with no nodes still gets its unlabelled class. Emit names a class with `labelSuffix` (`-` + 8 hex of sha256 over `LabelSetKey`) only when the role splits by labels **and** the set is non-empty, so unlabelled nodes of a split role (work01–03) keep today's template and profile names. Existing goldens are unchanged.)*
-- [ ] Tests:
+- [x] Tests:
       - load tests per rule, with positive controls;
       - goldens for a split worker role (plain and `size=large`);
       - **byte-identity**: a config without `labels` emits exactly
         today's tree;
       - `Validate` passes on every class template.
+      *(2026-10-22: `internal/config/labels_test.go` (each rule plus positive controls: allow-listed namespaces, worker-side LB exclusion, zone without a cluster block; resolution is copied). `internal/emit/labels_test.go`: `golden-labels` for a split worker role, plus unsplit labels keeping plain names. Byte-identity: the existing `golden`/`golden-multinic` sets are unchanged. `TestNodeConfigsMatchBooty` now also runs the labelled cluster (booty serves each class byte-identically, metal `Validate` passes, labels land in `machine.nodeLabels`); `TestClassTemplatesSplitByLabels` validates every class.)*
 - [ ] Docs: the example HCL and the README.
 - [ ] Release (OQ-9 a).
 - [ ] **Live (operator):**

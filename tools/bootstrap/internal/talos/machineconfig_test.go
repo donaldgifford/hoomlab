@@ -409,3 +409,66 @@ func TestClassTemplatesSchematicPin(t *testing.T) {
 		t.Error("template is missing the install_image expression")
 	}
 }
+
+// TestClassTemplatesSplitByLabels pins the class model: a role splits
+// by distinct label sets in first-node order, the labelled class
+// carries its labels in machine.nodeLabels, and every class validates
+// in metal mode once rendered.
+func TestClassTemplatesSplitByLabels(t *testing.T) {
+	dhcp, primary := true, true
+	nic := func(mac string) []config.NetworkInterface {
+		return []config.NetworkInterface{{Name: "net0", MAC: mac, Bridge: "vmbr0", DHCP: &dhcp, Primary: &primary}}
+	}
+	large := map[string]string{"hoomlab.io/size": "large"}
+	cluster := testCluster()
+	cluster.Talos.Nodes = []config.TalosNode{
+		{Name: "cp-01", Role: config.RoleControlPlane, Interfaces: nic("02:50:99:a2:00:01")},
+		{Name: "worker-01", Role: config.RoleWorker, Interfaces: nic("02:50:99:a2:01:01")},
+		{Name: "worker-02", Role: config.RoleWorker, Interfaces: nic("02:50:99:a2:01:02"), Labels: large},
+		{Name: "worker-03", Role: config.RoleWorker, Interfaces: nic("02:50:99:a2:01:03"), Labels: large},
+	}
+	if diags := cluster.ResolveInterfaces(); diags.HasErrors() {
+		t.Fatalf("resolve: %v", diags)
+	}
+
+	tmpl, err := talos.ClassTemplates(testBundle(t), cluster)
+	if err != nil {
+		t.Fatalf("ClassTemplates: %v", err)
+	}
+	if len(tmpl.Classes) != 3 {
+		t.Fatalf("got %d classes, want controlplane, worker, worker+large", len(tmpl.Classes))
+	}
+	labelled, ok := tmpl.For(config.RoleWorker, large)
+	if !ok {
+		t.Fatal("no template for the labelled worker class")
+	}
+	if !bytes.Contains(labelled, []byte("hoomlab.io/size: large")) {
+		t.Error("labelled worker template is missing its node label")
+	}
+	if bytes.Contains(workerOf(t, tmpl), []byte("hoomlab.io/size")) {
+		t.Error("unlabelled worker template carries the size label")
+	}
+	if _, ok := tmpl.For(config.RoleControlPlane, large); ok {
+		t.Error("For found a control-plane class no node belongs to")
+	}
+
+	for _, c := range tmpl.Classes {
+		provider, err := configloader.NewFromBytes(render(c.Data, "node-01"))
+		if err != nil {
+			t.Fatalf("%s %s: load: %v", c.Role, talos.LabelSetKey(c.Labels), err)
+		}
+		if _, err := provider.Validate(metalMode{}); err != nil {
+			t.Errorf("%s %s: invalid in metal mode: %v", c.Role, talos.LabelSetKey(c.Labels), err)
+		}
+	}
+}
+
+func TestLabelSetKey(t *testing.T) {
+	if got := talos.LabelSetKey(nil); got != "" {
+		t.Errorf("LabelSetKey(nil) = %q, want empty", got)
+	}
+	got := talos.LabelSetKey(map[string]string{"b": "2", "a": "1"})
+	if got != "a=1,b=2" {
+		t.Errorf("LabelSetKey = %q, want sorted a=1,b=2", got)
+	}
+}

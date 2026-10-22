@@ -10,6 +10,8 @@ import (
 
 	"github.com/donaldgifford/booty/catalog"
 	"github.com/donaldgifford/booty/render"
+	"github.com/donaldgifford/hoomlab/tools/bootstrap/internal/config"
+	"github.com/donaldgifford/hoomlab/tools/bootstrap/internal/emit"
 	"github.com/donaldgifford/hoomlab/tools/bootstrap/internal/talos"
 )
 
@@ -17,10 +19,23 @@ import (
 // NodeConfigs renders for a node is byte-for-byte the one booty serves
 // that node from the emitted tree, and machinery accepts it in metal
 // mode. If the two ever diverge, apply would converge nodes to a config
-// a fresh PXE boot would not reproduce.
+// a fresh PXE boot would not reproduce. The labelled cluster runs it
+// over every template class of a split role.
 func TestNodeConfigsMatchBooty(t *testing.T) {
-	e := testEmitter(t)
-	e.Cluster = multiNICTestCluster()
+	for name, cluster := range map[string]*config.Cluster{
+		"multi-nic": multiNICTestCluster(),
+		"labels":    labelledTestCluster(),
+	} {
+		t.Run(name, func(t *testing.T) {
+			e := testEmitter(t)
+			e.Cluster = cluster
+			nodeConfigsMatchBooty(t, e)
+		})
+	}
+}
+
+func nodeConfigsMatchBooty(t *testing.T, e *emit.Emitter) {
+	t.Helper()
 	tree, err := e.Tree(context.Background())
 	if err != nil {
 		t.Fatalf("Tree: %v", err)
@@ -74,6 +89,12 @@ func TestNodeConfigsMatchBooty(t *testing.T) {
 			}
 			if _, err := provider.Validate(metalMode{}); err != nil {
 				t.Errorf("rendered config invalid in metal mode: %v", err)
+			}
+			labels := provider.RawV1Alpha1().MachineConfig.MachineNodeLabels
+			for k, v := range cfgNode.ResolvedLabels() {
+				if labels[k] != v {
+					t.Errorf("machine.nodeLabels[%q] = %q, want %q", k, labels[k], v)
+				}
 			}
 		})
 	}
