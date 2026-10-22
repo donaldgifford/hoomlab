@@ -733,9 +733,10 @@ OQ-4), and there is no sugar (OQ-5).
 - [x] `internal/config/config.go`: add `Labels map[string]string` to
       `TalosNode`. Hold the `hoomlab.io/` prefix in one constant.
       *(2026-10-22: `TalosNode.Labels` (`labels`, optional) and `config.LabelPrefix = "hoomlab.io/"`.)*
-- [ ] `internal/config/resolve.go`: carry the explicit labels into the
+- [x] `internal/config/resolve.go`: carry the explicit labels into the
       resolved form. Phase 5 adds the derived runtime label beside
       them.
+      *(2026-10-22: the resolver stores a copy of the explicit labels; consumers read `TalosNode.ResolvedLabels()` (nil for an unlabelled node).)*
 - [ ] `internal/config/validate.go`:
       - qualified-name syntax for keys and values;
       - reject the NodeRestriction-restricted prefixes

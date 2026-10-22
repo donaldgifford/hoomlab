@@ -254,7 +254,8 @@ type TalosNode struct {
 	Profiles []string `hcl:"profiles,optional"`
 	// Labels are this node's explicit Kubernetes node labels — a
 	// placement preference, rendered to machine.nodeLabels
-	// (DESIGN-0005 Phase 3).
+	// (DESIGN-0005 Phase 3). Consumers read the resolved form,
+	// ResolvedLabels.
 	Labels map[string]string `hcl:"labels,optional"`
 	// Interfaces declares the node's NICs, one labeled block per PVE
 	// slot (net0, net1, …). At least one; exactly one resolves
@@ -265,6 +266,8 @@ type TalosNode struct {
 	// Cluster.ResolveInterfaces and read via ResolvedInterfaces —
 	// unexported so the resolver is the only write path.
 	resolved []ResolvedInterface
+	// labels is the resolved label set, read via ResolvedLabels.
+	labels map[string]string
 }
 
 // LabelPrefix is the label namespace hoomlab owns: the explicit

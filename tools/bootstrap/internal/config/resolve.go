@@ -10,6 +10,7 @@ package config
 // change instead of a refactor.
 
 import (
+	"maps"
 	"net/netip"
 	"regexp"
 	"slices"
@@ -47,6 +48,14 @@ func (n *TalosNode) ResolvedInterfaces() []ResolvedInterface {
 	return slices.Clone(n.resolved)
 }
 
+// ResolvedLabels returns the node's resolved label set: today the
+// explicit labels, and with DESIGN-0005 Phase 4 the derived runtime
+// label beside them — renderers never know which way a label arrived.
+// Nil for a node with none, or before resolution. The map is a copy.
+func (n *TalosNode) ResolvedLabels() map[string]string {
+	return maps.Clone(n.labels)
+}
+
 // PrimaryInterface returns the node's boot NIC — the one interface on
 // the primary plane. Resolved nodes always have exactly one; ok is
 // false on an unresolved node.
@@ -61,7 +70,8 @@ func (n *TalosNode) PrimaryInterface() (ResolvedInterface, bool) {
 
 // ResolveInterfaces resolves every node's network_interface blocks
 // against the declared network planes and stores the results,
-// readable via TalosNode.ResolvedInterfaces. ValidateAndNormalize
+// readable via TalosNode.ResolvedInterfaces, along with the node's
+// resolved labels (TalosNode.ResolvedLabels). ValidateAndNormalize
 // calls it as part of loading; tests that build clusters as struct
 // literals call it directly for the same effect. A node stores its
 // resolved interfaces only when every one of them resolved cleanly —
@@ -135,6 +145,9 @@ func resolveNode(planes map[string]*Network, n *TalosNode) hcl.Diagnostics {
 		return slotIndex(resolved[i].Slot) < slotIndex(resolved[j].Slot)
 	})
 	n.resolved = resolved
+	if len(n.Labels) > 0 {
+		n.labels = maps.Clone(n.Labels)
+	}
 	return diags
 }
 
