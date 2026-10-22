@@ -730,8 +730,9 @@ OQ-4), and there is no sugar (OQ-5).
 
 #### Tasks
 
-- [ ] `internal/config/config.go`: add `Labels map[string]string` to
+- [x] `internal/config/config.go`: add `Labels map[string]string` to
       `TalosNode`. Hold the `hoomlab.io/` prefix in one constant.
+      *(2026-10-22: `TalosNode.Labels` (`labels`, optional) and `config.LabelPrefix = "hoomlab.io/"`.)*
 - [ ] `internal/config/resolve.go`: carry the explicit labels into the
       resolved form. Phase 5 adds the derived runtime label beside
       them.
