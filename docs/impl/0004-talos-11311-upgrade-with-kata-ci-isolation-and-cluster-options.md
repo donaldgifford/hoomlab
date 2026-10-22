@@ -737,7 +737,7 @@ OQ-4), and there is no sugar (OQ-5).
       resolved form. Phase 5 adds the derived runtime label beside
       them.
       *(2026-10-22: the resolver stores a copy of the explicit labels; consumers read `TalosNode.ResolvedLabels()` (nil for an unlabelled node).)*
-- [ ] `internal/config/validate.go`:
+- [x] `internal/config/validate.go`:
       - qualified-name syntax for keys and values;
       - reject the NodeRestriction-restricted prefixes
         (`node-role.kubernetes.io/`,
@@ -745,6 +745,7 @@ OQ-4), and there is no sugar (OQ-5).
         or `k8s.io/` prefixes off the allow-list), with the error
         naming NodeRestriction;
       - collisions with the completion labels.
+      *(2026-10-22: `internal/config/labels.go` (`validateLabels`, run from `ValidateAndNormalize`): qualified-name syntax for keys and values; the kubelet `IsKubeletLabel` allow-list, so any other `kubernetes.io`/`k8s.io` key (incl. `node-role.` and `node-restriction.`) fails naming NodeRestriction; collisions with region/zone (with a cluster block) and the control-plane LB exclusion. The completion label keys now live in `config` and `talos` reads them from there.)*
 - [ ] `internal/talos/completion.go`: labels go to `machine.nodeLabels`,
       merged with the completion labels.
 - [ ] `internal/talos/machineconfig.go` and `internal/emit/catalog.go`:

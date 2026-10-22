@@ -34,8 +34,8 @@ const (
 // on the same iron would share it — and zone is the node, which makes
 // topology spread constraints meaningful on a small cluster.
 const (
-	labelTopologyRegion = "topology.kubernetes.io/region"
-	labelTopologyZone   = "topology.kubernetes.io/zone"
+	labelTopologyRegion = config.LabelTopologyRegion
+	labelTopologyZone   = config.LabelTopologyZone
 )
 
 // certApproverManifestURL is the pinned kubelet-serving-cert-approver

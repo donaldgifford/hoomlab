@@ -51,6 +51,7 @@ func (c *Cluster) ValidateAndNormalize() hcl.Diagnostics {
 	diags = append(diags, c.validateTalosCluster()...)
 	diags = append(diags, c.validateProfiles()...)
 	diags = append(diags, c.validateNetworks()...)
+	diags = append(diags, c.validateLabels()...)
 	diags = append(diags, c.ResolveInterfaces()...)
 	diags = append(diags, c.validateInterfaceMACs()...)
 	return diags
