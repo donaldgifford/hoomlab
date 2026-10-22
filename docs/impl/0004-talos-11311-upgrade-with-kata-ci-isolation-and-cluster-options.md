@@ -760,7 +760,8 @@ OQ-4), and there is no sugar (OQ-5).
         today's tree;
       - `Validate` passes on every class template.
       *(2026-10-22: `internal/config/labels_test.go` (each rule plus positive controls: allow-listed namespaces, worker-side LB exclusion, zone without a cluster block; resolution is copied). `internal/emit/labels_test.go`: `golden-labels` for a split worker role, plus unsplit labels keeping plain names. Byte-identity: the existing `golden`/`golden-multinic` sets are unchanged. `TestNodeConfigsMatchBooty` now also runs the labelled cluster (booty serves each class byte-identically, metal `Validate` passes, labels land in `machine.nodeLabels`); `TestClassTemplatesSplitByLabels` validates every class.)*
-- [ ] Docs: the example HCL and the README.
+- [x] Docs: the example HCL and the README.
+      *(2026-10-22: `examples/bootstrap.hcl` shows `labels` on worker-01 with the rules inline (still loads in `TestLoadExampleConfig`); README "Node labels" subsection; `config` package doc names the resolver and `labels.go`.)*
 - [ ] Release (OQ-9 a).
 - [ ] **Live (operator):**
       - add `labels = { "hoomlab.io/size" = "large" }` to work04 and

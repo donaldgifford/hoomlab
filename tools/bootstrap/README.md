@@ -55,6 +55,34 @@ export HOOMLAB_PVE_ROOT_PASSWORD='…'
 export HOOMLAB_CLOUDFLARE_API_TOKEN='…'
 ```
 
+### Node labels
+
+A node's `labels` map renders to its `machine.nodeLabels`, beside the
+labels the render sets itself:
+
+```hcl
+node "work04" {
+  role   = "worker"
+  # …
+  labels = { "hoomlab.io/size" = "large" }
+}
+```
+
+- Labels express a placement **preference**: workloads opt in with
+  preferred node affinity. Nothing is repelled; taints are not
+  supported yet.
+- Load rejects keys and values that aren't Kubernetes qualified names,
+  any `kubernetes.io` / `k8s.io` key NodeRestriction would refuse a
+  node (`node-role.kubernetes.io/…` among them), and keys the render
+  already sets (topology region/zone with a `cluster` block, the
+  control-plane load-balancer exclusion).
+- A role whose nodes carry different label sets renders one template
+  per set. Only the labelled classes gain a short label-set hash in
+  their template and profile names (`talos-worker-<hash>`); a config
+  without labels emits exactly the same tree as before.
+- On a running cluster, edit the labels, re-emit, and run
+  `bootstrap talos apply` — labels apply without a reboot.
+
 Global flags (CLI concerns, deliberately not config): `--config`
 (default `bootstrap.hcl`), `--output` (default `./bootstrap-out`),
 `--secrets` (default `secrets.yaml` next to the config), `--dry-run`,
