@@ -3,6 +3,7 @@ package talos
 import (
 	"bytes"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -28,7 +29,7 @@ const vanillaSchematicID = "376567988ad370138ad8b2698212367b8edcb69b5fd68c80be1f
 // hostnamePlaceholder stands in for the per-node hostname during
 // config generation and validation; the emitted template carries the
 // booty expression instead. The value never survives into any
-// artifact — RoleTemplates fails if the swap doesn't happen.
+// artifact — ClassTemplates fails if the swap doesn't happen.
 const hostnamePlaceholder = "bootstrap-hostname-placeholder"
 
 // installDisk is where Talos installs itself. The Phase 5 VM spec
@@ -106,23 +107,80 @@ func (metalMode) String() string        { return "metal" }
 func (metalMode) RequiresInstall() bool { return true }
 func (metalMode) InContainer() bool     { return false }
 
-// Templates is the pair of booty machineconfig templates, one per
-// role, plus any validation warnings machinery raised on the
+// Templates is the set of booty machineconfig templates, one per
+// class, plus any validation warnings machinery raised on the
 // underlying configs (the configs are valid; warnings are advisory).
 type Templates struct {
-	ControlPlane []byte
-	Worker       []byte
-	Warnings     []string
+	// Classes holds the control-plane classes first, then the worker
+	// classes, each role's in first-node order.
+	Classes  []ClassTemplate
+	Warnings []string
 }
 
-// RoleTemplates generates the two per-role machineconfig templates
-// for booty's overlay. Each is a complete machinery-generated config —
+// ClassTemplate is one template class: a role and the label set its
+// nodes share (DESIGN-0005 Phase 3). Labels are a map, so they can't
+// ride booty's textual var substitution the way the hostname does —
+// nodes with different label sets need different templates.
+type ClassTemplate struct {
+	Role   config.Role
+	Labels map[string]string // nil for the unlabelled class
+	Data   []byte
+}
+
+// For returns the template for a role and label set.
+func (t Templates) For(role config.Role, labels map[string]string) ([]byte, bool) {
+	key := LabelSetKey(labels)
+	for _, c := range t.Classes {
+		if c.Role == role && LabelSetKey(c.Labels) == key {
+			return c.Data, true
+		}
+	}
+	return nil, false
+}
+
+// LabelSetKey is the canonical form of a label set — sorted k=v pairs
+// joined by commas — that classes are keyed and named by. Empty for
+// no labels.
+func LabelSetKey(labels map[string]string) string {
+	keys := slices.Sorted(maps.Keys(labels))
+	pairs := make([]string, 0, len(keys))
+	for _, k := range keys {
+		pairs = append(pairs, k+"="+labels[k])
+	}
+	return strings.Join(pairs, ",")
+}
+
+// templateClasses lists the (role, label set) classes the cluster's
+// nodes fall into. A role with no nodes still gets its unlabelled
+// class, so both role templates always exist and a config without
+// labels emits exactly the two it always has.
+func templateClasses(cluster *config.Cluster) []ClassTemplate {
+	var classes []ClassTemplate
+	for _, role := range []config.Role{config.RoleControlPlane, config.RoleWorker} {
+		seen := map[string]bool{}
+		for i := range cluster.Talos.Nodes {
+			n := &cluster.Talos.Nodes[i]
+			labels := n.ResolvedLabels()
+			if key := LabelSetKey(labels); n.Role == role && !seen[key] {
+				seen[key] = true
+				classes = append(classes, ClassTemplate{Role: role, Labels: labels})
+			}
+		}
+		if len(seen) == 0 {
+			classes = append(classes, ClassTemplate{Role: role})
+		}
+	}
+	return classes
+}
+
+// ClassTemplates generates one machineconfig template per class for
+// booty's overlay. Each is a complete machinery-generated config —
 // seeded from the secrets bundle, validated in metal mode — with the
 // per-node values swapped for booty template expressions afterwards:
 // the hostname, the installer image, and (on multi-interface shapes)
 // each slot's MAC and static address. Validation always runs on the
 // real config, never on template text.
-func RoleTemplates(bundle *secrets.Bundle, cluster *config.Cluster) (Templates, error) {
+func ClassTemplates(bundle *secrets.Bundle, cluster *config.Cluster) (Templates, error) {
 	contract, err := machcfg.ParseContractFromVersion(cluster.Talos.Version)
 	if err != nil {
 		return Templates{}, fmt.Errorf("parse talos version %q: %w", cluster.Talos.Version, err)
@@ -147,21 +205,25 @@ func RoleTemplates(bundle *secrets.Bundle, cluster *config.Cluster) (Templates, 
 		return Templates{}, fmt.Errorf("machinery generate input: %w", err)
 	}
 
-	controlPlane, cpWarnings, err := roleTemplate(
-		in, machine.TypeControlPlane, image, cluster, shapes[config.RoleControlPlane])
-	if err != nil {
-		return Templates{}, fmt.Errorf("controlplane template: %w", err)
+	machineType := map[config.Role]machine.Type{
+		config.RoleControlPlane: machine.TypeControlPlane,
+		config.RoleWorker:       machine.TypeWorker,
 	}
-	worker, workerWarnings, err := roleTemplate(
-		in, machine.TypeWorker, image, cluster, shapes[config.RoleWorker])
-	if err != nil {
-		return Templates{}, fmt.Errorf("worker template: %w", err)
+	var out Templates
+	for _, c := range templateClasses(cluster) {
+		data, warnings, err := roleTemplate(in, machineType[c.Role], image, cluster, shapes[c.Role], c.Labels)
+		if err != nil {
+			return Templates{}, fmt.Errorf("%s template %s: %w", c.Role, LabelSetKey(c.Labels), err)
+		}
+		c.Data = data
+		out.Classes = append(out.Classes, c)
+		for _, w := range warnings {
+			if !slices.Contains(out.Warnings, w) {
+				out.Warnings = append(out.Warnings, w)
+			}
+		}
 	}
-	return Templates{
-		ControlPlane: controlPlane,
-		Worker:       worker,
-		Warnings:     append(cpWarnings, workerWarnings...),
-	}, nil
+	return out, nil
 }
 
 // slotShape is the machineconfig-relevant shape of one NIC slot —
@@ -174,11 +236,11 @@ type slotShape struct {
 }
 
 // roleShapes derives each role's interface shape from its nodes'
-// resolved interfaces. One machineconfig template exists per role
-// (booty's overlay contract — profiles split a role only by vars and
-// boot paths, never by template), so the nodes of a role must agree
-// on shape; a divergent node is an error naming both sides rather
-// than a template that silently fits only one of them.
+// resolved interfaces. A role's templates split only by label set
+// (DESIGN-0005 Phase 3) — interface shape stays a per-role rule, so
+// the nodes of a role must agree on it; a divergent node is an error
+// naming both sides rather than a template that silently fits only
+// one of them.
 func roleShapes(cluster *config.Cluster) (map[config.Role][]slotShape, error) {
 	shapes := make(map[config.Role][]slotShape, 2)
 	owners := make(map[config.Role]string, 2)
@@ -238,7 +300,7 @@ func formatShape(shape []slotShape) string {
 // manifests, CNI knobs, and network devices included.
 func roleTemplate(
 	in *generate.Input, machineType machine.Type, image string,
-	cluster *config.Cluster, shape []slotShape,
+	cluster *config.Cluster, shape []slotShape, labels map[string]string,
 ) (data []byte, warnings []string, err error) {
 	generated, err := in.Config(machineType)
 	if err != nil {
@@ -251,6 +313,7 @@ func roleTemplate(
 	if err := applyCompletion(provider.RawV1Alpha1(), cluster); err != nil {
 		return nil, nil, err
 	}
+	applyLabels(provider.RawV1Alpha1(), labels)
 	if len(shape) > 1 {
 		setInterfaces(provider.RawV1Alpha1(), shape)
 	}

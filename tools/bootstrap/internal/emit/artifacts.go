@@ -12,9 +12,12 @@ import (
 // mandatory: booty parses an overlay with the pattern "*/*" and looks
 // templates up by base name, so a flat layout matches nothing and a
 // matching base name replaces booty's secret-less built-in.
+// A labelled class of a split role inserts its label-set suffix
+// before templateExt (templatePath).
 const (
 	controlPlaneTemplatePath = "talos/controlplane.yaml.tmpl"
 	workerTemplatePath       = "talos/worker.yaml.tmpl"
+	templateExt              = ".yaml.tmpl"
 )
 
 // The remaining emitted paths, relative to the emit root.

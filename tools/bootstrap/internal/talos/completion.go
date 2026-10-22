@@ -3,6 +3,7 @@ package talos
 import (
 	"bytes"
 	"fmt"
+	"maps"
 	"os"
 	"text/template"
 
@@ -34,8 +35,8 @@ const (
 // on the same iron would share it — and zone is the node, which makes
 // topology spread constraints meaningful on a small cluster.
 const (
-	labelTopologyRegion = "topology.kubernetes.io/region"
-	labelTopologyZone   = "topology.kubernetes.io/zone"
+	labelTopologyRegion = config.LabelTopologyRegion
+	labelTopologyZone   = config.LabelTopologyZone
 )
 
 // certApproverManifestURL is the pinned kubelet-serving-cert-approver
@@ -65,6 +66,20 @@ func gatewayAPICRDURLs(version string) []string {
 		base + "gateway.networking.k8s.io_backendtlspolicies.yaml",
 		base + "gateway.networking.k8s.io_tlsroutes.yaml",
 	}
+}
+
+// applyLabels merges a class's explicit labels into machine.nodeLabels
+// beside the completion labels and machinery's own (DESIGN-0005 Phase
+// 3). Load validation rejects a key that collides with either, so the
+// merge never overwrites. No labels leaves the config untouched.
+func applyLabels(cfg *v1alpha1.Config, labels map[string]string) {
+	if len(labels) == 0 {
+		return
+	}
+	if cfg.MachineConfig.MachineNodeLabels == nil {
+		cfg.MachineConfig.MachineNodeLabels = map[string]string{}
+	}
+	maps.Copy(cfg.MachineConfig.MachineNodeLabels, labels)
 }
 
 // applyCompletion mutates the machinery-generated config with the

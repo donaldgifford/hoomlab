@@ -1,0 +1,13 @@
+#!ipxe
+# The embedded script — iPXE runs THIS in place of its autoboot sequence
+# (a stock binary would re-DHCP, be handed ipxe.efi again, and chainload
+# forever). Autoboot is also what would have configured the NIC, so net0
+# has no address yet: the dhcp below is load-bearing. The chain hands off
+# to booty's served /boot.ipxe, which forwards this machine's identity to
+# the /ipxe?mac=... lookup.
+dhcp || goto failed
+chain http://10.0.10.5:8080/boot.ipxe || goto failed
+
+:failed
+echo booty: could not chainload boot script from http://10.0.10.5:8080
+shell
