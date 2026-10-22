@@ -3,6 +3,24 @@
 All notable changes to this project are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
+## [unreleased]
+
+### Features
+
+- *(bootstrap)* Accept per-node labels in the config
+- *(bootstrap)* Carry node labels into the resolved form
+- *(bootstrap)* Validate node labels at load
+- *(bootstrap)* Split machineconfig templates by node label set
+
+### Documentation
+
+- *(bootstrap)* Document node labels
+- *(impl)* Defer the phase 4 operator tasks
+
+### Testing
+
+- *(bootstrap)* Cover node labels and template classes
+
 ## [tools/bootstrap/v0.4.1] - 2026-10-20
 
 ### Bug Fixes
