@@ -763,12 +763,14 @@ OQ-4), and there is no sugar (OQ-5).
 - [x] Docs: the example HCL and the README.
       *(2026-10-22: `examples/bootstrap.hcl` shows `labels` on worker-01 with the rules inline (still loads in `TestLoadExampleConfig`); README "Node labels" subsection; `config` package doc names the resolver and `labels.go`.)*
 - [ ] Release (OQ-9 a).
+      *(Deferred — human required: the operator runs `tools-release.yml` after merge.)*
 - [ ] **Live (operator):**
       - add `labels = { "hoomlab.io/size" = "large" }` to work04 and
         work05 in `~/drill/bootstrap.hcl`;
       - run `talos emit` and sync and restart booty;
       - run `talos apply --dry-run` (only work04/05 differ, by the
         label), then `talos apply --node work04` and `--node work05`.
+      *(Deferred — human required: operator edits `~/drill/bootstrap.hcl`, re-emits, restarts booty, and applies with the released binary.)*
 
 #### Success Criteria
 
