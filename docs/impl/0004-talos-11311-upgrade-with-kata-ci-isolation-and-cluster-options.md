@@ -817,6 +817,16 @@ DESIGN-0005 Phase 4.
             `~/drill/cilium-values.yaml` and the GitOps Cilium values.
             It is already in effect, so expect a no-op agent restart.
             Run the cilium#48420 check after.
+            *(2026-10-23: before the change, every agent already reported
+            `Socket LB Coverage: Hostns-only` and `cilium-config` had
+            `bpf-lb-sock-hostns-only: true`, forced by `gatewayAPI.enabled`;
+            the GitOps values had no `socketLB` key. With the block added,
+            `argocd app diff cilium` came back empty, so nothing restarted.
+            cilium#48420 baseline passes on all 8 nodes: 11 `cil_sock*`
+            hooks at the root cgroup (`/sys/fs/cgroup`, read via
+            `bpftool` in each agent) and a 401 from the `kubernetes`
+            ClusterIP over host network. The `~/drill/cilium-values.yaml`
+            edit is still open.)*
       - [ ] Run `talos emit`, sync booty, then `talos apply` on all
             workers so the derived label goes live. `--dry-run` reports
             0 after.
