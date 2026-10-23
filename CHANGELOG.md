@@ -9,6 +9,24 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 - *(impl)* Record the phase 3 live talos apply results
 
+## [tools/bootstrap/v0.5.0] - 2026-10-22
+
+### Features
+
+- *(bootstrap)* Accept per-node labels in the config
+- *(bootstrap)* Carry node labels into the resolved form
+- *(bootstrap)* Validate node labels at load
+- *(bootstrap)* Split machineconfig templates by node label set
+
+### Documentation
+
+- *(bootstrap)* Document node labels
+- *(impl)* Defer the phase 4 operator tasks
+
+### Testing
+
+- *(bootstrap)* Cover node labels and template classes
+
 ## [tools/bootstrap/v0.4.1] - 2026-10-20
 
 ### Bug Fixes
