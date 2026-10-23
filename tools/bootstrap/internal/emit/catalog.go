@@ -2,7 +2,10 @@ package emit
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"strings"
 	"text/template"
 
 	"github.com/donaldgifford/hoomlab/tools/bootstrap/internal/config"
@@ -16,6 +19,49 @@ const (
 	profilesPath  = "catalog/10-profiles.hcl"
 	groupsPath    = "catalog/20-groups.hcl"
 )
+
+// labelSplits reports, per role, whether its nodes carry more than one
+// label set — whether label-set suffixes join the role's template and
+// profile names.
+func labelSplits(cluster *config.Cluster) map[config.Role]bool {
+	sets := make(map[config.Role]map[string]bool, 2)
+	for i := range cluster.Talos.Nodes {
+		n := &cluster.Talos.Nodes[i]
+		if sets[n.Role] == nil {
+			sets[n.Role] = map[string]bool{}
+		}
+		sets[n.Role][talos.LabelSetKey(n.ResolvedLabels())] = true
+	}
+	splits := make(map[config.Role]bool, len(sets))
+	for role, keys := range sets {
+		splits[role] = len(keys) > 1
+	}
+	return splits
+}
+
+// labelSuffix is the name suffix for a label set: a short hash of its
+// canonical form, and only when the role splits by labels and the set
+// is non-empty. The unlabelled class of a split role and every class
+// of an unsplit one keep the plain name, so a config without labels —
+// and the unlabelled nodes of one with them — names everything as
+// before.
+func labelSuffix(labels map[string]string, split bool) string {
+	if !split || len(labels) == 0 {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(talos.LabelSetKey(labels)))
+	return "-" + hex.EncodeToString(sum[:])[:8]
+}
+
+// templatePath is the overlay path of a class's machineconfig
+// template, relative to the templates directory.
+func templatePath(role config.Role, labels map[string]string, splits map[config.Role]bool) string {
+	base := workerTemplatePath
+	if role == config.RoleControlPlane {
+		base = controlPlaneTemplatePath
+	}
+	return strings.TrimSuffix(base, templateExt) + labelSuffix(labels, splits[role]) + templateExt
+}
 
 // profileFor maps a config role to the base catalog profile name.
 func profileFor(role config.Role) string {
@@ -34,11 +80,11 @@ type catalogData struct {
 	Nodes        []catalogGroup
 }
 
-// catalogProfile is one boot recipe — a node class in DESIGN-0002
-// terms: a role plus a schematic. The machineconfig template is
-// shared per role (the installer image is a profile var, so classes
-// differ only in vars and boot paths), while the kernel, initramfs,
-// and installer image are the schematic's own.
+// catalogProfile is one boot recipe — a node class: a role, a
+// schematic, and a label set. The machineconfig template is shared
+// per (role, label set) — the installer image is a profile var, so
+// schematic classes differ only in vars and boot paths — while the
+// kernel, initramfs, and installer image are the schematic's own.
 type catalogProfile struct {
 	Name         string
 	Role         string
@@ -64,10 +110,11 @@ type catalogVar struct {
 
 // renderCatalog renders the three catalog files for the cluster.
 // perNode carries each node's resolved schematic ID, indexed like
-// cluster.Talos.Nodes; the distinct (role, schematic) pairs become
-// the profiles. A role with a single class keeps its plain profile
-// name; only when profiles split a role into classes does the
-// schematic's short ID join the name.
+// cluster.Talos.Nodes; the distinct (role, schematic, label set)
+// triples become the profiles. A role with a single class keeps its
+// plain profile name; the schematic's short ID joins the name only
+// when schematics split the role, and the label-set hash only when
+// labels do (labelSuffix).
 func renderCatalog(cluster *config.Cluster, perNode []string) (map[string]File, error) {
 	if len(perNode) != len(cluster.Talos.Nodes) {
 		return nil, fmt.Errorf(
@@ -79,36 +126,41 @@ func renderCatalog(cluster *config.Cluster, perNode []string) (map[string]File, 
 		BootyURL:     cluster.Talos.Booty.URL,
 	}
 
-	templateFor := map[config.Role]string{
-		config.RoleControlPlane: controlPlaneTemplatePath,
-		config.RoleWorker:       workerTemplatePath,
-	}
 	type class struct {
 		role      config.Role
 		schematic string
+		labels    string // LabelSetKey
 	}
-	classesPerRole := make(map[config.Role]int)
-	profileNames := make(map[class]string)
-	var classes []class
+	classOf := func(i int) class {
+		n := &cluster.Talos.Nodes[i]
+		return class{role: n.Role, schematic: perNode[i], labels: talos.LabelSetKey(n.ResolvedLabels())}
+	}
+	splits := labelSplits(cluster)
+	schematicsPerRole := make(map[config.Role]map[string]bool)
 	for i := range cluster.Talos.Nodes {
-		c := class{role: cluster.Talos.Nodes[i].Role, schematic: perNode[i]}
+		c := classOf(i)
+		if schematicsPerRole[c.role] == nil {
+			schematicsPerRole[c.role] = map[string]bool{}
+		}
+		schematicsPerRole[c.role][c.schematic] = true
+	}
+	profileNames := make(map[class]string)
+	for i := range cluster.Talos.Nodes {
+		c := classOf(i)
 		if _, seen := profileNames[c]; seen {
 			continue
 		}
-		profileNames[c] = "" // named below, once the class count per role is known
-		classesPerRole[c.role]++
-		classes = append(classes, c)
-	}
-	for _, c := range classes {
+		labels := cluster.Talos.Nodes[i].ResolvedLabels()
 		name := profileFor(c.role)
-		if classesPerRole[c.role] > 1 {
+		if len(schematicsPerRole[c.role]) > 1 {
 			name += "-" + c.schematic[:8]
 		}
+		name += labelSuffix(labels, splits[c.role])
 		profileNames[c] = name
 		data.Profiles = append(data.Profiles, catalogProfile{
 			Name:         name,
 			Role:         string(c.role),
-			Template:     templateFor[c.role],
+			Template:     templatePath(c.role, labels, splits),
 			Schematic:    c.schematic,
 			InstallImage: talos.InstallImage(c.schematic, cluster.Talos.Version),
 		})
@@ -125,7 +177,7 @@ func renderCatalog(cluster *config.Cluster, perNode []string) (map[string]File, 
 		}
 		data.Nodes = append(data.Nodes, catalogGroup{
 			Name:    n.Name,
-			Profile: profileNames[class{role: n.Role, schematic: perNode[i]}],
+			Profile: profileNames[classOf(i)],
 			MAC:     nic.MAC,
 			Vars:    groupVars(n),
 		})

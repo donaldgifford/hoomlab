@@ -259,6 +259,20 @@ cluster "homelab" {
       disk_gb  = 128
       storage  = "local-zfs"
       profiles = ["base"]
+      # labels are this node's Kubernetes node labels, rendered to
+      # machine.nodeLabels — a placement preference workloads opt into
+      # with preferred node affinity; nothing is repelled. Written
+      # explicitly, never derived from cores or memory. Keys and values
+      # must be Kubernetes qualified names; kubernetes.io / k8s.io keys
+      # off the NodeRestriction allow-list (node-role.kubernetes.io/…
+      # among them) are rejected at load, as are the keys the render
+      # sets itself (topology region/zone with a cluster block, the
+      # control-plane load-balancer exclusion). Nodes of a role with
+      # different label sets render from separate templates; talos
+      # apply puts a changed label on a running node without a reboot.
+      labels = {
+        "hoomlab.io/size" = "large"
+      }
 
       # The inline form, equally valid — the primitives are always
       # reachable without declaring a plane:

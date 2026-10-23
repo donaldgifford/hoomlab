@@ -71,13 +71,14 @@ func (e *Emitter) Tree(ctx context.Context) (Tree, error) {
 
 // tree renders the artifact tree for already-resolved schematics.
 func (e *Emitter) tree(perNode []string) (Tree, error) {
-	templates, err := talos.RoleTemplates(e.Bundle, e.Cluster)
+	templates, err := talos.ClassTemplates(e.Bundle, e.Cluster)
 	if err != nil {
 		return nil, err
 	}
 	for _, w := range templates.Warnings {
 		e.logger().Warn("machineconfig validation warning", "warning", w)
 	}
+	splits := labelSplits(e.Cluster)
 
 	catalog, err := renderCatalog(e.Cluster, perNode)
 	if err != nil {
@@ -93,10 +94,11 @@ func (e *Emitter) tree(perNode []string) (Tree, error) {
 	}
 
 	tree := Tree{
-		"templates/" + controlPlaneTemplatePath: {Data: templates.ControlPlane},
-		"templates/" + workerTemplatePath:       {Data: templates.Worker},
-		embedIPXEPath:                           {Data: chain},
-		runScriptPath:                           {Data: runScript, Mode: 0o755},
+		embedIPXEPath: {Data: chain},
+		runScriptPath: {Data: runScript, Mode: 0o755},
+	}
+	for _, c := range templates.Classes {
+		tree["templates/"+templatePath(c.Role, c.Labels, splits)] = File{Data: c.Data}
 	}
 	for path, file := range catalog {
 		tree[path] = file

@@ -730,12 +730,14 @@ OQ-4), and there is no sugar (OQ-5).
 
 #### Tasks
 
-- [ ] `internal/config/config.go`: add `Labels map[string]string` to
+- [x] `internal/config/config.go`: add `Labels map[string]string` to
       `TalosNode`. Hold the `hoomlab.io/` prefix in one constant.
-- [ ] `internal/config/resolve.go`: carry the explicit labels into the
+      *(2026-10-22: `TalosNode.Labels` (`labels`, optional) and `config.LabelPrefix = "hoomlab.io/"`.)*
+- [x] `internal/config/resolve.go`: carry the explicit labels into the
       resolved form. Phase 5 adds the derived runtime label beside
       them.
-- [ ] `internal/config/validate.go`:
+      *(2026-10-22: the resolver stores a copy of the explicit labels; consumers read `TalosNode.ResolvedLabels()` (nil for an unlabelled node).)*
+- [x] `internal/config/validate.go`:
       - qualified-name syntax for keys and values;
       - reject the NodeRestriction-restricted prefixes
         (`node-role.kubernetes.io/`,
@@ -743,25 +745,32 @@ OQ-4), and there is no sugar (OQ-5).
         or `k8s.io/` prefixes off the allow-list), with the error
         naming NodeRestriction;
       - collisions with the completion labels.
-- [ ] `internal/talos/completion.go`: labels go to `machine.nodeLabels`,
+      *(2026-10-22: `internal/config/labels.go` (`validateLabels`, run from `ValidateAndNormalize`): qualified-name syntax for keys and values; the kubelet `IsKubeletLabel` allow-list, so any other `kubernetes.io`/`k8s.io` key (incl. `node-role.` and `node-restriction.`) fails naming NodeRestriction; collisions with region/zone (with a cluster block) and the control-plane LB exclusion. The completion label keys now live in `config` and `talos` reads them from there.)*
+- [x] `internal/talos/completion.go`: labels go to `machine.nodeLabels`,
       merged with the completion labels.
-- [ ] `internal/talos/machineconfig.go` and `internal/emit/catalog.go`:
+      *(2026-10-22: `applyLabels` merges a class's labels into `machine.nodeLabels` after the completion labels; validation guarantees no overwrite.)*
+- [x] `internal/talos/machineconfig.go` and `internal/emit/catalog.go`:
       key templates by (role, label set). Class names are derived only
       when a role splits; single-class roles keep today's names.
-- [ ] Tests:
+      *(2026-10-22: `RoleTemplates` → `ClassTemplates`, one template per (role, label set) with `Templates.For` lookup; a role with no nodes still gets its unlabelled class. Emit names a class with `labelSuffix` (`-` + 8 hex of sha256 over `LabelSetKey`) only when the role splits by labels **and** the set is non-empty, so unlabelled nodes of a split role (work01–03) keep today's template and profile names. Existing goldens are unchanged.)*
+- [x] Tests:
       - load tests per rule, with positive controls;
       - goldens for a split worker role (plain and `size=large`);
       - **byte-identity**: a config without `labels` emits exactly
         today's tree;
       - `Validate` passes on every class template.
-- [ ] Docs: the example HCL and the README.
+      *(2026-10-22: `internal/config/labels_test.go` (each rule plus positive controls: allow-listed namespaces, worker-side LB exclusion, zone without a cluster block; resolution is copied). `internal/emit/labels_test.go`: `golden-labels` for a split worker role, plus unsplit labels keeping plain names. Byte-identity: the existing `golden`/`golden-multinic` sets are unchanged. `TestNodeConfigsMatchBooty` now also runs the labelled cluster (booty serves each class byte-identically, metal `Validate` passes, labels land in `machine.nodeLabels`); `TestClassTemplatesSplitByLabels` validates every class.)*
+- [x] Docs: the example HCL and the README.
+      *(2026-10-22: `examples/bootstrap.hcl` shows `labels` on worker-01 with the rules inline (still loads in `TestLoadExampleConfig`); README "Node labels" subsection; `config` package doc names the resolver and `labels.go`.)*
 - [ ] Release (OQ-9 a).
+      *(Deferred — human required: the operator runs `tools-release.yml` after merge.)*
 - [ ] **Live (operator):**
       - add `labels = { "hoomlab.io/size" = "large" }` to work04 and
         work05 in `~/drill/bootstrap.hcl`;
       - run `talos emit` and sync and restart booty;
       - run `talos apply --dry-run` (only work04/05 differ, by the
         label), then `talos apply --node work04` and `--node work05`.
+      *(Deferred — human required: operator edits `~/drill/bootstrap.hcl`, re-emits, restarts booty, and applies with the released binary.)*
 
 #### Success Criteria
 
