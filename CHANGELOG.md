@@ -12,6 +12,7 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 ### Documentation
 
 - *(impl)* Record the phase 4 live label results
+- *(impl)* Record the phase 3 live talos apply results
 
 ## [tools/bootstrap/v0.5.0] - 2026-10-22
 
