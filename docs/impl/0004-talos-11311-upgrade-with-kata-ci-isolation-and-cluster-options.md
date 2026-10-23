@@ -790,9 +790,10 @@ DESIGN-0005 Phase 4.
       (extension `siderolabs/kata-containers`, handler `kata`,
       worker-only).
       *(2026-10-23: `config.Runtime` table with the `kata` row and `Runtime.Label()` (`runtime.hoomlab.dev/<name>`); extension flattening moved from `talos.NodeExtensions` to `Talos.NodeExtensions` so the resolver can use it, plus `Talos.NodeRuntimes`.)*
-- [ ] Resolver: a node whose flattened extensions include a runtime's
+- [x] Resolver: a node whose flattened extensions include a runtime's
       extension derives the label `runtime.hoomlab.dev/kata=true`. An
       explicit label on that key is an XOR error.
+      *(2026-10-23: `Talos.resolveLabels` adds `runtime.hoomlab.dev/<runtime>=true` per runtime the node's extensions provide. The XOR rule is enforced at load by rejecting **any** explicit key in `runtime.hoomlab.dev/`, since a hand-written one on a node without the extension would schedule Kata pods where they can't run.)*
 - [ ] Validation: the Kata extension on a control-plane profile is an
       error.
 - [ ] `internal/config/ciliumvalues.go`: if any node carries Kata,
