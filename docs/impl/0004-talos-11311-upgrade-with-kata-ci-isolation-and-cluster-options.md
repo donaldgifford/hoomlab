@@ -794,8 +794,9 @@ DESIGN-0005 Phase 4.
       extension derives the label `runtime.hoomlab.dev/kata=true`. An
       explicit label on that key is an XOR error.
       *(2026-10-23: `Talos.resolveLabels` adds `runtime.hoomlab.dev/<runtime>=true` per runtime the node's extensions provide. The XOR rule is enforced at load by rejecting **any** explicit key in `runtime.hoomlab.dev/`, since a hand-written one on a node without the extension would schedule Kata pods where they can't run.)*
-- [ ] Validation: the Kata extension on a control-plane profile is an
+- [x] Validation: the Kata extension on a control-plane profile is an
       error.
+      *(2026-10-23: `validateRuntimes` (from `ValidateAndNormalize`) rejects any `WorkerOnly` runtime a control plane's flattened extensions provide, naming the node and extension.)*
 - [ ] `internal/config/ciliumvalues.go`: if any node carries Kata,
       require explicit `socketLB.hostNamespaceOnly: true`, and make
       `bandwidthManager.enabled: true` an error.

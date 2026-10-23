@@ -1,6 +1,10 @@
 package config
 
-import "slices"
+import (
+	"slices"
+
+	"github.com/hashicorp/hcl/v2"
+)
 
 // Runtime is one row of the runtime table (DESIGN-0005 Phase 4): a
 // container runtime a node can run because an extension baked into its
@@ -69,4 +73,29 @@ func (t *Talos) NodeRuntimes(n *TalosNode) []Runtime {
 		}
 	}
 	return out
+}
+
+// validateRuntimes enforces the runtime table's rules: a worker-only
+// runtime's extension on a control plane is an error naming the node
+// and the extension.
+func (c *Cluster) validateRuntimes() hcl.Diagnostics {
+	var diags hcl.Diagnostics
+	for i := range c.Talos.Nodes {
+		n := &c.Talos.Nodes[i]
+		if n.Role != RoleControlPlane {
+			continue
+		}
+		for _, r := range c.Talos.NodeRuntimes(n) {
+			if r.WorkerOnly {
+				diags = append(diags, errf(
+					"Worker-only runtime on a control plane",
+					"talos node %q: its profiles bake in %s, which provides the %s runtime — worker-only, since control planes stay minimal and run no workloads. Drop the profile carrying it from this node.",
+					n.Name,
+					r.Extension,
+					r.Name,
+				))
+			}
+		}
+	}
+	return diags
 }
