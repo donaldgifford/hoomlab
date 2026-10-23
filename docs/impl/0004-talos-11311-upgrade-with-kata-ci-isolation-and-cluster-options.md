@@ -786,9 +786,10 @@ DESIGN-0005 Phase 4.
 
 #### Tasks
 
-- [ ] Runtime table, e.g. `internal/config/runtime.go`: a `kata` row
+- [x] Runtime table, e.g. `internal/config/runtime.go`: a `kata` row
       (extension `siderolabs/kata-containers`, handler `kata`,
       worker-only).
+      *(2026-10-23: `config.Runtime` table with the `kata` row and `Runtime.Label()` (`runtime.hoomlab.dev/<name>`); extension flattening moved from `talos.NodeExtensions` to `Talos.NodeExtensions` so the resolver can use it, plus `Talos.NodeRuntimes`.)*
 - [ ] Resolver: a node whose flattened extensions include a runtime's
       extension derives the label `runtime.hoomlab.dev/kata=true`. An
       explicit label on that key is an XOR error.
