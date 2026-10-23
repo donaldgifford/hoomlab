@@ -813,7 +813,7 @@ DESIGN-0005 Phase 4.
       *(Deferred — human required: the operator runs `tools-release.yml` after merge.)*
 - [ ] **Operator / GitOps:**
       *(Deferred — human required. Order matters: add `socketLB.hostNamespaceOnly: true` to `~/drill/cilium-values.yaml` **before** running the released binary — with Kata on the workers, load now rejects values without it.)*
-      - [ ] Add `socketLB.hostNamespaceOnly: true` explicitly to
+      - [x] Add `socketLB.hostNamespaceOnly: true` explicitly to
             `~/drill/cilium-values.yaml` and the GitOps Cilium values.
             It is already in effect, so expect a no-op agent restart.
             Run the cilium#48420 check after.
@@ -825,8 +825,9 @@ DESIGN-0005 Phase 4.
             cilium#48420 baseline passes on all 8 nodes: 11 `cil_sock*`
             hooks at the root cgroup (`/sys/fs/cgroup`, read via
             `bpftool` in each agent) and a 401 from the `kubernetes`
-            ClusterIP over host network. The `~/drill/cilium-values.yaml`
-            edit is still open.)*
+            ClusterIP over host network. `~/drill/cilium-values.yaml`
+            already carried `socketLB.hostNamespaceOnly: true` and passes
+            the Kata Cilium checks.)*
       - [ ] Run `talos emit`, sync booty, then `talos apply` on all
             workers so the derived label goes live. `--dry-run` reports
             0 after.
