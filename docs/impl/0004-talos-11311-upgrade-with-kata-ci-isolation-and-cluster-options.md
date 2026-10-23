@@ -762,15 +762,15 @@ OQ-4), and there is no sugar (OQ-5).
       *(2026-10-22: `internal/config/labels_test.go` (each rule plus positive controls: allow-listed namespaces, worker-side LB exclusion, zone without a cluster block; resolution is copied). `internal/emit/labels_test.go`: `golden-labels` for a split worker role, plus unsplit labels keeping plain names. Byte-identity: the existing `golden`/`golden-multinic` sets are unchanged. `TestNodeConfigsMatchBooty` now also runs the labelled cluster (booty serves each class byte-identically, metal `Validate` passes, labels land in `machine.nodeLabels`); `TestClassTemplatesSplitByLabels` validates every class.)*
 - [x] Docs: the example HCL and the README.
       *(2026-10-22: `examples/bootstrap.hcl` shows `labels` on worker-01 with the rules inline (still loads in `TestLoadExampleConfig`); README "Node labels" subsection; `config` package doc names the resolver and `labels.go`.)*
-- [ ] Release (OQ-9 a).
-      *(Deferred — human required: the operator runs `tools-release.yml` after merge.)*
-- [ ] **Live (operator):**
+- [x] Release (OQ-9 a).
+      *(2026-10-23: `tools/bootstrap/v0.5.0` cut after #26.)*
+- [x] **Live (operator):**
       - add `labels = { "hoomlab.dev/size" = "large" }` to work04 and
         work05 in `~/drill/bootstrap.hcl`;
       - run `talos emit` and sync and restart booty;
       - run `talos apply --dry-run` (only work04/05 differ, by the
         label), then `talos apply --node work04` and `--node work05`.
-      *(Deferred — human required: operator edits `~/drill/bootstrap.hcl`, re-emits, restarts booty, and applies with the released binary.)*
+      *(2026-10-23, with v0.5.0 and the key moved to `hoomlab.dev/` (#27) before anything carried it: the dry-run showed only work04/05 pending, each diff a single `+ hoomlab.dev/size: large` under `nodeLabels`. `--node work04` and `--node work05` applied with `NO_REBOOT`, the re-survey reports 0 of 8 pending, and `kubectl get nodes -L hoomlab.dev/size` shows `large` on work04/05 only.)*
 
 #### Success Criteria
 
