@@ -797,9 +797,10 @@ DESIGN-0005 Phase 4.
 - [x] Validation: the Kata extension on a control-plane profile is an
       error.
       *(2026-10-23: `validateRuntimes` (from `ValidateAndNormalize`) rejects any `WorkerOnly` runtime a control plane's flattened extensions provide, naming the node and extension.)*
-- [ ] `internal/config/ciliumvalues.go`: if any node carries Kata,
+- [x] `internal/config/ciliumvalues.go`: if any node carries Kata,
       require explicit `socketLB.hostNamespaceOnly: true`, and make
       `bandwidthManager.enabled: true` an error.
+      *(2026-10-23: `kataCiliumValues`, run when `carriesRuntime("kata")`: `socketLB.hostNamespaceOnly` must be an explicit `true`, and `bandwidthManager.enabled: true` is an error.)*
 - [ ] Tests: the derived label, the XOR, Kata on a control plane, both
       Cilium checks, and positive controls. Goldens carry the label in
       every worker class. Since the label is the same on every worker,
