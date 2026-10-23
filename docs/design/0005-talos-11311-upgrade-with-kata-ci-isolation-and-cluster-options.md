@@ -239,7 +239,7 @@ Recorded 2026-10-13 to 2026-10-19.
 flowchart TB
     subgraph HCL["bootstrap.hcl"]
         P["profile worker<br/>extensions = [… , kata-containers]"]
-        N["node work04 / work05<br/>labels = { hoomlab.io/size = large }"]
+        N["node work04 / work05<br/>labels = { hoomlab.dev/size = large }"]
         O["cluster { image_verification · logging ·<br/>etcd_metrics · registry_mirror }"]
         A["addon metrics-server / keda"]
     end
@@ -255,7 +255,7 @@ flowchart TB
         K8S["Kubernetes API"]
     end
     subgraph GitOps["GitOps (private repo)"]
-        RC["RuntimeClass kata<br/>scheduling: nodeSelector runtime.hoomlab.io/kata"]
+        RC["RuntimeClass kata<br/>scheduling: nodeSelector runtime.hoomlab.dev/kata"]
         CV["Cilium values<br/>socketLB.hostNamespaceOnly: true"]
         CI["Buildkite privileged job pods (first user)<br/>runtimeClassName: kata<br/>preferred affinity: size=large"]
     end
@@ -468,7 +468,7 @@ node "work04" {
   role     = "worker"
   # …
   labels = {
-    "hoomlab.io/size" = "large"
+    "hoomlab.dev/size" = "large"
   }
 }
 ```
@@ -575,7 +575,7 @@ node "work01" {
 node "work04" {
   role     = "worker"
   profiles = ["base", "kata"]
-  labels   = { "hoomlab.io/size" = "large" }   # placement preference (Phase 3)
+  labels   = { "hoomlab.dev/size" = "large" }   # placement preference (Phase 3)
   # …
 }
 ```
@@ -589,7 +589,7 @@ provides; adding a runtime is one row plus its rules:
 | `gvisor`, `crun`, `nvidia` | — | — | deferred (Non-Goals) |
 
 **Derived label (OQ-7).** A node whose flattened extensions include a
-runtime's extension gets the label `runtime.hoomlab.io/kata = "true"`.
+runtime's extension gets the label `runtime.hoomlab.dev/kata = "true"`.
 
 - The label is derived from the explicit profile, so the
   image-build-time fact is stated once. It also can't drift from what
@@ -626,7 +626,7 @@ overhead:
   podFixed: { memory: 250Mi, cpu: 250m }   # measured in Stage 1 (T7)
 scheduling:
   nodeSelector:
-    runtime.hoomlab.io/kata: "true"
+    runtime.hoomlab.dev/kata: "true"
 ```
 
 - A pod that needs isolation sets `runtimeClassName: kata`, and that
@@ -641,7 +641,7 @@ scheduling:
         - weight: 50
           preference:
             matchExpressions:
-              - { key: hoomlab.io/size, operator: In, values: [large] }
+              - { key: hoomlab.dev/size, operator: In, values: [large] }
   ```
 
   The class can't carry this, because RuntimeClass scheduling is hard
@@ -928,7 +928,7 @@ No new persisted state. `secrets.yaml`, `talosconfig`, and
   - positive controls for each.
 - **Emit:**
   - golden templates for a split worker role (plain workers and
-    `hoomlab.io/size=large` workers), and the worker/control-plane
+    `hoomlab.dev/size=large` workers), and the worker/control-plane
     schematic split;
   - a test that a config without the new attributes stays
     byte-identical to today's output;
@@ -1043,14 +1043,16 @@ Approved.
    - b. A named `node_class "<name>"` block (labels, later taints) that
      nodes reference.
 6. **Label and taint key prefix.** *Resolved 2026-10-11*: `hoomlab.io/`
-   for now, changeable. The prefix lives in one constant in code and in
-   the GitOps objects that select on it. Changing it later costs a
-   relabel of the live nodes (via the apply stage) plus a GitOps edit.
+   for now, changeable. *Changed 2026-10-23 to `hoomlab.dev/`*, before
+   any node carried a label, so the change cost nothing live. The
+   prefix lives in one constant in code and in the GitOps objects that
+   select on it. Changing it later costs a relabel of the live nodes
+   (via the apply stage) plus a GitOps edit.
 7. **Derived runtime label.** *Resolved 2026-10-19 (a).* T6 confirmed the problem: the test class
    selects on the versioned Talos label, so the next Kata bump would
    leave every Kata pod Pending.
    - a. The Kata extension in a node's profiles derives
-     `runtime.hoomlab.io/kata=true`, a stable key for the RuntimeClass
+     `runtime.hoomlab.dev/kata=true`, a stable key for the RuntimeClass
      `nodeSelector`.
    - b. No derivation; the operator writes the label by hand on every
      worker.
@@ -1076,7 +1078,7 @@ Approved.
     tainted two-worker pool; *reopened 2026-10-17* when the pool was
     dropped. Kata is on every worker and opt-in per workload in every
     option below.
-    - a. An explicit size label, `hoomlab.io/size=large`, on work04/05,
+    - a. An explicit size label, `hoomlab.dev/size=large`, on work04/05,
       with workloads preferring it through preferred node affinity:
       big services, and the Buildkite privileged job pods through
       `pod-spec-patch`. Preference, not a pin, so a full or drained
@@ -1147,7 +1149,7 @@ Approved.
       `nodeSelector` on the derived runtime label. Placement preference
       lives in each workload.
     - b. Also a `kata-large` class whose `nodeSelector` adds
-      `hoomlab.io/size=large`, a hard pin for workloads that must run
+      `hoomlab.dev/size=large`, a hard pin for workloads that must run
       on the large workers.
 22. **The unprivileged Buildkite controller.** *Resolved 2026-10-19 (a).* *New 2026-10-19.*
     - a. It stays on runc. Its namespace is `baseline`, so job pods

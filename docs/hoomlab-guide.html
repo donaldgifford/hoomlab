@@ -385,7 +385,7 @@ overhead:
   podFixed: { memory: 250Mi, cpu: 250m }   # T7 measured ~200 MB per idle pod (README says 130Mi)
 scheduling:
   nodeSelector:
-    runtime.hoomlab.io/kata: "true"        # derived by bootstrap from the profile, version-free</code></pre>
+    runtime.hoomlab.dev/kata: "true"        # derived by bootstrap from the profile, version-free</code></pre>
   <div class="grid g3">
     <div class="card"><h4>Why a derived label?</h4><p>Talos labels <code>extensions.talos.dev/kata-containers=3.32.0</code>, and a <code>nodeSelector</code> is an exact match. Selecting on it would leave every Kata pod Pending at the next Kata bump.</p></div>
     <div class="card"><h4>The Cilium rule</h4><p>Socket LB can't hook a guest kernel, so <code>socketLB.hostNamespaceOnly: true</code> must be set explicitly whenever any node carries Kata. Bandwidth manager plus Kata is an error (talos#13745).</p></div>
@@ -396,7 +396,7 @@ scheduling:
 
 <section id="placement">
   <h2>Placement simulator</h2>
-  <p class="lede">Pick a workload and see where the scheduler may put it. Hard constraints come from taints and the RuntimeClass <code>nodeSelector</code>; soft ones from preferred affinity on <code>hoomlab.io/size=large</code>.</p>
+  <p class="lede">Pick a workload and see where the scheduler may put it. Hard constraints come from taints and the RuntimeClass <code>nodeSelector</code>; soft ones from preferred affinity on <code>hoomlab.dev/size=large</code>.</p>
   <div class="btns" id="podBtns">
     <button class="on" data-p="runc">runc service</button>
     <button data-p="kata">kata pod</button>
@@ -734,7 +734,7 @@ const OWN = [
   ['kube-proxy disabled', 'bootstrap', 'Machine-config time. It can\'t be deferred without a flannel → cilium migration.'],
   ['Cilium installation', 'both', 'The deliberate boundary-crosser: machine config installs it (inline Job), and GitOps adopts the release afterwards.'],
   ['Cilium BGP peers and LB pools', 'gitops', 'Kubernetes objects on a running cluster. Left unconfigured at T2.'],
-  ['Node labels (hoomlab.io/size)', 'bootstrap', '<code>machine.nodeLabels</code> in machine config, delivered live by <code>talos apply</code> (DESIGN-0005 Phase 3).'],
+  ['Node labels (hoomlab.dev/size)', 'bootstrap', '<code>machine.nodeLabels</code> in machine config, delivered live by <code>talos apply</code> (DESIGN-0005 Phase 3).'],
   ['RuntimeClass kata', 'gitops', 'A Kubernetes object. Bootstrap only provides the capability (extension) and the label it selects on (DESIGN-0005 OQ-9).'],
   ['Buildkite pod-spec-patch', 'gitops', 'Workload config. It sets <code>runtimeClassName: kata</code> and the size preference.'],
   ['Registry mirror', 'bootstrap', 'A machine-config document (<code>RegistryMirrorConfig</code>), DESIGN-0005 Phase 5.'],
@@ -807,7 +807,7 @@ pickTree('#hclTree', '#hclInfo', [
   ['    profile "<name>" { extensions = [...] }', 'talos.profile ' + P('built'), 'Named extension sets. A node\'s profiles flatten into a sorted, deduped set, which becomes one schematic. An unreferenced profile is an error. Kata lives in a <code>kata</code> profile on workers only.'],
   ['    booty { url, version? }', 'talos.booty', 'Where nodes reach booty; it is baked into <code>embed.ipxe</code>. Changing it is the one thing that rebuilds iPXE.'],
   ['    node "<name>" { role, pve_node, vmid, … }', 'talos.node ' + P('built'), '<code>role</code> is controlplane or worker. Also <code>cores</code>, <code>memory</code> (MiB), <code>disk_gb</code>, <code>storage</code>, <code>profiles</code>. VMIDs are unique and ≥ 100.'],
-  ['      labels = { "hoomlab.io/size" = "large" }', 'node labels ' + P('planned'), '→ <code>machine.nodeLabels</code>, applied live on workers through the kubelet. Validated as qualified names; NodeRestriction-restricted prefixes are rejected <i>at load</i> rather than found as a 12-second retry loop. Splits template classes. DESIGN-0005 Phase 3; taints are deferred.'],
+  ['      labels = { "hoomlab.dev/size" = "large" }', 'node labels ' + P('planned'), '→ <code>machine.nodeLabels</code>, applied live on workers through the kubelet. Validated as qualified names; NodeRestriction-restricted prefixes are rejected <i>at load</i> rather than found as a 12-second retry loop. Splits template classes. DESIGN-0005 Phase 3; taints are deferred.'],
   ['      network_interface "netN" { … }', 'network_interface ' + P('built'), '<code>mac</code> and <code>bridge</code>, plus either <code>network = "&lt;plane&gt;"</code> or inline <code>vlan/dhcp/primary/cidr/mtu</code> (XOR). <code>address</code> for static planes. Exactly one primary per node. See <a href="#xor">XOR</a>.'],
   ['  addon "<name>" { version }', 'addon ' + P('planned'), 'A closed set (metrics-server, keda) mapped to pinned upstream manifests. It feeds the opt-in <code>cluster addons</code> stage. Declaring one that GitOps already owns is an operator error, made visible by the field manager.'],
 ]);
@@ -841,7 +841,7 @@ function drawProf() {
     if (n.r === 'controlplane' && n.large) warns.push(`node "${n.n}": valid, but control planes are tainted against workloads, so the label attracts nothing`);
     const ext = [...new Set(ps.flatMap(p => PROF[p]))].sort(); const id = hash8(ext.join(','));
     (sch[id] = sch[id] || { ext, nodes: [] }).nodes.push(n.n);
-    const labels = (n.p.kata && n.r === 'worker' ? ['runtime.hoomlab.io/kata=true'] : []).concat(n.large ? ['hoomlab.io/size=large'] : []);
+    const labels = (n.p.kata && n.r === 'worker' ? ['runtime.hoomlab.dev/kata=true'] : []).concat(n.large ? ['hoomlab.dev/size=large'] : []);
     const key = `${n.r}|${id}|${n.large ? 'large' : ''}`;
     (cls[key] = cls[key] || { r: n.r, id, labels, nodes: [] }).nodes.push(n.n);
   });
@@ -849,7 +849,7 @@ function drawProf() {
   const byRole = {}; Object.values(cls).forEach(c => byRole[c.r] = (byRole[c.r] || 0) + 1);
   $('#profOut').innerHTML = `<h4>${Object.keys(sch).length} schematic(s) · ${Object.keys(cls).length} template class(es)</h4>` +
     Object.entries(sch).map(([id, s]) => `<p><code>${id}…</code> ← ${s.nodes.join(', ')}<br><span class="small">${s.ext.map(e => e.replace('siderolabs/', '')).join(' · ')}</span></p>`).join('') +
-    '<hr style="border-color:var(--border)">' + Object.values(cls).map(c => { const name = byRole[c.r] > 1 ? `${c.r}-${c.id.slice(0, 6)}${c.labels.some(l => l.startsWith('hoomlab.io')) ? '-' + hash8(c.labels.join()).slice(0, 4) : ''}` : c.r; return `<p><code>${name}.yaml.tmpl</code> ← ${c.nodes.join(', ')}${c.labels.length ? `<br><span class="small">nodeLabels: ${c.labels.join(', ')}</span>` : ''}</p>`; }).join('') +
+    '<hr style="border-color:var(--border)">' + Object.values(cls).map(c => { const name = byRole[c.r] > 1 ? `${c.r}-${c.id.slice(0, 6)}${c.labels.some(l => l.startsWith('hoomlab.dev')) ? '-' + hash8(c.labels.join()).slice(0, 4) : ''}` : c.r; return `<p><code>${name}.yaml.tmpl</code> ← ${c.nodes.join(', ')}${c.labels.length ? `<br><span class="small">nodeLabels: ${c.labels.join(', ')}</span>` : ''}</p>`; }).join('') +
     '<p class="small">Class names are derived only when a role splits, so a config with one class per role keeps today\'s names and bytes. The derived runtime label is the same on every Kata worker, so it never splits a role by itself.</p>';
   const w = warns.map(e => `<p class="warn">! ${e}</p>`).join('');
   $('#profVal').innerHTML = errs.length ? '<h4 class="bad">bootstrap validate</h4>' + errs.map(e => `<p class="bad">✗ ${e}</p>`).join('') + w : '<h4 class="ok">bootstrap validate</h4><p class="ok">✓ valid</p>' + w + '<p class="small">Try: tick kata on ctrl01, untick kata on every worker (the profile becomes unreferenced), or give work01 the size label and watch the worker role split into another class.</p>';
@@ -910,8 +910,8 @@ const PH = [
   ['1', 'Kubernetes 1.36.5', 1, '<p><code>talosctl upgrade-k8s --to 1.36.5</code> after an etcd snapshot. Control-plane components rolled one node at a time, then the kubelets, then CoreDNS v1.14.7. The HCL is pinned to <code>kubernetes_version = "1.36.5"</code>, and the closing emit dry-run reports 0.</p>'],
   ['2', 'Design gate', 1, '<p>Amended DESIGN-0005 with a Stage 1 findings table and in-place corrections. Phase 3 became labels only, and Phase 4 became Kata per workload with one class. All open questions were answered <b>a</b>, and the design moved to Approved. IMPL Phases 3–7 were re-cut.</p>'],
   ['3', 'talos apply stage', 0, '<p>Client calls (members, MachineConfig read, <code>ApplyConfiguration</code>, extensions), node addressing via Talos members, a renderer shared with emit, multi-document normalisation, one Step per node, and a schematic check. <b>Success:</b> <code>--dry-run</code> across all 8 nodes reports 0, followed by a tools release.</p>'],
-  ['4', 'Node labels', 0, '<p>Add <code>labels</code> to <code>TalosNode</code>, with qualified-name validation, NodeRestriction prefix rejection and completion-label collisions. They render to <code>machine.nodeLabels</code>, and templates key by (role, label set). Byte-identity holds for configs without labels. <b>Live:</b> <code>hoomlab.io/size=large</code> on work04/05 via <code>talos apply</code>.</p>'],
-  ['5', 'Kata label, Cilium rule, Buildkite', 0, '<p>A runtime table, the derived <code>runtime.hoomlab.io/kata=true</code>, Kata-on-control-plane as an error, and the Cilium <code>hostNamespaceOnly</code> and bandwidth-manager checks. <b>GitOps:</b> the <code>kata</code> class replaces the test class; the Buildkite privileged controller gets <code>pod-spec-patch</code> and <code>prohibit-kubernetes-plugin</code>; then a week of green builds. <b>PVE:</b> turn off automatic live migration for workers.</p>'],
+  ['4', 'Node labels', 0, '<p>Add <code>labels</code> to <code>TalosNode</code>, with qualified-name validation, NodeRestriction prefix rejection and completion-label collisions. They render to <code>machine.nodeLabels</code>, and templates key by (role, label set). Byte-identity holds for configs without labels. <b>Live:</b> <code>hoomlab.dev/size=large</code> on work04/05 via <code>talos apply</code>.</p>'],
+  ['5', 'Kata label, Cilium rule, Buildkite', 0, '<p>A runtime table, the derived <code>runtime.hoomlab.dev/kata=true</code>, Kata-on-control-plane as an error, and the Cilium <code>hostNamespaceOnly</code> and bandwidth-manager checks. <b>GitOps:</b> the <code>kata</code> class replaces the test class; the Buildkite privileged controller gets <code>pod-spec-patch</code> and <code>prohibit-kubernetes-plugin</code>; then a week of green builds. <b>PVE:</b> turn off automatic live migration for workers.</p>'],
   ['6', 'Talos-side options', 0, '<p>Each option is its own PR, enabled on one node before the fleet, in order of ascending blast radius: etcd metrics → logging → registry mirror → image verification (control planes last; talos#13342).</p>'],
   ['7', 'Cluster add-ons', 0, '<p>A <code>client-go</code> dependency (reusable by the INV-0005 drain stage), the <code>addon</code> blocks, and <code>bootstrap cluster addons</code> with server-side apply. metrics-server, then KEDA with a Temporal <code>ScaledObject</code> in GitOps (<code>minReplicaCount: 1</code>).</p>'],
   ['8', 'Close', 0, '<p>README, runbook and examples current. DESIGN-0005 → Implemented, with an as-built note. DESIGN-0006\'s surfaces table pointed at the as-built forms. IMPL-0004 → Completed.</p>'],
@@ -963,9 +963,9 @@ $('#findTable').innerHTML = '<tr><th>Area</th><th>Finding</th><th>Consequence in
 /* ---------------- KATA LAYERS ---------------- */
 $('#kataLayers').innerHTML = [
   ['Default runtime', 'runc, always. Not configurable.', 'Talos'],
-  ['Capability: which runtimes a node can run', 'The extensions in the node\'s profiles, fixed at image-build time. The derived label <code>runtime.hoomlab.io/kata=true</code> states it for schedulers.', 'bootstrap'],
+  ['Capability: which runtimes a node can run', 'The extensions in the node\'s profiles, fixed at image-build time. The derived label <code>runtime.hoomlab.dev/kata=true</code> states it for schedulers.', 'bootstrap'],
   ['Use: which pods run under Kata', '<code>runtimeClassName: kata</code> in the pod spec. The class\'s hard <code>nodeSelector</code> keeps them on capable nodes.', 'GitOps'],
-  ['Placement preference', 'Node labels (<code>hoomlab.io/size=large</code>) plus the workload\'s own <code>preferredDuringScheduling</code> affinity. A RuntimeClass can\'t carry soft constraints.', 'bootstrap (labels) · GitOps (affinity)']].map(([a, b, c]) => `<div class="layer"><b>${a}</b><span class="w">${b}</span><span class="o">${c}</span></div>`).join('');
+  ['Placement preference', 'Node labels (<code>hoomlab.dev/size=large</code>) plus the workload\'s own <code>preferredDuringScheduling</code> affinity. A RuntimeClass can\'t carry soft constraints.', 'bootstrap (labels) · GitOps (affinity)']].map(([a, b, c]) => `<div class="layer"><b>${a}</b><span class="w">${b}</span><span class="o">${c}</span></div>`).join('');
 
 /* ---------------- PLACEMENT ---------------- */
 const NODES = [['ctrl01', 'cp', '4c · 8 GiB'], ['ctrl02', 'cp', '4c · 8 GiB'], ['ctrl03', 'cp', '4c · 8 GiB'], ['work01', 'w', '8c · 16 GiB'], ['work02', 'w', '8c · 16 GiB'], ['work03', 'w', '8c · 16 GiB'], ['work04', 'wl', '16c · 32 GiB'], ['work05', 'wl', '16c · 32 GiB']];
@@ -977,8 +977,8 @@ function place() {
   const html = NODES.map(([n, k, sz]) => {
     const labels = []; const isW = k !== 'cp';
     if (isW) labels.push(`extensions.talos.dev/kata-containers=${phase === 'bump' ? '3.33.0' : '3.32.0'}`);
-    if (isW && labelsLive) labels.push('runtime.hoomlab.io/kata=true');
-    if (k === 'wl' && labelsLive) labels.push('hoomlab.io/size=large');
+    if (isW && labelsLive) labels.push('runtime.hoomlab.dev/kata=true');
+    if (k === 'wl' && labelsLive) labels.push('hoomlab.dev/size=large');
     if (!isW) labels.push('taint: control-plane:NoSchedule');
     let v = 'ok', why = 'eligible';
     if (!isW) { v = 'no'; why = kataPod ? 'no Kata extension + control-plane taint' : 'control-plane taint'; }
@@ -990,7 +990,7 @@ function place() {
   }).join('');
   $('#nodeGrid').innerHTML = html;
   const mem = { runc: 'requests only', kata: 'requests + 250Mi / 250m overhead', big: 'requests only', bk: 'requests + 250Mi / 250m overhead (+ build-VM margin in requests)', bku: 'requests only' }[pod];
-  let msg = { runc: 'A plain service: runc, any worker.', kata: 'Opt-in isolation: <code>runtimeClassName: kata</code>. The class adds a hard <code>nodeSelector</code>.', big: 'A big runc service with preferred affinity on <code>hoomlab.io/size=large</code>.', bk: 'A Buildkite job from the <b>privileged</b> controller. <code>pod-spec-patch</code> sets <code>runtimeClassName: kata</code> plus the size preference, and <code>prohibit-kubernetes-plugin</code> stops a pipeline stripping it. Namespace PSA stays <code>privileged</code>.', bku: 'A Buildkite job from the <b>unprivileged</b> controller: stays on runc (OQ-22), and its namespace is <code>baseline</code>.' }[pod];
+  let msg = { runc: 'A plain service: runc, any worker.', kata: 'Opt-in isolation: <code>runtimeClassName: kata</code>. The class adds a hard <code>nodeSelector</code>.', big: 'A big runc service with preferred affinity on <code>hoomlab.dev/size=large</code>.', bk: 'A Buildkite job from the <b>privileged</b> controller. <code>pod-spec-patch</code> sets <code>runtimeClassName: kata</code> plus the size preference, and <code>prohibit-kubernetes-plugin</code> stops a pipeline stripping it. Namespace PSA stays <code>privileged</code>.', bku: 'A Buildkite job from the <b>unprivileged</b> controller: stays on runc (OQ-22), and its namespace is <code>baseline</code>.' }[pod];
   if (phase === 'now' && kataPod) msg += ' <span class="warn">Today the test class selects the versioned Talos label, which works until Kata is bumped.</span>';
   if (phase === 'bump' && kataPod) msg += ' <b class="bad">Every Kata pod is Pending.</b> This is why bootstrap derives a version-free label (OQ-7).';
   if (prefer && !labelsLive) msg += ' <span class="warn">No size label yet: the preference matches nothing, so placement is free.</span>';
@@ -1006,7 +1006,7 @@ stepper($('#applyStepper'), [
   { t: 'Resolve the node', b: '<p>List cluster members through the configured endpoint and match by hostname (IMPL OQ-7 a). A config node with no member is an error naming it. <code>--node work04</code> scopes the run to one node.</p>' },
   { t: 'Render', b: '<p>Class template plus node vars, through the same <code>text/template</code> and <code>.Vars</code> contract booty uses at install. The var assembly is shared with <code>internal/emit/catalog.go</code>, so emit and apply can\'t diverge.</p>' },
   { t: 'Read live', b: '<p>Read the node\'s <code>MachineConfig</code> resource over the Talos API with <code>out/talosconfig</code> (never overwritten).</p>' },
-  { t: 'Normalise and diff', b: '<p>Decode both sides through machinery\'s loader and re-encode, so formatting and comments don\'t count. The configs are multi-document (3 documents per node), compared by kind and name with order ignored. <code>--dry-run</code> prints a unified diff with secrets redacted.</p><pre><code>apply-work04   differs\n  v1alpha1/machine.nodeLabels:\n+   hoomlab.io/size: large\ndry-run: 1 of 8 steps pending, nothing applied</code></pre>' },
+  { t: 'Normalise and diff', b: '<p>Decode both sides through machinery\'s loader and re-encode, so formatting and comments don\'t count. The configs are multi-document (3 documents per node), compared by kind and name with order ignored. <code>--dry-run</code> prints a unified diff with secrets redacted.</p><pre><code>apply-work04   differs\n  v1alpha1/machine.nodeLabels:\n+   hoomlab.dev/size: large\ndry-run: 1 of 8 steps pending, nothing applied</code></pre>' },
   { t: 'Schematic check', b: '<p>If the rendered <code>install.image</code> names a different schematic than the node\'s running extensions, that is an image change, not config. The stage prints the exact <code>talosctl upgrade --image factory.talos.dev/installer/&lt;schematic&gt;:v1.13.11</code> and never re-images itself. A merely <i>stale</i> stored <code>install.image</code> (the Stage 1 case) is ordinary drift and is applied.</p>' },
   { t: 'Apply NO_REBOOT', b: '<p><code>ApplyConfiguration(mode = NO_REBOOT)</code> with the whole rendered config, so there is no patch format to get wrong. If Talos refuses because the change needs a reboot, the step errors, naming the node and the change, and tells you to reboot through cordon → drain. It never runs a bare <code>talosctl reboot</code>.</p>' },
   { t: 'Re-run: 0 to apply', b: '<p>The Check now reports equal. The first fleet-wide dry-run must report <b>0 of 8</b> before any option is enabled: proof that render equals live after three rounds of hand patches.</p>' },
@@ -1030,10 +1030,10 @@ btnGroup('#upBtns', d => { $('#upSteps').innerHTML = UP[d.u].map(([c, t, n]) => 
 /* ---------------- DECISIONS ---------------- */
 const OQ = [
   [1, 'ver', 'Record-fix scope', 'Comment and IMPL-0003 note only, done first'], [2, 'ver', 'Kubernetes patch', '1.36.5 after Stage 1, pinned in HCL (done)'], [3, 'kata', 'Runtimes now', 'Kata only; gVisor, crun and NVIDIA deferred'],
-  [4, 'kata', 'Taints', 'Deferred: labels only; return as registerWithTaints + drift report'], [5, 'cli', 'Sugar', 'None: `labels` only'], [6, 'kata', 'Key prefix', '`hoomlab.io/`, one constant'],
-  [7, 'kata', 'Derived runtime label', '`runtime.hoomlab.io/kata=true` from the profile'], [8, 'kata', 'Cilium rule', 'Explicit `hostNamespaceOnly` required with Kata; bandwidth manager is an error'],
+  [4, 'kata', 'Taints', 'Deferred: labels only; return as registerWithTaints + drift report'], [5, 'cli', 'Sugar', 'None: `labels` only'], [6, 'kata', 'Key prefix', '`hoomlab.dev/`, one constant'],
+  [7, 'kata', 'Derived runtime label', '`runtime.hoomlab.dev/kata=true` from the profile'], [8, 'kata', 'Cilium rule', 'Explicit `hostNamespaceOnly` required with Kata; bandwidth manager is an error'],
   [9, 'kata', 'RuntimeClass owner', 'GitOps, against the documented contract'], [10, 'kata', 'Kata handler', 'Only `kata` (Cloud Hypervisor) exists'],
-  [11, 'kata', 'Placement without a CI pool', '`hoomlab.io/size=large` on work04/05 + preferred affinity'], [12, 'cli', 'Day-2 delivery', 'A new `talos apply` stage, multi-document aware'],
+  [11, 'kata', 'Placement without a CI pool', '`hoomlab.dev/size=large` on work04/05 + preferred affinity'], [12, 'cli', 'Day-2 delivery', 'A new `talos apply` stage, multi-document aware'],
   [13, 'opt', 'Where options live', 'Inside `talos.cluster`'], [14, 'opt', 'etcd metrics', 'Plain HTTP :2381 on control planes'], [15, 'opt', 'Log receiver', 'Alloy on a fixed LB IP (component to confirm)'],
   [16, 'opt', 'Pull-through mirror', 'Off-cluster, on the booty host'], [17, 'opt', 'Image verification', 'siderolabs + factory keyless; terminal `*` skip'], [18, 'opt', 'metrics-server / KEDA', 'Opt-in `cluster addons` stage'],
   [19, 'opt', 'Temporal scaler', 'Per-workload ScaledObject in GitOps'], [20, 'ver', 'When Kata enters the image', 'In the 1.13.11 re-image (done)'], [21, 'kata', 'RuntimeClasses', 'One `kata` class, 250Mi / 250m'], [22, 'kata', 'Unprivileged Buildkite', 'Stays on runc']];

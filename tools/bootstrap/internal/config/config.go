@@ -271,9 +271,9 @@ type TalosNode struct {
 }
 
 // LabelPrefix is the label namespace hoomlab owns: the explicit
-// placement labels (hoomlab.io/size) and, as subdomains of it, the
-// labels the CLI derives (runtime.hoomlab.io/…).
-const LabelPrefix = "hoomlab.io/"
+// placement labels (hoomlab.dev/size) and, as subdomains of it, the
+// labels the CLI derives (runtime.hoomlab.dev/…).
+const LabelPrefix = "hoomlab.dev/"
 
 // NetworkInterface is the raw HCL form of one VM NIC — a labeled
 // network_interface block inside a node (DESIGN-0004). The label is

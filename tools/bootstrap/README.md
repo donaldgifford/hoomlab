@@ -64,7 +64,7 @@ labels the render sets itself:
 node "work04" {
   role   = "worker"
   # …
-  labels = { "hoomlab.io/size" = "large" }
+  labels = { "hoomlab.dev/size" = "large" }
 }
 ```
 

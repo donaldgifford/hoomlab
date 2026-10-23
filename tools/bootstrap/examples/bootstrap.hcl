@@ -271,7 +271,7 @@ cluster "homelab" {
       # different label sets render from separate templates; talos
       # apply puts a changed label on a running node without a reboot.
       labels = {
-        "hoomlab.io/size" = "large"
+        "hoomlab.dev/size" = "large"
       }
 
       # The inline form, equally valid — the primitives are always
