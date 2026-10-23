@@ -810,7 +810,9 @@ DESIGN-0005 Phase 4.
       the README covers it.
       *(2026-10-23: the example `kata` profile is live on worker-01 (`["base", "kata"]`) and `examples/cilium-values.yaml` sets `socketLB.hostNamespaceOnly: true`, so `TestLoadExampleConfig` exercises the Kata checks; README "Kata Containers" section; `config` package doc names `runtime.go`.)*
 - [ ] Release (OQ-9 a).
+      *(Deferred — human required: the operator runs `tools-release.yml` after merge.)*
 - [ ] **Operator / GitOps:**
+      *(Deferred — human required. Order matters: add `socketLB.hostNamespaceOnly: true` to `~/drill/cilium-values.yaml` **before** running the released binary — with Kata on the workers, load now rejects values without it.)*
       - [ ] Add `socketLB.hostNamespaceOnly: true` explicitly to
             `~/drill/cilium-values.yaml` and the GitOps Cilium values.
             It is already in effect, so expect a no-op agent restart.
