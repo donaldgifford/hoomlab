@@ -47,7 +47,7 @@ profile "talos-worker" {
   }
 }
 
-profile "talos-worker-d18a3cad" {
+profile "talos-worker-e0a0872e" {
   boot {
     kernel = "${local.boot_base}/376567988ad370138ad8b2698212367b8edcb69b5fd68c80be1f2ec7d603b4ba/vmlinuz"
     initrd = "${local.boot_base}/376567988ad370138ad8b2698212367b8edcb69b5fd68c80be1f2ec7d603b4ba/initramfs.xz"
@@ -58,7 +58,7 @@ profile "talos-worker-d18a3cad" {
   }
   render {
     kind     = "talos-machineconfig"
-    template = "talos/worker-d18a3cad.yaml.tmpl"
+    template = "talos/worker-e0a0872e.yaml.tmpl"
   }
   vars = {
     role          = "worker"

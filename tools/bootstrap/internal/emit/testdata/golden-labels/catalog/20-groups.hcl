@@ -39,7 +39,7 @@ group "worker-01" {
 }
 
 group "worker-02" {
-  profile = "talos-worker-d18a3cad"
+  profile = "talos-worker-e0a0872e"
   selector = {
     mac = "02:50:99:a2:01:02"
   }

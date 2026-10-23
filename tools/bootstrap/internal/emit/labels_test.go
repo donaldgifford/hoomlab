@@ -9,7 +9,7 @@ import (
 	"github.com/donaldgifford/hoomlab/tools/bootstrap/internal/config"
 )
 
-const sizeLabel = "hoomlab.io/size"
+const sizeLabel = "hoomlab.dev/size"
 
 // labelledTestCluster is testCluster with a second worker carrying
 // the size label, so the worker role splits into an unlabelled and a

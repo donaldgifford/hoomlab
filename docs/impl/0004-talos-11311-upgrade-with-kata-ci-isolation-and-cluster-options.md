@@ -139,7 +139,7 @@ this IMPL.
 | Talos | v1.13.8 → v1.13.11 (all 8 nodes, 2026-10-13; kernel 6.18.54) |
 | Kubernetes | v1.36.3 → v1.36.5 (all 8 nodes, 2026-10-19; CoreDNS v1.14.7) |
 | CI workers | ~~`work04`, `work05` (OQ-4)~~ none: no CI pool (DESIGN-0005 direction change, 2026-10-17). Kata test node: work05 |
-| Label keys | ~~`hoomlab.io/workload=ci`~~ dropped. `hoomlab.io/size=large` on work04/05 (Phase 4); `runtime.hoomlab.io/kata=true` derived on every worker (Phase 5). Taints deferred |
+| Label keys | ~~`hoomlab.io/workload=ci`~~ dropped. `hoomlab.dev/size=large` on work04/05 (Phase 4); `runtime.hoomlab.dev/kata=true` derived on every worker (Phase 5). Taints deferred |
 | bootstrap release with the apply stage | *(Phase 3)* |
 | Kata cost per idle pod | ~200 MB host RSS (`cloud-hypervisor` ~150, shim ~44, `virtiofsd` ~5); MemAvailable −165 to −177 MiB. Build VMs: ~310–330 MB plus `virtiofsd` ~95 MB. RuntimeClass `overhead.podFixed` should be ~250Mi (the test used 130Mi) |
 | Kata cold start (cached images) | runc 1s, Kata 3s |
@@ -731,8 +731,8 @@ OQ-4), and there is no sugar (OQ-5).
 #### Tasks
 
 - [x] `internal/config/config.go`: add `Labels map[string]string` to
-      `TalosNode`. Hold the `hoomlab.io/` prefix in one constant.
-      *(2026-10-22: `TalosNode.Labels` (`labels`, optional) and `config.LabelPrefix = "hoomlab.io/"`.)*
+      `TalosNode`. Hold the `hoomlab.dev/` prefix in one constant.
+      *(2026-10-22: `TalosNode.Labels` (`labels`, optional) and `config.LabelPrefix = "hoomlab.dev/"`.)*
 - [x] `internal/config/resolve.go`: carry the explicit labels into the
       resolved form. Phase 5 adds the derived runtime label beside
       them.
@@ -762,19 +762,19 @@ OQ-4), and there is no sugar (OQ-5).
       *(2026-10-22: `internal/config/labels_test.go` (each rule plus positive controls: allow-listed namespaces, worker-side LB exclusion, zone without a cluster block; resolution is copied). `internal/emit/labels_test.go`: `golden-labels` for a split worker role, plus unsplit labels keeping plain names. Byte-identity: the existing `golden`/`golden-multinic` sets are unchanged. `TestNodeConfigsMatchBooty` now also runs the labelled cluster (booty serves each class byte-identically, metal `Validate` passes, labels land in `machine.nodeLabels`); `TestClassTemplatesSplitByLabels` validates every class.)*
 - [x] Docs: the example HCL and the README.
       *(2026-10-22: `examples/bootstrap.hcl` shows `labels` on worker-01 with the rules inline (still loads in `TestLoadExampleConfig`); README "Node labels" subsection; `config` package doc names the resolver and `labels.go`.)*
-- [ ] Release (OQ-9 a).
-      *(Deferred — human required: the operator runs `tools-release.yml` after merge.)*
-- [ ] **Live (operator):**
-      - add `labels = { "hoomlab.io/size" = "large" }` to work04 and
+- [x] Release (OQ-9 a).
+      *(2026-10-23: `tools/bootstrap/v0.5.0` cut after #26.)*
+- [x] **Live (operator):**
+      - add `labels = { "hoomlab.dev/size" = "large" }` to work04 and
         work05 in `~/drill/bootstrap.hcl`;
       - run `talos emit` and sync and restart booty;
       - run `talos apply --dry-run` (only work04/05 differ, by the
         label), then `talos apply --node work04` and `--node work05`.
-      *(Deferred — human required: operator edits `~/drill/bootstrap.hcl`, re-emits, restarts booty, and applies with the released binary.)*
+      *(2026-10-23, with v0.5.0 and the key moved to `hoomlab.dev/` (#27) before anything carried it: the dry-run showed only work04/05 pending, each diff a single `+ hoomlab.dev/size: large` under `nodeLabels`. `--node work04` and `--node work05` applied with `NO_REBOOT`, the re-survey reports 0 of 8 pending, and `kubectl get nodes -L hoomlab.dev/size` shows `large` on work04/05 only.)*
 
 #### Success Criteria
 
-- work04 and work05 carry `hoomlab.io/size=large`, and no other node
+- work04 and work05 carry `hoomlab.dev/size=large`, and no other node
   does. `talos apply --dry-run` reports 0 on all 8 nodes.
 - Configs without `labels` are byte-identical.
 
@@ -790,7 +790,7 @@ DESIGN-0005 Phase 4.
       (extension `siderolabs/kata-containers`, handler `kata`,
       worker-only).
 - [ ] Resolver: a node whose flattened extensions include a runtime's
-      extension derives the label `runtime.hoomlab.io/kata=true`. An
+      extension derives the label `runtime.hoomlab.dev/kata=true`. An
       explicit label on that key is an XOR error.
 - [ ] Validation: the Kata extension on a control-plane profile is an
       error.
@@ -815,9 +815,9 @@ DESIGN-0005 Phase 4.
       - [ ] Delete the Phase 0 test RuntimeClass and let GitOps create
             the `kata` class from the DESIGN-0005 contract
             (`overhead.podFixed` 250Mi / 250m, `nodeSelector`
-            `runtime.hoomlab.io/kata: "true"`).
+            `runtime.hoomlab.dev/kata: "true"`).
       - [ ] Re-run T1, T2, and T6 against the GitOps class: T6 with a
-            pod that prefers `hoomlab.io/size=large`.
+            pod that prefers `hoomlab.dev/size=large`.
       - [ ] PVE: turn off automatic live migration for the worker VMs
             (the 9.2 load balancer's rebalancing, and an HA shutdown
             policy of `migrate`). HA cold restart stays.

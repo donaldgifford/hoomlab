@@ -43,7 +43,7 @@ func TestLoadLabels(t *testing.T) {
 		{
 			name:   "hoomlab size label",
 			vmid:   workerVMID,
-			labels: `        "hoomlab.io/size" = "large"`,
+			labels: `        "hoomlab.dev/size" = "large"`,
 		},
 		{
 			name:   "unprefixed key and empty value",
@@ -74,7 +74,7 @@ func TestLoadLabels(t *testing.T) {
 			name:     "node-role prefix",
 			vmid:     workerVMID,
 			labels:   `        "node-role.kubernetes.io/ci" = ""`,
-			wantErrs: []string{"Label refused by NodeRestriction", `"node-role.kubernetes.io/ci"`, `"hoomlab.io/ci"`},
+			wantErrs: []string{"Label refused by NodeRestriction", `"node-role.kubernetes.io/ci"`, `"hoomlab.dev/ci"`},
 		},
 		{
 			name:     "node-restriction prefix",
@@ -103,19 +103,19 @@ func TestLoadLabels(t *testing.T) {
 		{
 			name:     "empty name",
 			vmid:     workerVMID,
-			labels:   `        "hoomlab.io/" = "large"`,
+			labels:   `        "hoomlab.dev/" = "large"`,
 			wantErrs: []string{"Invalid label key"},
 		},
 		{
 			name:     "name over 63 characters",
 			vmid:     workerVMID,
-			labels:   `        "hoomlab.io/` + strings.Repeat("a", 64) + `" = "x"`,
+			labels:   `        "hoomlab.dev/` + strings.Repeat("a", 64) + `" = "x"`,
 			wantErrs: []string{"Invalid label key"},
 		},
 		{
 			name:     "invalid value",
 			vmid:     workerVMID,
-			labels:   `        "hoomlab.io/size" = "extra large"`,
+			labels:   `        "hoomlab.dev/size" = "extra large"`,
 			wantErrs: []string{"Invalid label value"},
 		},
 		{
@@ -169,7 +169,7 @@ func TestLoadLabels(t *testing.T) {
 
 func TestLoadResolvesLabels(t *testing.T) {
 	setTestEnv(t)
-	path := writeConfig(t, withLabels(t, validHCL, workerVMID, `        "hoomlab.io/size" = "large"`))
+	path := writeConfig(t, withLabels(t, validHCL, workerVMID, `        "hoomlab.dev/size" = "large"`))
 	cluster, diags := Load(path)
 	if diags.HasErrors() {
 		t.Fatalf("Load failed:\n%s", renderDiags(t, diags))
@@ -180,11 +180,11 @@ func TestLoadResolvesLabels(t *testing.T) {
 		t.Errorf("unlabelled node ResolvedLabels = %v, want nil", got)
 	}
 	got := worker.ResolvedLabels()
-	if len(got) != 1 || got["hoomlab.io/size"] != "large" {
-		t.Fatalf("ResolvedLabels = %v, want hoomlab.io/size=large", got)
+	if len(got) != 1 || got["hoomlab.dev/size"] != "large" {
+		t.Fatalf("ResolvedLabels = %v, want hoomlab.dev/size=large", got)
 	}
-	got["hoomlab.io/size"] = "small"
-	if worker.ResolvedLabels()["hoomlab.io/size"] != "large" {
+	got["hoomlab.dev/size"] = "small"
+	if worker.ResolvedLabels()["hoomlab.dev/size"] != "large" {
 		t.Error("ResolvedLabels returned the resolver's map, not a copy")
 	}
 }

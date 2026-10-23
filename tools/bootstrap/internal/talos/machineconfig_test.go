@@ -419,7 +419,7 @@ func TestClassTemplatesSplitByLabels(t *testing.T) {
 	nic := func(mac string) []config.NetworkInterface {
 		return []config.NetworkInterface{{Name: "net0", MAC: mac, Bridge: "vmbr0", DHCP: &dhcp, Primary: &primary}}
 	}
-	large := map[string]string{"hoomlab.io/size": "large"}
+	large := map[string]string{"hoomlab.dev/size": "large"}
 	cluster := testCluster()
 	cluster.Talos.Nodes = []config.TalosNode{
 		{Name: "cp-01", Role: config.RoleControlPlane, Interfaces: nic("02:50:99:a2:00:01")},
@@ -442,10 +442,10 @@ func TestClassTemplatesSplitByLabels(t *testing.T) {
 	if !ok {
 		t.Fatal("no template for the labelled worker class")
 	}
-	if !bytes.Contains(labelled, []byte("hoomlab.io/size: large")) {
+	if !bytes.Contains(labelled, []byte("hoomlab.dev/size: large")) {
 		t.Error("labelled worker template is missing its node label")
 	}
-	if bytes.Contains(workerOf(t, tmpl), []byte("hoomlab.io/size")) {
+	if bytes.Contains(workerOf(t, tmpl), []byte("hoomlab.dev/size")) {
 		t.Error("unlabelled worker template carries the size label")
 	}
 	if _, ok := tmpl.For(config.RoleControlPlane, large); ok {

@@ -5,8 +5,13 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
 ## [unreleased]
 
+### Refactor
+
+- *(bootstrap)* Move the label namespace to hoomlab.dev
+
 ### Documentation
 
+- *(impl)* Record the phase 4 live label results
 - *(impl)* Record the phase 3 live talos apply results
 
 ## [tools/bootstrap/v0.5.0] - 2026-10-22
