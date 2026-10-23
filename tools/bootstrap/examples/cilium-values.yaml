@@ -3,7 +3,8 @@
 # Cilium on Talos; extend it, don't start from scratch. bootstrap
 # validates this file at config load: kubeProxyReplacement must be
 # true (the emitted machineconfigs disable kube-proxy), the KubePrism
-# pair below must be exactly localhost:7445, and a top-level key with
+# pair below must be exactly localhost:7445, socketLB.hostNamespaceOnly
+# must be true while any node carries Kata, and a top-level key with
 # no value is rejected — a lost indent silently turns a nested
 # setting into a bogus key the chart ignores.
 #
@@ -16,6 +17,15 @@ kubeProxyReplacement: true
 # 7445 — the only API server address that exists before the CNI does.
 k8sServiceHost: localhost
 k8sServicePort: 7445
+
+# Kata (DESIGN-0005): a Kata pod's sockets live in its guest kernel,
+# out of reach of pod-namespace socket load balancing, so socket LB
+# stays in the host namespace. Gateway API forces this on in Cilium
+# 1.20 today; bootstrap requires it explicitly whenever a node carries
+# the kata extension, so it survives a values change. Don't enable the
+# bandwidth manager alongside Kata (talos#13745).
+socketLB:
+  hostNamespaceOnly: true
 
 # Talos ships no cgroup v1 mount point and needs these capability
 # lists (Cilium-on-Talos docs).

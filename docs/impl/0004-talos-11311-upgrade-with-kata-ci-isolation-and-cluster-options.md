@@ -806,8 +806,9 @@ DESIGN-0005 Phase 4.
       every worker class. Since the label is the same on every worker,
       it does not split a role.
       *(2026-10-23: `internal/config/runtime_test.go` covers the derived label beside an explicit one, the XOR (with and without the extension), Kata on a control plane, and both Cilium checks with positive controls. `TestRuntimeLabelInEveryWorkerClass`: the label is in every worker template, in no control-plane one, and the worker role still splits only by size. Catalog goldens don't carry labels (templates hold secrets and aren't golden), so the template assertion stands in for them.)*
-- [ ] Docs: the example HCL `kata` profile is live, not commented, and
+- [x] Docs: the example HCL `kata` profile is live, not commented, and
       the README covers it.
+      *(2026-10-23: the example `kata` profile is live on worker-01 (`["base", "kata"]`) and `examples/cilium-values.yaml` sets `socketLB.hostNamespaceOnly: true`, so `TestLoadExampleConfig` exercises the Kata checks; README "Kata Containers" section; `config` package doc names `runtime.go`.)*
 - [ ] Release (OQ-9 a).
 - [ ] **Operator / GitOps:**
       - [ ] Add `socketLB.hostNamespaceOnly: true` explicitly to

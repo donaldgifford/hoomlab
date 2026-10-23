@@ -83,6 +83,39 @@ node "work04" {
 - On a running cluster, edit the labels, re-emit, and run
   `bootstrap talos apply` — labels apply without a reboot.
 
+### Kata Containers
+
+Kata is a capability baked into the image, not a setting. A node that
+carries `siderolabs/kata-containers` in its profiles can run Kata pods;
+a pod opts in with `runtimeClassName: kata`, and everything else stays
+on runc.
+
+```hcl
+profile "kata" {
+  extensions = ["siderolabs/kata-containers"]
+}
+
+node "work01" {
+  role     = "worker"
+  profiles = ["base", "kata"]
+  # …
+}
+```
+
+- Every node carrying the extension derives the label
+  `runtime.hoomlab.dev/kata=true`. Select the RuntimeClass on it: the
+  Talos extension label carries a version, so a class selecting on that
+  would strand every Kata pod at the next extension bump.
+- `runtime.hoomlab.dev/` is reserved for derived labels; an explicit
+  label there fails load.
+- The extension on a control plane fails load. Control planes stay
+  minimal.
+- With Kata on any node, the Cilium values must set
+  `socketLB.hostNamespaceOnly: true` explicitly, and
+  `bandwidthManager.enabled: true` fails load (talos#13745).
+- Kata needs `/dev/kvm` in the guest: `cpu = host` on the VM plus
+  nested virtualisation on the PVE host.
+
 Global flags (CLI concerns, deliberately not config): `--config`
 (default `bootstrap.hcl`), `--output` (default `./bootstrap-out`),
 `--secrets` (default `secrets.yaml` next to the config), `--dry-run`,
