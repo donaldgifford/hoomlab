@@ -30,10 +30,10 @@ jobs:
       matrix:
         tool: [bootstrap]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: tools/${{ matrix.tool }}/go.mod
           cache-dependency-path: tools/${{ matrix.tool }}/go.sum
@@ -41,7 +41,7 @@ jobs:
       # Uses the repo-root .golangci.yml — golangci-lint searches upward
       # from the working directory for its config.
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v9
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
         with:
           version: v2.12.2
           working-directory: tools/${{ matrix.tool }}
@@ -56,10 +56,10 @@ jobs:
       run:
         working-directory: tools/${{ matrix.tool }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: tools/${{ matrix.tool }}/go.mod
           cache-dependency-path: tools/${{ matrix.tool }}/go.sum
