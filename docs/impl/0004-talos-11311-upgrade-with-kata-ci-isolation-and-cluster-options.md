@@ -809,8 +809,8 @@ DESIGN-0005 Phase 4.
 - [x] Docs: the example HCL `kata` profile is live, not commented, and
       the README covers it.
       *(2026-10-23: the example `kata` profile is live on worker-01 (`["base", "kata"]`) and `examples/cilium-values.yaml` sets `socketLB.hostNamespaceOnly: true`, so `TestLoadExampleConfig` exercises the Kata checks; README "Kata Containers" section; `config` package doc names `runtime.go`.)*
-- [ ] Release (OQ-9 a).
-      *(Deferred — human required: the operator runs `tools-release.yml` after merge.)*
+- [x] Release (OQ-9 a).
+      *(2026-11-01: `bootstrap v0.6.0` cut via `tools-release.yml` after #30 merged.)*
 - [ ] **Operator / GitOps:**
       *(Deferred — human required. Order matters: add `socketLB.hostNamespaceOnly: true` to `~/drill/cilium-values.yaml` **before** running the released binary — with Kata on the workers, load now rejects values without it.)*
       - [x] Add `socketLB.hostNamespaceOnly: true` explicitly to
@@ -828,9 +828,21 @@ DESIGN-0005 Phase 4.
             ClusterIP over host network. `~/drill/cilium-values.yaml`
             already carried `socketLB.hostNamespaceOnly: true` and passes
             the Kata Cilium checks.)*
-      - [ ] Run `talos emit`, sync booty, then `talos apply` on all
+      - [x] Run `talos emit`, sync booty, then `talos apply` on all
             workers so the derived label goes live. `--dry-run` reports
             0 after.
+            *(2026-11-01, v0.6.0: the survey had 8 of 8 pending, not
+            just the workers. The Cilium values are embedded in every
+            node's config as the `cilium-values` inline manifest, so
+            adding `socketLB` drifts the control planes too. Each node's
+            diff was the `socketLB` block, plus
+            `runtime.hoomlab.dev/kata: "true"` on work01–05. A first
+            survey also showed the values file's `---` and blank lines
+            as drift; the drill file had been reformatted, and restoring
+            them cleared it. `talos apply --node` applied all 8 with
+            `NO_REBOOT`; the re-run dry-run reports 0 of 8 pending, and
+            `kubectl get nodes -L runtime.hoomlab.dev/kata` shows `true`
+            on work01–05 only.)*
       - [ ] Delete the Phase 0 test RuntimeClass and let GitOps create
             the `kata` class from the DESIGN-0005 contract
             (`overhead.podFixed` 250Mi / 250m, `nodeSelector`
