@@ -843,10 +843,18 @@ DESIGN-0005 Phase 4.
             `NO_REBOOT`; the re-run dry-run reports 0 of 8 pending, and
             `kubectl get nodes -L runtime.hoomlab.dev/kata` shows `true`
             on work01–05 only.)*
-      - [ ] Delete the Phase 0 test RuntimeClass and let GitOps create
+      - [x] Delete the Phase 0 test RuntimeClass and let GitOps create
             the `kata` class from the DESIGN-0005 contract
             (`overhead.podFixed` 250Mi / 250m, `nodeSelector`
             `runtime.hoomlab.dev/kata: "true"`).
+            *(2026-11-01: no delete was needed. The class went into its
+            own small cluster-scoped Argo app, not the Cilium app or
+            Talos inline manifests, and Argo adopted the hand-applied
+            object in place. The live class now has `podFixed`
+            250m / 250Mi and selects `runtime.hoomlab.dev/kata: "true"`;
+            the test class's `extensions.talos.dev/kata-containers:
+            3.32.0` selector, which would have broken on the next Kata
+            bump, is gone. No pods used the class at the switch.)*
       - [ ] Re-run T1, T2, and T6 against the GitOps class: T6 with a
             pod that prefers `hoomlab.dev/size=large`.
       - [ ] PVE: turn off automatic live migration for the worker VMs
