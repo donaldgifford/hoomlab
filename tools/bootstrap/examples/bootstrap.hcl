@@ -154,16 +154,20 @@ cluster "homelab" {
       ]
     }
 
-    # Kata Containers (DESIGN-0005): reference it from WORKER nodes only
-    # — profiles = ["base", "kata"] — so every worker can run Kata
-    # pods. Installed is not enabled: runc stays the default runtime,
-    # and a pod opts in with runtimeClassName once a RuntimeClass for
-    # handler "kata" exists. Needs /dev/kvm in the guest, which the
-    # VMs' cpu = host plus nested virtualisation on the PVE hosts
-    # provide. Control planes stay without it.
-    # profile "kata" {
-    #   extensions = ["siderolabs/kata-containers"]
-    # }
+    # Kata Containers (DESIGN-0005): referenced by every worker —
+    # profiles = ["base", "kata"] — and by no control plane, which load
+    # rejects. Installed is not enabled: runc stays the default runtime,
+    # and a pod opts in with runtimeClassName: kata. Each node carrying
+    # the extension derives the label runtime.hoomlab.dev/kata=true,
+    # the stable key the RuntimeClass nodeSelector selects on (the
+    # Talos extension label carries a version). With Kata present the
+    # cilium values must set socketLB.hostNamespaceOnly: true and must
+    # not enable the bandwidth manager. Needs /dev/kvm in the guest,
+    # which the VMs' cpu = host plus nested virtualisation on the PVE
+    # hosts provide.
+    profile "kata" {
+      extensions = ["siderolabs/kata-containers"]
+    }
 
     booty {
       # Where the operator runs the booty container; the emitted
@@ -258,7 +262,7 @@ cluster "homelab" {
       memory   = 16384
       disk_gb  = 128
       storage  = "local-zfs"
-      profiles = ["base"]
+      profiles = ["base", "kata"]
       # labels are this node's Kubernetes node labels, rendered to
       # machine.nodeLabels — a placement preference workloads opt into
       # with preferred node affinity; nothing is repelled. Written
@@ -267,7 +271,8 @@ cluster "homelab" {
       # off the NodeRestriction allow-list (node-role.kubernetes.io/…
       # among them) are rejected at load, as are the keys the render
       # sets itself (topology region/zone with a cluster block, the
-      # control-plane load-balancer exclusion). Nodes of a role with
+      # control-plane load-balancer exclusion), and runtime.hoomlab.dev/
+      # keys, which only the runtime table derives. Nodes of a role with
       # different label sets render from separate templates; talos
       # apply puts a changed label on a running node without a reboot.
       labels = {

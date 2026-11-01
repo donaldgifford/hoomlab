@@ -786,29 +786,48 @@ DESIGN-0005 Phase 4.
 
 #### Tasks
 
-- [ ] Runtime table, e.g. `internal/config/runtime.go`: a `kata` row
+- [x] Runtime table, e.g. `internal/config/runtime.go`: a `kata` row
       (extension `siderolabs/kata-containers`, handler `kata`,
       worker-only).
-- [ ] Resolver: a node whose flattened extensions include a runtime's
+      *(2026-10-23: `config.Runtime` table with the `kata` row and `Runtime.Label()` (`runtime.hoomlab.dev/<name>`); extension flattening moved from `talos.NodeExtensions` to `Talos.NodeExtensions` so the resolver can use it, plus `Talos.NodeRuntimes`.)*
+- [x] Resolver: a node whose flattened extensions include a runtime's
       extension derives the label `runtime.hoomlab.dev/kata=true`. An
       explicit label on that key is an XOR error.
-- [ ] Validation: the Kata extension on a control-plane profile is an
+      *(2026-10-23: `Talos.resolveLabels` adds `runtime.hoomlab.dev/<runtime>=true` per runtime the node's extensions provide. The XOR rule is enforced at load by rejecting **any** explicit key in `runtime.hoomlab.dev/`, since a hand-written one on a node without the extension would schedule Kata pods where they can't run.)*
+- [x] Validation: the Kata extension on a control-plane profile is an
       error.
-- [ ] `internal/config/ciliumvalues.go`: if any node carries Kata,
+      *(2026-10-23: `validateRuntimes` (from `ValidateAndNormalize`) rejects any `WorkerOnly` runtime a control plane's flattened extensions provide, naming the node and extension.)*
+- [x] `internal/config/ciliumvalues.go`: if any node carries Kata,
       require explicit `socketLB.hostNamespaceOnly: true`, and make
       `bandwidthManager.enabled: true` an error.
-- [ ] Tests: the derived label, the XOR, Kata on a control plane, both
+      *(2026-10-23: `kataCiliumValues`, run when `carriesRuntime("kata")`: `socketLB.hostNamespaceOnly` must be an explicit `true`, and `bandwidthManager.enabled: true` is an error.)*
+- [x] Tests: the derived label, the XOR, Kata on a control plane, both
       Cilium checks, and positive controls. Goldens carry the label in
       every worker class. Since the label is the same on every worker,
       it does not split a role.
-- [ ] Docs: the example HCL `kata` profile is live, not commented, and
+      *(2026-10-23: `internal/config/runtime_test.go` covers the derived label beside an explicit one, the XOR (with and without the extension), Kata on a control plane, and both Cilium checks with positive controls. `TestRuntimeLabelInEveryWorkerClass`: the label is in every worker template, in no control-plane one, and the worker role still splits only by size. Catalog goldens don't carry labels (templates hold secrets and aren't golden), so the template assertion stands in for them.)*
+- [x] Docs: the example HCL `kata` profile is live, not commented, and
       the README covers it.
+      *(2026-10-23: the example `kata` profile is live on worker-01 (`["base", "kata"]`) and `examples/cilium-values.yaml` sets `socketLB.hostNamespaceOnly: true`, so `TestLoadExampleConfig` exercises the Kata checks; README "Kata Containers" section; `config` package doc names `runtime.go`.)*
 - [ ] Release (OQ-9 a).
+      *(Deferred — human required: the operator runs `tools-release.yml` after merge.)*
 - [ ] **Operator / GitOps:**
-      - [ ] Add `socketLB.hostNamespaceOnly: true` explicitly to
+      *(Deferred — human required. Order matters: add `socketLB.hostNamespaceOnly: true` to `~/drill/cilium-values.yaml` **before** running the released binary — with Kata on the workers, load now rejects values without it.)*
+      - [x] Add `socketLB.hostNamespaceOnly: true` explicitly to
             `~/drill/cilium-values.yaml` and the GitOps Cilium values.
             It is already in effect, so expect a no-op agent restart.
             Run the cilium#48420 check after.
+            *(2026-10-23: before the change, every agent already reported
+            `Socket LB Coverage: Hostns-only` and `cilium-config` had
+            `bpf-lb-sock-hostns-only: true`, forced by `gatewayAPI.enabled`;
+            the GitOps values had no `socketLB` key. With the block added,
+            `argocd app diff cilium` came back empty, so nothing restarted.
+            cilium#48420 baseline passes on all 8 nodes: 11 `cil_sock*`
+            hooks at the root cgroup (`/sys/fs/cgroup`, read via
+            `bpftool` in each agent) and a 401 from the `kubernetes`
+            ClusterIP over host network. `~/drill/cilium-values.yaml`
+            already carried `socketLB.hostNamespaceOnly: true` and passes
+            the Kata Cilium checks.)*
       - [ ] Run `talos emit`, sync booty, then `talos apply` on all
             workers so the derived label goes live. `--dry-run` reports
             0 after.

@@ -5,6 +5,13 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
 ## [unreleased]
 
+### Features
+
+- *(bootstrap)* Add the runtime table
+- *(bootstrap)* Derive runtime labels from node extensions
+- *(bootstrap)* Reject worker-only runtimes on control planes
+- *(bootstrap)* Check the cilium values kata depends on
+
 ### Refactor
 
 - *(bootstrap)* Move the label namespace to hoomlab.dev
@@ -13,6 +20,14 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 - *(impl)* Record the phase 4 live label results
 - *(impl)* Record the phase 3 live talos apply results
+- *(bootstrap)* Document the kata runtime
+- *(impl)* Defer the phase 5 operator tasks
+- *(impl)* Record the socketLB gitops change and cilium#48420 baseline
+- *(impl)* Tick the socketLB operator step
+
+### Testing
+
+- *(bootstrap)* Cover the kata runtime label and cilium checks
 
 ## [tools/bootstrap/v0.5.0] - 2026-10-22
 

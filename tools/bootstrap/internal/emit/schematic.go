@@ -114,7 +114,7 @@ func (e *Emitter) nodeSchematics(ctx context.Context) (perNode, unique []string,
 // schematicFor resolves one node's image identity, consulting the
 // per-extension-set cache so each unique set hits the factory once.
 func (e *Emitter) schematicFor(ctx context.Context, node *config.TalosNode, resolved map[string]string) (string, error) {
-	exts := talos.NodeExtensions(&e.Cluster.Talos, node)
+	exts := e.Cluster.Talos.NodeExtensions(node)
 	if len(exts) == 0 {
 		return talos.ResolveSchematicID(e.Cluster.Talos.SchematicID), nil
 	}

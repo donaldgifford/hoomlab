@@ -48,9 +48,10 @@ func (n *TalosNode) ResolvedInterfaces() []ResolvedInterface {
 	return slices.Clone(n.resolved)
 }
 
-// ResolvedLabels returns the node's resolved label set: today the
-// explicit labels, and with DESIGN-0005 Phase 4 the derived runtime
-// label beside them — renderers never know which way a label arrived.
+// ResolvedLabels returns the node's resolved label set: the explicit
+// labels plus the runtime labels derived from its extensions
+// (DESIGN-0005 Phase 4) — renderers never know which way a label
+// arrived.
 // Nil for a node with none, or before resolution. The map is a copy.
 func (n *TalosNode) ResolvedLabels() map[string]string {
 	return maps.Clone(n.labels)
@@ -83,7 +84,7 @@ func (c *Cluster) ResolveInterfaces() hcl.Diagnostics {
 	}
 	diags := make(hcl.Diagnostics, 0, len(c.Talos.Nodes))
 	for i := range c.Talos.Nodes {
-		diags = append(diags, resolveNode(planes, &c.Talos.Nodes[i])...)
+		diags = append(diags, c.Talos.resolveNode(planes, &c.Talos.Nodes[i])...)
 	}
 	return diags
 }
@@ -93,7 +94,7 @@ func (c *Cluster) ResolveInterfaces() hcl.Diagnostics {
 // exactly-one-primary rule — checked only once every interface
 // resolved, so a node reports its structural mistakes before its
 // aggregate ones.
-func resolveNode(planes map[string]*Network, n *TalosNode) hcl.Diagnostics {
+func (t *Talos) resolveNode(planes map[string]*Network, n *TalosNode) hcl.Diagnostics {
 	if len(n.Interfaces) == 0 {
 		return hcl.Diagnostics{errf("Missing network interface",
 			"talos node %q declares no network_interface block; a VM needs at least its boot NIC.",
@@ -145,10 +146,26 @@ func resolveNode(planes map[string]*Network, n *TalosNode) hcl.Diagnostics {
 		return slotIndex(resolved[i].Slot) < slotIndex(resolved[j].Slot)
 	})
 	n.resolved = resolved
-	if len(n.Labels) > 0 {
-		n.labels = maps.Clone(n.Labels)
-	}
+	n.labels = t.resolveLabels(n)
 	return diags
+}
+
+// resolveLabels is the node's explicit labels plus one derived label
+// per runtime its extensions provide (runtime.hoomlab.dev/kata=true).
+// Validation keeps explicit labels out of the derived namespace, so
+// the union never overwrites. Nil for a node with neither.
+func (t *Talos) resolveLabels(n *TalosNode) map[string]string {
+	labels := maps.Clone(n.Labels)
+	for _, r := range t.NodeRuntimes(n) {
+		if labels == nil {
+			labels = map[string]string{}
+		}
+		labels[r.Label()] = "true"
+	}
+	if len(labels) == 0 {
+		return nil
+	}
+	return labels
 }
 
 // slotIndex extracts the numeric slot from a label the slotPattern

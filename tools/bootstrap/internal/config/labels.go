@@ -55,8 +55,10 @@ var (
 )
 
 // validateLabels checks every node's explicit labels: Kubernetes
-// syntax for keys and values, NodeRestriction's restricted namespaces,
-// and collisions with the labels the render already sets. Each rule
+// syntax for keys and values, the derived runtime namespace (the XOR
+// rule: a runtime label comes from the profiles, never from labels),
+// NodeRestriction's restricted namespaces, and collisions with the
+// labels the render already sets. Each rule
 // fails at load, where the error can name the node and the key —
 // instead of on the node, as a kubelet retry loop.
 func (c *Cluster) validateLabels() hcl.Diagnostics {
@@ -106,6 +108,15 @@ func validateLabel(node, key, value string, rendered []string) hcl.Diagnostics {
 	}
 
 	switch {
+	case strings.HasPrefix(key, runtimeLabelPrefix):
+		diags = append(diags, errf(
+			"Label in the derived runtime namespace",
+			"talos node %q: label %q is in %s, which only the runtime table writes — a node gets %skata=true from carrying the kata extension in its profiles. Add the extension, or drop the label.",
+			node,
+			key,
+			runtimeLabelPrefix,
+			runtimeLabelPrefix,
+		))
 	case slices.Contains(rendered, key):
 		diags = append(diags, errf("Label collides with a rendered label",
 			"talos node %q: label %q is set by the render itself; drop it from labels.", node, key))
