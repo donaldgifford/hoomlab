@@ -855,8 +855,16 @@ DESIGN-0005 Phase 4.
             the test class's `extensions.talos.dev/kata-containers:
             3.32.0` selector, which would have broken on the next Kata
             bump, is gone. No pods used the class at the switch.)*
-      - [ ] Re-run T1, T2, and T6 against the GitOps class: T6 with a
+      - [x] Re-run T1, T2, and T6 against the GitOps class: T6 with a
             pod that prefers `hoomlab.dev/size=large`.
+            *(2026-11-01: T1 and T2 were not re-run. Argo adopted the
+            class in place with the same `handler`, extension, and nodes,
+            so nothing they cover changed. The adoption did change the
+            selector and the overhead, so T6 ran as one smoke pod with
+            `runtimeClassName: kata` and a preferred `hoomlab.dev/size=large`
+            affinity. It landed on work05 with `overhead`
+            250m / 250Mi, and `uname -r` printed the guest kernel `6.18.35`,
+            not the host's `6.18.54-talos`.)*
       - [ ] PVE: turn off automatic live migration for the worker VMs
             (the 9.2 load balancer's rebalancing, and an HA shutdown
             policy of `migrate`). HA cold restart stays.
