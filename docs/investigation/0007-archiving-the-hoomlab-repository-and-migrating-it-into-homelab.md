@@ -1,7 +1,7 @@
 ---
 id: INV-0007
 title: "Archiving the hoomlab repository and migrating it into homelab as a private project"
-status: In Progress
+status: Concluded
 author: Donald Gifford
 created: 2026-11-02
 ---
@@ -305,6 +305,10 @@ token. The rule to write down is the one ADR-0001 implies already: a
 tagged, downloaded bootstrap release exists before any
 cluster-breaking change, and the recovery runbook names the local
 build path first. Nothing in this coupling needs the cluster to be up.
+
+*(2026-11-02: accepted by the operator. Managing the cluster it runs on
+and builds on is part of the design; the starting point is always a
+local build, as it has to be.)*
 
 ### Observation 7: what is lost, weighed
 
