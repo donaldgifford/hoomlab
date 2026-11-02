@@ -20,7 +20,7 @@ Design docs, plans, and implementation docs can reference investigations by ID
 | INV-0003 | Platform reuse for hoomlab | Concluded | 2026-10-10 | Donald Gifford | [0003-platform-reuse-for-hoomlab.md](0003-platform-reuse-for-hoomlab.md) |
 | INV-0004 | Talos 1.14 and Kubernetes 1.37 upgrade with workload isolation | Concluded | 2026-10-11 | Donald Gifford | [0004-talos-114-and-kubernetes-137-upgrade-with-workload-isolation.md](0004-talos-114-and-kubernetes-137-upgrade-with-workload-isolation.md) |
 | INV-0005 | Rolling node upgrades managed by hoomlab | Open | 2026-10-11 | Donald Gifford | [0005-rolling-node-upgrades-managed-by-hoomlab.md](0005-rolling-node-upgrades-managed-by-hoomlab.md) |
-| INV-0006 | Platform-repo reuse and moving hoomlab into the homelab monorepo | In Progress | 2026-11-02 | Donald Gifford | [0006-platform-repo-reuse-and-moving-hoomlab-into-the-homelab-monorepo.md](0006-platform-repo-reuse-and-moving-hoomlab-into-the-homelab-monorepo.md) |
+| INV-0006 | Platform-repo reuse and moving hoomlab into the homelab monorepo | Concluded | 2026-11-02 | Donald Gifford | [0006-platform-repo-reuse-and-moving-hoomlab-into-the-homelab-monorepo.md](0006-platform-repo-reuse-and-moving-hoomlab-into-the-homelab-monorepo.md) |
 <!-- markdownlint-restore -->
 <!-- END DOCZ AUTO-GENERATED -->
 <!-- BEGIN DOCZ AUTO-GENERATED -->

@@ -1,7 +1,7 @@
 ---
 id: INV-0006
 title: "Platform-repo reuse and moving hoomlab into the homelab monorepo"
-status: In Progress
+status: Concluded
 author: Donald Gifford
 created: 2026-11-02
 ---
