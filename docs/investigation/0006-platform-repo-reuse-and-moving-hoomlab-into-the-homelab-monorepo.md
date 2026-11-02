@@ -1,7 +1,7 @@
 ---
 id: INV-0006
 title: "Platform-repo reuse and moving hoomlab into the homelab monorepo"
-status: Concluded
+status: In Progress
 author: Donald Gifford
 created: 2026-11-02
 ---
@@ -11,6 +11,8 @@ created: 2026-11-02
 # INV-0006: Platform-repo reuse and moving hoomlab into the homelab monorepo
 
 <!--toc:start-->
+<!-- markdownlint-capture -->
+<!-- markdownlint-disable MD013 -->
 - [Question](#question)
 - [Hypothesis](#hypothesis)
 - [Context](#context)
@@ -28,7 +30,11 @@ created: 2026-11-02
   - [Observation 9: the precedent for "homelab's build" is a copy, not a merge](#observation-9-the-precedent-for-homelabs-build-is-a-copy-not-a-merge)
 - [Conclusion](#conclusion)
 - [Recommendation](#recommendation)
+  - [The move](#the-move)
+  - [Reuse, in rough order of value](#reuse-in-rough-order-of-value)
+  - [Housekeeping](#housekeeping)
 - [References](#references)
+<!-- markdownlint-restore -->
 <!--toc:end-->
 
 <!--docz:question:start-->
@@ -49,6 +55,9 @@ where hoomlab lives:
 2. Should hoomlab move into the `homelab` monorepo, under its Bazel
    and Buildkite setup, next to the other Go projects?
 
+<!--docz:question:end-->
+
+<!--docz:hypothesis:start-->
 ## Hypothesis
 
 For (1): the portal and design system are the one genuinely new,
@@ -543,7 +552,9 @@ e2e / manual) so the acceptance suite of Observation 6 has a home;
 <!--docz:conclusion:start-->
 ## Conclusion
 
-**Answer to (1): Yes, more than INV-0003 could offer — but still
+**Answer:** (1) yes, (2) no.
+
+**(1) Yes, more than INV-0003 could offer — but still
 ideas and a few thousand lines, not a dependency.** Confirmed with
 one surprise. The portal and design system, deferred in INV-0003,
 are now a liftable asset: ~700 lines of generic Go, ~1,050 to adapt
@@ -559,7 +570,7 @@ asked for, now with the ownership half present. The surprise is the
 handoff mechanics: `charts` and `kubernetes/resources` are new,
 cloud-agnostic, and fit DESIGN-0002's completion stage directly.
 
-**Answer to (2): No, not now, and homelab says so itself.** homelab's
+**(2) No, not now, and homelab says so itself.** homelab's
 ADR-0062, DESIGN-0013 and DESIGN-0016 all exclude public
 repositories; IMPL-0013 parked hoomlab by name pending a decision
 that has not been made; the monorepo cannot build an image or publish
@@ -656,16 +667,22 @@ merging, and even that repo cannot release what hoomlab releases.
 <!--docz:references:start-->
 ## References
 
-- hoomlab: RFC-0001, ADR-0001, DESIGN-0002 (T3), DESIGN-0003 (nested
-  test environment), IMPL-0004 (Phase 7 add-ons, Phase 8 close),
-  INV-0003, INV-0005
-- platform-repo (`~/code/platform-repo`, private): `CLAUDE.md`,
+- hoomlab: [RFC-0001](../rfc/0001-hoomlab-a-self-hosted-cloud-for-homelab-environments.md),
+  [ADR-0001](../adr/0001-bootstrap-cli-and-service.md),
+  [DESIGN-0002](../design/0002-talos-cluster-completion-scope-for-bootstrap.md) (T3),
+  [DESIGN-0003](../design/0003-nested-test-environment-for-the-bootstrap-cli.md)
+  (nested test environment),
+  [IMPL-0004](../impl/0004-talos-11311-upgrade-with-kata-ci-isolation-and-cluster-options.md)
+  (Phase 7 add-ons, Phase 8 close),
+  [INV-0003](0003-platform-reuse-for-hoomlab.md),
+  [INV-0005](0005-rolling-node-upgrades-managed-by-hoomlab.md)
+- [platform-repo](https://github.com/donaldgifford/platform-repo) (private): `CLAUDE.md`,
   `go/platform/CLAUDE.md`, DESIGN-0001 (the monorepo), IMPL-0001
   (Phase 7 platform import, Phase 9 web), `docs/bazel-migration.md`,
   `docs/deferred/platform-release.md`,
   `docs/deferred/platform-ci-gates.md`,
   `docs/deferred/wiz-operator-release.md`
-- platform, archived under `platform-repo/docs/archived/platform/`:
+- platform, archived under [`platform-repo/docs/archived/platform/`](https://github.com/donaldgifford/platform-repo/tree/main/docs/archived/platform):
   RFC-0001 (bootstrap mode), ADR-0004, ADR-0005, ADR-0008, ADR-0017,
   DESIGN-0003 (service foundation), DESIGN-0004 (ownership, handoff),
   DESIGN-0006 (portal shell), DESIGN-0007 (spoke attach),
@@ -674,7 +691,7 @@ merging, and even that repo cannot release what hoomlab releases.
   INV-0006, INV-0007,
   `intent-discover-plan-reconcile-status-architecture.md`; in
   `go/platform/docs/`: DESIGN-0001 (platformctl), IMPL-0001
-- platform code: `internal/cli/runtime/runtime.go`,
+- platform code, under [`platform-repo/go/platform`](https://github.com/donaldgifford/platform-repo/tree/main/go/platform): `internal/cli/runtime/runtime.go`,
   `internal/cli/root.go`, `internal/cli/cliconfig`,
   `internal/bootstrap/{plan,apply}.go`, `internal/{finding,condition,
   progress,errorsx,retry,texttable,identity,policy,repoconf}`,
@@ -684,7 +701,7 @@ merging, and even that repo cannot release what hoomlab releases.
   `web/platform/packages/ui`, `web/platform/apps/portal/src/shell`,
   `test/acceptance`, `scripts/gitops-smoke.sh`,
   `scripts/gitops-check.sh`
-- homelab (`~/code/homelab`, private; cited by ID and title only):
+- [homelab](https://github.com/donaldgifford/homelab) (private; cited by ID and title only):
   ADR-0062 (Buildkite with self-hosted agents), ADR-0063 (Go projects
   as a single module under `go/`), DESIGN-0013 (Buildkite agent
   stack), DESIGN-0014 (Bazel workspace and remote cache), DESIGN-0015
