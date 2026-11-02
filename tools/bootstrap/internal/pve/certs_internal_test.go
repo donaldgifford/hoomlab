@@ -61,7 +61,7 @@ func TestIssuerMatchesCA(t *testing.T) {
 // the certificate is right but expiring, delete-then-order when it is
 // wrong (CA flip, SAN change).
 func TestCertActionFor(t *testing.T) {
-	const fqdn = "r740a.shart.sh"
+	const fqdn = "pve1.example.com"
 	right := nodes.Certificate{
 		Filename: "pveproxy-ssl.pem",
 		Issuer:   "C=US, O=Let's Encrypt, CN=R13", SAN: []string{fqdn},
@@ -76,7 +76,7 @@ func TestCertActionFor(t *testing.T) {
 	}
 	selfSigned := nodes.Certificate{
 		Filename: "pve-ssl.pem",
-		Issuer:   "O=PVE Cluster Manager CA", SAN: []string{"r740a"},
+		Issuer:   "O=PVE Cluster Manager CA", SAN: []string{"pve1"},
 	}
 
 	tests := []struct {

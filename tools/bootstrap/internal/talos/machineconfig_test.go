@@ -93,12 +93,12 @@ func TestTalosNameFlowsToClusterName(t *testing.T) {
 	}
 
 	named := testCluster()
-	named.Talos.Name = "fartlab"
+	named.Talos.Name = "lab"
 	tmpl, err := talos.ClassTemplates(bundle, named)
 	if err != nil {
 		t.Fatalf("ClassTemplates (named): %v", err)
 	}
-	if !bytes.Contains(controlPlaneOf(t, tmpl), []byte("clusterName: fartlab")) {
+	if !bytes.Contains(controlPlaneOf(t, tmpl), []byte("clusterName: lab")) {
 		t.Error("talos name set: clusterName must carry it")
 	}
 	if bytes.Contains(controlPlaneOf(t, tmpl), []byte("clusterName: homelab")) {

@@ -79,7 +79,7 @@ cluster "homelab" {
     # cluster). Omitted means the Talos cluster inherits the label.
     # Set it when the layers carry different names — or ever might:
     # a second Talos cluster on the same PVE cluster needs its own.
-    # name = "fartlab"
+    # name = "lab"
 
     # Optional: pins the Kubernetes version the machineconfigs
     # install. Omitted means the default of the Talos machinery this

@@ -14,7 +14,7 @@
 apiVersion: cilium.io/v2
 kind: CiliumBGPClusterConfig
 metadata:
-  name: shart
+  name: lab
 spec:
   bgpInstances:
     - name: instance-65200
