@@ -1,7 +1,7 @@
 ---
 id: IMPL-0004
 title: "Talos 1.13.11 upgrade with Kata CI isolation and cluster options"
-status: In Progress
+status: Paused
 author: Donald Gifford
 created: 2026-10-11
 ---
