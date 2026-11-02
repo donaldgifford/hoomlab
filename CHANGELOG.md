@@ -5,6 +5,21 @@ based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 this project adheres to [Semantic Versioning](https://semver.org/).
 ## [unreleased]
 
+### Documentation
+
+- *(inv)* INV-0006 platform-repo reuse and the homelab monorepo question
+- *(inv)* Conclude INV-0003 with the INV-0006 amendments
+- *(inv)* Address the INV-0006 review round
+- *(inv)* Conclude INV-0006
+- *(inv)* INV-0007 archiving hoomlab and migrating it into homelab as private
+- *(inv)* Conclude INV-0007 with the coupling accepted
+
+### Miscellaneous Tasks
+
+- Pin docz 2.6.1 and update the plugin list
+
+## [tools/bootstrap/v0.6.0] - 2026-11-01
+
 ### Features
 
 - *(bootstrap)* Add the runtime table

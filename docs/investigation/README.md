@@ -11,13 +11,18 @@ Design docs, plans, and implementation docs can reference investigations by ID
 <!-- BEGIN DOCZ AUTO-GENERATED -->
 ## All Investigations
 
+<!-- markdownlint-capture -->
+<!-- markdownlint-disable MD013 -->
 | ID | Title | Status | Date | Author | Link |
-|----|-------|--------|------|--------|------|
+| --- | --- | --- | --- | --- | --- |
 | INV-0001 | Bootstrap CLI hardware acceptance drill | Concluded | 2026-08-21 | Donald Gifford | [0001-bootstrap-cli-hardware-acceptance-drill.md](0001-bootstrap-cli-hardware-acceptance-drill.md) |
 | INV-0002 | Talos storage plane - second NIC and iSCSI readiness | Concluded | 2026-08-31 | Donald Gifford | [0002-talos-storage-plane-second-nic-and-iscsi-readiness.md](0002-talos-storage-plane-second-nic-and-iscsi-readiness.md) |
-| INV-0003 | Platform reuse for hoomlab | In Progress | 2026-10-10 | Donald Gifford | [0003-platform-reuse-for-hoomlab.md](0003-platform-reuse-for-hoomlab.md) |
+| INV-0003 | Platform reuse for hoomlab | Concluded | 2026-10-10 | Donald Gifford | [0003-platform-reuse-for-hoomlab.md](0003-platform-reuse-for-hoomlab.md) |
 | INV-0004 | Talos 1.14 and Kubernetes 1.37 upgrade with workload isolation | Concluded | 2026-10-11 | Donald Gifford | [0004-talos-114-and-kubernetes-137-upgrade-with-workload-isolation.md](0004-talos-114-and-kubernetes-137-upgrade-with-workload-isolation.md) |
 | INV-0005 | Rolling node upgrades managed by hoomlab | Open | 2026-10-11 | Donald Gifford | [0005-rolling-node-upgrades-managed-by-hoomlab.md](0005-rolling-node-upgrades-managed-by-hoomlab.md) |
+| INV-0006 | Platform-repo reuse and moving hoomlab into the homelab monorepo | Concluded | 2026-11-02 | Donald Gifford | [0006-platform-repo-reuse-and-moving-hoomlab-into-the-homelab-monorepo.md](0006-platform-repo-reuse-and-moving-hoomlab-into-the-homelab-monorepo.md) |
+| INV-0007 | Archiving the hoomlab repository and migrating it into homelab as a private project | Concluded | 2026-11-02 | Donald Gifford | [0007-archiving-the-hoomlab-repository-and-migrating-it-into-homelab.md](0007-archiving-the-hoomlab-repository-and-migrating-it-into-homelab.md) |
+<!-- markdownlint-restore -->
 <!-- END DOCZ AUTO-GENERATED -->
 <!-- BEGIN DOCZ AUTO-GENERATED -->
 <!-- END DOCZ AUTO-GENERATED -->

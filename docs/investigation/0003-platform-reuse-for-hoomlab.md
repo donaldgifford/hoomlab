@@ -1,7 +1,7 @@
 ---
 id: INV-0003
 title: "Platform reuse for hoomlab"
-status: In Progress
+status: Concluded
 author: Donald Gifford
 created: 2026-10-10
 ---
@@ -89,6 +89,10 @@ T3 and service design work.
 Note the platform branch: the GitOps findings include its unmerged
 `feat/gitops-render` work.
 
+*(Amended 2026-11-02 by INV-0006: the snapshot commit `9dc6780` is
+dated 2026-10-04, not 2026-10-10. platform has since moved into the
+`platform-repo` monorepo; INV-0006 re-inventories it.)*
+
 ## Findings
 
 ### Observation 1: the visions share a spine; the substrate and scale differ
@@ -127,7 +131,7 @@ no Talos code to take — hoomlab is ahead there.
 | RDS Postgres / ElastiCache Valkey (ADR-0009/0010) | ADAPT/DEFER | CNPG on Talos with democratic-csi volumes; keep "Valkey never holds durable state" |
 | Hub observability with Alloy (ADR-0014) | ADAPT | One cluster; the homelab already runs a Prometheus/Loki stack |
 | Lambda MicroVM sandboxes (ADR-0012, RFC-0003) | DEFER | Observation 7 |
-| Web UI stack (ADR-0008) | DEFER | Only once the service has an API |
+| Web UI stack (ADR-0008) | DEFER | Only once the service has an API. *(INV-0006: the portal shell, auth, session and design system are now built without an API; see INV-0006 Observation 2)* |
 | LLM observability, kagent (ADR-0013/0015) | SKIP | No LLM workloads in hoomlab's scope |
 | IAM / Pod Identity / Identity Center | ADAPT | PVE tokens and roles; in-cluster OIDC; secrets from 1Password/OpenBao |
 | Route53 / ACM | ADAPT | Cloudflare DNS-01 — already decided (ADR-0001) |
@@ -176,7 +180,10 @@ in four ways worth noting:
   CLI, but the natural status API for the service.
 
 One part conflicts and should not be taken: platform persists a plan
-file with a fingerprint and refuses stale plans. That is a third
+file with a fingerprint and refuses stale plans *(INV-0006: the
+plan file is optional — `plan --out` / `apply plan.json`; `apply -f`
+re-plans every run. The "never persist" rule is ADR-0001's, not a
+platform ADR.)* That is a third
 truth beside "the config and the world", which ADR-0001 rules out. A
 dry run can *show* an explainable plan without *saving* one.
 
