@@ -13,10 +13,13 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(inv)* Conclude INV-0006
 - *(inv)* INV-0007 archiving hoomlab and migrating it into homelab as private
 - *(inv)* Conclude INV-0007 with the coupling accepted
+- *(adr)* ADR-0002 hoomlab is developed as a private project inside homelab
+- *(adr)* Accept ADR-0002
 
 ### Miscellaneous Tasks
 
 - Pin docz 2.6.1 and update the plugin list
+- *(bootstrap)* Neutral site names in fixtures and examples
 
 ## [tools/bootstrap/v0.6.0] - 2026-11-01
 

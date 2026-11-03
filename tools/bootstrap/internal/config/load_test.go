@@ -323,7 +323,7 @@ func TestLoad(t *testing.T) {
 			wantErrs: []string{"Invalid network_interface vlan"},
 		},
 		{
-			// The fartlab shape end to end: a static jumbo plane and a
+			// The site shape end to end: a static jumbo plane and a
 			// referenced second NIC with its address inside the cidr.
 			name:   "storage plane accepted",
 			mutate: addStorageNIC("\n        address = \"192.0.2.51/24\""),
@@ -966,7 +966,7 @@ func TestLoadResolvesAndNormalizes(t *testing.T) {
 func TestTalosNameSplitsTheLayers(t *testing.T) {
 	setTestEnv(t)
 	path := writeConfig(t, strings.Replace(validHCL,
-		`  talos {`, "  talos {\n    name     = \"fartlab\"", 1))
+		`  talos {`, "  talos {\n    name     = \"lab\"", 1))
 
 	cluster, diags := Load(path)
 	if diags.HasErrors() {
@@ -975,7 +975,7 @@ func TestTalosNameSplitsTheLayers(t *testing.T) {
 	if got, want := cluster.Name, "test"; got != want {
 		t.Errorf("cluster.Name = %q, want the label %q untouched", got, want)
 	}
-	if got, want := cluster.TalosName(), "fartlab"; got != want {
+	if got, want := cluster.TalosName(), "lab"; got != want {
 		t.Errorf("TalosName() = %q, want the talos name %q", got, want)
 	}
 }

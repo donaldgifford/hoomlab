@@ -99,7 +99,7 @@ func TestTreeGolden(t *testing.T) {
 }
 
 // withStorageNIC appends the static jumbo storage NIC to a boot NIC —
-// the fartlab shape from IMPL-0003.
+// the site shape from IMPL-0003.
 func withStorageNIC(nics []config.NetworkInterface, mac, address string) []config.NetworkInterface {
 	dhcp, mtu := false, 9000
 	return append(nics, config.NetworkInterface{

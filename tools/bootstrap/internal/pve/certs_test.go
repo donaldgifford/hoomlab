@@ -155,7 +155,7 @@ func TestCertsFreshRun(t *testing.T) {
 // TestCertsAccountRegistersAsRoot is the INV-0001 regression
 // (2026-08-25, deviation 3): POST /cluster/acme/account carries no
 // permissions block, and PVE defaults such endpoints to root@pam only
-// — r740a rejected the token-dialed registration with HTTP 403
+// — a PVE host rejected the token-dialed registration with HTTP 403
 // "user != root@pam". The account write must go through DialRoot while
 // everything else stays on the token session. Two separate mocks play
 // the two sessions; the account must land on the root side only —
