@@ -34,6 +34,6 @@ docz create adr "Your ADR Title"
 | ID | Title | Status | Date | Author | Link |
 | --- | --- | --- | --- | --- | --- |
 | ADR-0001 | Bootstrap CLI | Accepted | 2026-08-17 | Donald Gifford | [0001-bootstrap-cli-and-service.md](0001-bootstrap-cli-and-service.md) |
-| ADR-0002 | hoomlab is developed as a private project inside homelab | Proposed | 2026-11-02 | Donald Gifford | [0002-hoomlab-is-developed-as-a-private-project-inside-homelab.md](0002-hoomlab-is-developed-as-a-private-project-inside-homelab.md) |
+| ADR-0002 | hoomlab is developed as a private project inside homelab | Accepted | 2026-11-02 | Donald Gifford | [0002-hoomlab-is-developed-as-a-private-project-inside-homelab.md](0002-hoomlab-is-developed-as-a-private-project-inside-homelab.md) |
 <!-- markdownlint-restore -->
 <!-- END DOCZ AUTO-GENERATED -->

@@ -1,7 +1,7 @@
 ---
 id: ADR-0002
 title: "hoomlab is developed as a private project inside homelab"
-status: Proposed
+status: Accepted
 author: Donald Gifford
 created: 2026-11-02
 ---
