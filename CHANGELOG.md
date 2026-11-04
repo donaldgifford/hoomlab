@@ -15,6 +15,10 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 - *(inv)* Conclude INV-0007 with the coupling accepted
 - *(adr)* ADR-0002 hoomlab is developed as a private project inside homelab
 - *(adr)* Accept ADR-0002
+- *(impl)* Record the phase 5 label rollout and v0.6.0 release
+- *(impl)* Record the gitops kata runtimeclass
+- *(impl)* Record the kata runtimeclass smoke test
+- *(impl)* Park impl-0004 for fleet patching
 
 ### Miscellaneous Tasks
 

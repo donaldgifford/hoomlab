@@ -1,7 +1,7 @@
 ---
 id: IMPL-0004
 title: "Talos 1.13.11 upgrade with Kata CI isolation and cluster options"
-status: In Progress
+status: Paused
 author: Donald Gifford
 created: 2026-10-11
 ---
@@ -809,8 +809,8 @@ DESIGN-0005 Phase 4.
 - [x] Docs: the example HCL `kata` profile is live, not commented, and
       the README covers it.
       *(2026-10-23: the example `kata` profile is live on worker-01 (`["base", "kata"]`) and `examples/cilium-values.yaml` sets `socketLB.hostNamespaceOnly: true`, so `TestLoadExampleConfig` exercises the Kata checks; README "Kata Containers" section; `config` package doc names `runtime.go`.)*
-- [ ] Release (OQ-9 a).
-      *(Deferred — human required: the operator runs `tools-release.yml` after merge.)*
+- [x] Release (OQ-9 a).
+      *(2026-11-01: `bootstrap v0.6.0` cut via `tools-release.yml` after #30 merged.)*
 - [ ] **Operator / GitOps:**
       *(Deferred — human required. Order matters: add `socketLB.hostNamespaceOnly: true` to `~/drill/cilium-values.yaml` **before** running the released binary — with Kata on the workers, load now rejects values without it.)*
       - [x] Add `socketLB.hostNamespaceOnly: true` explicitly to
@@ -828,15 +828,43 @@ DESIGN-0005 Phase 4.
             ClusterIP over host network. `~/drill/cilium-values.yaml`
             already carried `socketLB.hostNamespaceOnly: true` and passes
             the Kata Cilium checks.)*
-      - [ ] Run `talos emit`, sync booty, then `talos apply` on all
+      - [x] Run `talos emit`, sync booty, then `talos apply` on all
             workers so the derived label goes live. `--dry-run` reports
             0 after.
-      - [ ] Delete the Phase 0 test RuntimeClass and let GitOps create
+            *(2026-11-01, v0.6.0: the survey had 8 of 8 pending, not
+            just the workers. The Cilium values are embedded in every
+            node's config as the `cilium-values` inline manifest, so
+            adding `socketLB` drifts the control planes too. Each node's
+            diff was the `socketLB` block, plus
+            `runtime.hoomlab.dev/kata: "true"` on work01–05. A first
+            survey also showed the values file's `---` and blank lines
+            as drift; the drill file had been reformatted, and restoring
+            them cleared it. `talos apply --node` applied all 8 with
+            `NO_REBOOT`; the re-run dry-run reports 0 of 8 pending, and
+            `kubectl get nodes -L runtime.hoomlab.dev/kata` shows `true`
+            on work01–05 only.)*
+      - [x] Delete the Phase 0 test RuntimeClass and let GitOps create
             the `kata` class from the DESIGN-0005 contract
             (`overhead.podFixed` 250Mi / 250m, `nodeSelector`
             `runtime.hoomlab.dev/kata: "true"`).
-      - [ ] Re-run T1, T2, and T6 against the GitOps class: T6 with a
+            *(2026-11-01: no delete was needed. The class went into its
+            own small cluster-scoped Argo app, not the Cilium app or
+            Talos inline manifests, and Argo adopted the hand-applied
+            object in place. The live class now has `podFixed`
+            250m / 250Mi and selects `runtime.hoomlab.dev/kata: "true"`;
+            the test class's `extensions.talos.dev/kata-containers:
+            3.32.0` selector, which would have broken on the next Kata
+            bump, is gone. No pods used the class at the switch.)*
+      - [x] Re-run T1, T2, and T6 against the GitOps class: T6 with a
             pod that prefers `hoomlab.dev/size=large`.
+            *(2026-11-01: T1 and T2 were not re-run. Argo adopted the
+            class in place with the same `handler`, extension, and nodes,
+            so nothing they cover changed. The adoption did change the
+            selector and the overhead, so T6 ran as one smoke pod with
+            `runtimeClassName: kata` and a preferred `hoomlab.dev/size=large`
+            affinity. It landed on work05 with `overhead`
+            250m / 250Mi, and `uname -r` printed the guest kernel `6.18.35`,
+            not the host's `6.18.54-talos`.)*
       - [ ] PVE: turn off automatic live migration for the worker VMs
             (the 9.2 load balancer's rebalancing, and an HA shutdown
             policy of `migrate`). HA cold restart stays.
